@@ -8,7 +8,7 @@ const { HttpError } = require('./status');
 const { uploadRoutes } = require('./uploads');
 const { teamRoutes } = require('./routes/team');
 const { reviewRoutes } = require('./routes/review');
-const { FORMATS } = require('./media');
+const { FORMATS, toolStatus } = require('./media');
 
 /** Express 4 vangt geen fouten uit async handlers; deze router doet dat wel. */
 function asyncRouter() {
@@ -27,6 +27,9 @@ function createApp(overrides = {}) {
   const app = express();
   const publicDir = path.join(__dirname, '..', 'public');
   const limiter = auth.loginLimiter();
+  // Het eerste account kan alleen worden aangemaakt met deze code. Zonder SETUP_TOKEN
+  // genereert de server bij elke start een nieuwe code en toont die alleen in het serverlog.
+  const setupToken = config.setupToken || auth.randomToken(18);
 
   app.set('trust proxy', process.env.TRUST_PROXY === 'true');
   app.disable('x-powered-by');
@@ -53,13 +56,44 @@ function createApp(overrides = {}) {
   const api = asyncRouter();
 
   // ---------- Sessie & inloggen ----------
-  api.get('/session', (req, res) => {
+  const mediaCheck = async () => {
+    const tools = await toolStatus(config.tools);
+    return {
+      ffprobe: tools.ffprobe,
+      ffmpeg: tools.ffmpeg,
+      uploadsEnabled: tools.ffprobe || config.allowUnverifiedUploads,
+      unverifiedAllowed: config.allowUnverifiedUploads,
+    };
+  };
+
+  api.get('/health', async (req, res) => {
+    db.prepare('SELECT 1').get();
+    const media = await mediaCheck();
+    const ok = media.ffprobe && media.ffmpeg && !media.unverifiedAllowed;
+    res.json({
+      status: ok ? 'ok' : 'degraded',
+      database: 'ok',
+      ffprobe: media.ffprobe ? 'ok' : 'ontbreekt',
+      ffmpeg: media.ffmpeg ? 'ok' : 'ontbreekt',
+      uploads: media.uploadsEnabled ? (media.unverifiedAllowed && !media.ffprobe ? 'zonder controle (ALLOW_UNVERIFIED_UPLOADS)' : 'ok') : 'uitgeschakeld',
+    });
+  });
+
+  api.get('/session', async (req, res) => {
     const user = auth.sessionUser(db, req);
     const needsSetup = db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
-    res.json({ user, needsSetup, formats: Object.keys(FORMATS), maxUploadBytes: config.maxUploadBytes });
+    res.json({
+      user, needsSetup, formats: Object.keys(FORMATS), maxUploadBytes: config.maxUploadBytes,
+      media: user ? await mediaCheck() : undefined,
+    });
   });
 
   api.post('/setup', (req, res) => {
+    limiter.check(req.ip);
+    if (!auth.safeEqual(String(req.body?.setupToken || '').trim(), setupToken)) {
+      limiter.fail(req.ip);
+      throw new HttpError(403, 'De installatiecode klopt niet. Je vindt de code in het serverlog bij het starten, of in de variabele SETUP_TOKEN.');
+    }
     const userId = db.tx(() => {
       if (db.prepare('SELECT COUNT(*) AS n FROM users').get().n > 0) throw new HttpError(409, 'Er is al een account aangemaakt');
       return auth.createUser(db, req.body || {});
@@ -94,6 +128,12 @@ function createApp(overrides = {}) {
   team.use(auth.requireTeam(db));
   const uploads = uploadRoutes(team, db, config);
   teamRoutes(team, db, config, uploads);
+
+  const runCleanup = () => uploads.cleanupExpired().then((r) => {
+    if (r.removed || r.orphans) console.log(`Opruimen: ${r.removed} verlopen upload(s) en ${r.orphans} los(se) bestand(en) verwijderd`);
+  }).catch((err) => console.error('Opruimen van uploads mislukt:', err));
+  const cleanupTimer = setInterval(runCleanup, config.cleanupIntervalMinutes * 60_000);
+  cleanupTimer.unref();
   api.use(team);
 
   app.use('/api', api);
@@ -108,14 +148,19 @@ function createApp(overrides = {}) {
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     const status = err.status || err.statusCode || 500;
-    if (status >= 500) console.error(err);
+    const expected = err instanceof HttpError;
+    if (status >= 500 && !expected) console.error(err);
     if (res.headersSent) return res.end();
-    const message = status >= 500 ? 'Er ging iets mis op de server' : err.message;
+    const message = status >= 500 && !expected ? 'Er ging iets mis op de server' : err.message;
     if (req.path.startsWith('/api')) res.status(status).json({ error: message });
     else res.status(status).send(message);
   });
 
-  return { app, db, config };
+  const needsSetup = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
+  return {
+    app, db, config, uploads, setupToken, needsSetup, runCleanup, mediaCheck,
+    stop() { clearInterval(cleanupTimer); },
+  };
 }
 
 module.exports = { createApp };

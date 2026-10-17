@@ -117,3 +117,24 @@ export function copyText(text) {
   ta.remove();
   return Promise.resolve();
 }
+
+/** Unieke id per gebruikersactie; bij een herhaalpoging wordt dezelfde id meegestuurd. */
+export function newRequestId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Zoals api(), maar probeert bij een verbroken verbinding opnieuw met exact
+ * hetzelfde verzoek (inclusief requestId). De server herkent de herhaling.
+ */
+export async function apiWithRetry(method, url, body, extraHeaders = {}, attempts = 3) {
+  for (let i = 1; ; i++) {
+    try {
+      return await api(method, url, body, extraHeaders);
+    } catch (err) {
+      if (err.status !== 0 || i >= attempts) throw err;
+      await new Promise((r) => setTimeout(r, 1000 * i));
+    }
+  }
+}

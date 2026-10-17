@@ -143,11 +143,32 @@ CREATE INDEX IF NOT EXISTS idx_comments_version ON comments(version_id);
 CREATE INDEX IF NOT EXISTS idx_events_version ON status_events(version_id);
 `;
 
+// Kolommen die later zijn toegevoegd; bestaande databases krijgen ze hier alsnog.
+const COLUMNS = [
+  ['feedback_rounds', 'request_id', 'TEXT'],
+  ['approvals', 'request_id', 'TEXT'],
+  ['comments', 'request_id', 'TEXT'],
+  ['uploads', 'updated_at', 'TEXT'],
+];
+
+function migrate(db) {
+  for (const [table, column, type] of COLUMNS) {
+    const exists = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+    if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+  db.exec(`UPDATE uploads SET updated_at = created_at WHERE updated_at IS NULL;
+    -- Een herhaald verzoek (zelfde request_id via dezelfde link) wordt maar één keer verwerkt.
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_rounds_request ON feedback_rounds(share_link_id, request_id) WHERE request_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_approvals_request ON approvals(share_link_id, request_id) WHERE request_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_comments_request ON comments(share_link_id, request_id) WHERE request_id IS NOT NULL;`);
+}
+
 function openDb(config) {
   fs.mkdirSync(config.dataDir, { recursive: true });
   const db = new DatabaseSync(config.dbFile);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   db.exec(SCHEMA);
+  migrate(db);
 
   db.tx = (fn) => {
     db.exec('BEGIN IMMEDIATE');

@@ -67,49 +67,64 @@ function run(cmd, args, timeout = 60_000) {
   });
 }
 
-let toolsAvailable;
-async function hasFfmpeg() {
-  if (toolsAvailable === undefined) {
-    try {
-      await run('ffprobe', ['-version'], 5000);
-      await run('ffmpeg', ['-version'], 5000);
-      toolsAvailable = true;
-    } catch {
-      toolsAvailable = false;
-    }
+// Paden naar ffprobe/ffmpeg zijn instelbaar (FFPROBE_PATH / FFMPEG_PATH).
+const availability = new Map();
+async function toolAvailable(cmd) {
+  if (!availability.has(cmd)) {
+    availability.set(cmd, run(cmd, ['-version'], 5000).then(() => true, () => false));
   }
-  return toolsAvailable;
+  return availability.get(cmd);
 }
 
+/** Status van de externe hulpmiddelen, voor de startmelding, /api/health en de teamomgeving. */
+async function toolStatus(tools) {
+  const [ffprobe, ffmpeg] = await Promise.all([toolAvailable(tools.ffprobe), toolAvailable(tools.ffmpeg)]);
+  return { ffprobe, ffmpeg };
+}
+
+// Containerfamilie die bij de extensie hoort (ffprobe format_name).
+const CONTAINERS = {
+  mp4: ['mov', 'mp4'],
+  m4v: ['mov', 'mp4'],
+  mov: ['mov', 'mp4'],
+  webm: ['webm', 'matroska'],
+};
+
 /**
- * Leest technische gegevens uit. Geeft null terug als ffprobe niet beschikbaar
- * is; gooit een fout als het bestand geen leesbare video bevat.
+ * Controleert de inhoud en leest technische gegevens uit. Gooit een fout als
+ * het bestand geen leesbare video is of niet bij de extensie past.
  */
-async function probe(file) {
-  if (!(await hasFfmpeg())) return null;
+async function probe(file, extension, tools) {
   let out;
   try {
-    out = await run('ffprobe', ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file]);
+    out = await run(tools.ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file]);
   } catch {
     throw new Error('Het bestand kon niet als video worden gelezen. Controleer of het een geldig videobestand is.');
   }
   const data = JSON.parse(out);
-  const video = (data.streams || []).find((s) => s.codec_type === 'video');
+  const formats = String(data.format?.format_name || '').split(',');
+  if (!CONTAINERS[extension].some((f) => formats.includes(f))) {
+    throw new Error(`De inhoud van het bestand past niet bij de extensie .${extension}.`);
+  }
+  const video = (data.streams || []).find((s) => s.codec_type === 'video' && s.disposition?.attached_pic !== 1);
   if (!video) throw new Error('Het bestand bevat geen videospoor.');
+  const audio = (data.streams || []).find((s) => s.codec_type === 'audio');
   const duration = Number(data.format?.duration || video.duration);
+  if (!Number.isFinite(duration) || duration <= 0) throw new Error('De duur van de video kon niet worden bepaald.');
   return {
-    duration: Number.isFinite(duration) ? duration : null,
+    duration,
     width: video.width || null,
     height: video.height || null,
-    codec: video.codec_name,
+    videoCodec: video.codec_name,
+    audioCodec: audio?.codec_name || null,
   };
 }
 
-async function makePoster(file, posterFile, duration) {
-  if (!(await hasFfmpeg())) return false;
+async function makePoster(file, posterFile, duration, tools) {
+  if (!(await toolAvailable(tools.ffmpeg))) return false;
   const at = duration ? Math.min(1, duration / 3) : 0;
   try {
-    await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'scale=640:-2', posterFile], 120_000);
+    await run(tools.ffmpeg, ['-y', '-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'scale=640:-2', posterFile], 120_000);
     return true;
   } catch {
     return false;
@@ -118,5 +133,5 @@ async function makePoster(file, posterFile, duration) {
 
 module.exports = {
   FORMATS, extensionOf, titleFromFilename, normalizeTitle, downloadFilename,
-  contentDisposition, probe, makePoster, hasFfmpeg,
+  contentDisposition, probe, makePoster, toolAvailable, toolStatus,
 };

@@ -56,6 +56,19 @@ function reviewRoutes(router, db, config) {
     return { name, type: 'guest', verified: false };
   };
 
+  /**
+   * Idempotentie: de browser stuurt per actie een eigen request-id mee en
+   * gebruikt die opnieuw bij een herhaalpoging. Een herhaald verzoek wordt dan
+   * herkend en verandert niets meer aan de status.
+   */
+  const requestId = (req, required) => {
+    const id = String(req.body?.requestId || '');
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(id)) return id;
+    if (required) throw new HttpError(400, 'Ontbrekende request-id. Ververs de pagina en probeer het opnieuw.');
+    return null;
+  };
+  const currentStatus = (versionId) => db.prepare('SELECT status FROM versions WHERE id = ?').get(versionId).status;
+
   const reviewerKey = (req) => {
     const key = String(req.get('x-reviewer-key') || req.body?.reviewerKey || '');
     return /^[A-Za-z0-9_-]{16,64}$/.test(key) ? key : null;
@@ -85,6 +98,11 @@ function reviewRoutes(router, db, config) {
   // Een losse reactie opslaan verandert de status niet.
   router.post('/review/:token/versions/:versionId/comments', (req, res) => {
     const ver = getSharedVersion(req);
+    const reqId = requestId(req, false);
+    if (reqId) {
+      const prior = db.prepare('SELECT id, version_id FROM comments WHERE share_link_id = ? AND request_id = ?').get(req.link.id, reqId);
+      if (prior && prior.version_id === ver.id) return res.status(200).json({ id: prior.id, replayed: true });
+    }
     assertActionable(req, ver);
     const who = reviewer(req);
     const key = reviewerKey(req);
@@ -101,9 +119,9 @@ function reviewRoutes(router, db, config) {
       timecode = Math.max(0, Number(req.body.timecode) || 0);
       if (ver.duration_seconds) timecode = Math.min(timecode, ver.duration_seconds);
     }
-    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, author_name, author_type, share_link_id, reviewer_key, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(ver.id, parentId, body.slice(0, 5000), timecode, who.name, who.type, req.link.id, key, now());
+    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, author_name, author_type, share_link_id, reviewer_key, request_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(ver.id, parentId, body.slice(0, 5000), timecode, who.name, who.type, req.link.id, key, reqId, now());
     res.status(201).json({ id: Number(info.lastInsertRowid) });
   });
 
@@ -120,17 +138,25 @@ function reviewRoutes(router, db, config) {
 
   router.post('/review/:token/versions/:versionId/feedback', (req, res) => {
     const ver = getSharedVersion(req);
-    assertActionable(req, ver);
+    const reqId = requestId(req, true);
     const who = reviewer(req);
     const key = reviewerKey(req);
     if (!key) throw new HttpError(400, 'Ontbrekende reviewer-sleutel. Ververs de pagina.');
     const message = String(req.body?.message || '').trim().slice(0, 5000);
     const result = db.tx(() => {
+      // Herhaald verzoek voor een al verwerkte feedbackronde: niets wijzigen,
+      // zodat een latere goedkeuring of handmatige correctie blijft staan.
+      const prior = db.prepare('SELECT * FROM feedback_rounds WHERE share_link_id = ? AND request_id = ?').get(req.link.id, reqId);
+      if (prior) {
+        if (prior.version_id !== ver.id) throw new HttpError(409, 'Deze request-id hoort bij een andere versie.');
+        return { roundId: prior.id, commentCount: prior.comment_count, replayed: true };
+      }
+      assertActionable(req, ver);
       const pending = db.prepare('SELECT id FROM comments WHERE version_id = ? AND share_link_id = ? AND reviewer_key = ? AND round_id IS NULL')
         .all(ver.id, req.link.id, key);
       if (!pending.length && !message) throw new HttpError(400, 'Plaats eerst een of meer reacties of schrijf een toelichting.');
-      const info = db.prepare(`INSERT INTO feedback_rounds (version_id, share_link_id, reviewer_name, verified, message, comment_count, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(ver.id, req.link.id, who.name, who.verified ? 1 : 0, message, pending.length, now());
+      const info = db.prepare(`INSERT INTO feedback_rounds (version_id, share_link_id, reviewer_name, verified, message, comment_count, request_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(ver.id, req.link.id, who.name, who.verified ? 1 : 0, message, pending.length, reqId, now());
       const roundId = Number(info.lastInsertRowid);
       db.prepare('UPDATE comments SET round_id = ? WHERE version_id = ? AND share_link_id = ? AND reviewer_key = ? AND round_id IS NULL')
         .run(roundId, ver.id, req.link.id, key);
@@ -143,9 +169,9 @@ function reviewRoutes(router, db, config) {
         event: 'feedback_submitted', actorType: who.type, actorLabel: label, shareLinkId: req.link.id,
         note: `${pending.length} reactie(s)${message ? ' + toelichting' : ''}`,
       });
-      return { roundId, commentCount: pending.length };
+      return { roundId, commentCount: pending.length, replayed: false };
     });
-    res.json({ ok: true, ...result, status: 'changes_requested' });
+    res.json({ ok: true, ...result, status: currentStatus(ver.id) });
   });
 
   // Alleen de aangewezen akkoordgever (persoonlijke link) kan expliciet goedkeuren,
@@ -154,20 +180,27 @@ function reviewRoutes(router, db, config) {
     if (req.link.role !== 'approver') throw new HttpError(403, 'Alleen de aangewezen akkoordgever kan deze versie goedkeuren.');
     if (req.body?.confirm !== true) throw new HttpError(400, 'Bevestig de goedkeuring expliciet.');
     const ver = getSharedVersion(req);
+    const reqId = requestId(req, true);
     if (Number(req.body?.versionNumber) !== ver.number) throw new HttpError(409, 'De versie die je bekijkt komt niet overeen. Ververs de pagina.');
-    assertActionable(req, ver);
     if (req.link.approver_name !== req.video.approver_name || req.link.approver_email !== req.video.approver_email) {
       throw new HttpError(403, 'Deze akkoordlink hoort niet meer bij de huidige akkoordgever.');
     }
-    db.tx(() => {
-      db.prepare('INSERT INTO approvals (version_id, share_link_id, approver_name, approver_email, ip, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(ver.id, req.link.id, req.link.approver_name, req.link.approver_email, req.ip || '', String(req.get('user-agent') || '').slice(0, 300), now());
+    const replayed = db.tx(() => {
+      const prior = db.prepare('SELECT version_id FROM approvals WHERE share_link_id = ? AND request_id = ?').get(req.link.id, reqId);
+      if (prior) {
+        if (prior.version_id !== ver.id) throw new HttpError(409, 'Deze request-id hoort bij een andere versie.');
+        return true;
+      }
+      assertActionable(req, ver);
+      db.prepare('INSERT INTO approvals (version_id, share_link_id, approver_name, approver_email, ip, user_agent, request_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(ver.id, req.link.id, req.link.approver_name, req.link.approver_email, req.ip || '', String(req.get('user-agent') || '').slice(0, 300), reqId, now());
       changeStatus(db, ver.id, 'approved', {
         event: 'approved', actorType: 'approver', actorLabel: `${req.link.approver_name} (akkoordgever, geverifieerd)`,
         shareLinkId: req.link.id, note: `Versie ${ver.number} goedgekeurd`,
       });
+      return false;
     });
-    res.json({ ok: true, status: 'approved' });
+    res.json({ ok: true, replayed, status: currentStatus(ver.id) });
   });
 
   router.get('/review/:token/versions/:versionId/media', (req, res) => {

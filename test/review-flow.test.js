@@ -3,7 +3,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { makeVideo, startServer, client, upload } = require('./helpers');
+const { makeVideo, startServer, client, upload, rid, SETUP_TOKEN } = require('./helpers');
 
 let srv;
 let team;
@@ -19,7 +19,7 @@ before(async () => {
     v2: makeVideo(dir, 'klant_campagne_edit_v04.mp4', 3),
   };
   team = client(srv.base);
-  const setup = await team.post('/api/setup', { email: 'team@agency.nl', name: 'Sanne', password: 'een-lang-wachtwoord' });
+  const setup = await team.post('/api/setup', { setupToken: SETUP_TOKEN, email: 'team@agency.nl', name: 'Sanne', password: 'een-lang-wachtwoord' });
   assert.equal(setup.status, 201);
   const p = await team.post('/api/projects', { name: 'Campagne 2026', clientName: 'Klant BV' });
   projectId = p.data.id;
@@ -56,7 +56,7 @@ const tokenOf = (video, role = 'reviewer') => new URL(video.links.find((l) => l.
 test('interne omgeving vereist een account', async () => {
   const anon = client(srv.base);
   assert.equal((await anon.get('/api/projects')).status, 401);
-  assert.equal((await anon.post('/api/setup', { email: 'x@y.nl', name: 'X', password: 'nog-een-wachtwoord' })).status, 409);
+  assert.equal((await anon.post('/api/setup', { setupToken: SETUP_TOKEN, email: 'x@y.nl', name: 'X', password: 'nog-een-wachtwoord' })).status, 409);
   const login = await anon.post('/api/login', { email: 'team@agency.nl', password: 'fout-wachtwoord' });
   assert.equal(login.status, 401);
 });
@@ -149,10 +149,10 @@ test('reactie opslaan, pagina openen en afvinken wijzigen de status niet; feedba
   assert.equal(status, 'in_review');
 
   // gast kan niet goedkeuren
-  const approve = await guest.post(`/api/review/${token}/versions/${ver.id}/approve`, { confirm: true, versionNumber: 1 }, h);
+  const approve = await guest.post(`/api/review/${token}/versions/${ver.id}/approve`, { requestId: rid(), confirm: true, versionNumber: 1 }, h);
   assert.equal(approve.status, 403);
 
-  const fb = await guest.post(`/api/review/${token}/versions/${ver.id}/feedback`, { authorName: 'Eva', message: 'Zie opmerkingen' }, h);
+  const fb = await guest.post(`/api/review/${token}/versions/${ver.id}/feedback`, { requestId: rid(), authorName: 'Eva', message: 'Zie opmerkingen' }, h);
   assert.equal(fb.status, 200);
   assert.equal(fb.data.commentCount, 1);
   const after = (await team.get(`/api/videos/${videoId}`)).data.versions[0];
@@ -164,7 +164,7 @@ test('reactie opslaan, pagina openen en afvinken wijzigen de status niet; feedba
   assert.ok(last.at);
 
   // lege feedbackronde wordt geweigerd
-  const emptyRound = await guest.post(`/api/review/${token}/versions/${ver.id}/feedback`, { authorName: 'Eva' }, h);
+  const emptyRound = await guest.post(`/api/review/${token}/versions/${ver.id}/feedback`, { requestId: rid(), authorName: 'Eva' }, h);
   assert.equal(emptyRound.status, 400);
 });
 
@@ -181,11 +181,11 @@ test('goedkeuring geldt alleen voor de bekeken versie; nieuwe versie bewaart fee
   assert.deepEqual(info.identity, { name: 'Joris de Klant', verified: true });
 
   await approver.post(`/api/review/${approverToken}/versions/${v1.id}/comments`, { body: 'Mooi!', timecode: 1 }, h);
-  const noConfirm = await approver.post(`/api/review/${approverToken}/versions/${v1.id}/approve`, { versionNumber: 1 }, h);
+  const noConfirm = await approver.post(`/api/review/${approverToken}/versions/${v1.id}/approve`, { requestId: rid(), versionNumber: 1 }, h);
   assert.equal(noConfirm.status, 400);
-  const wrongVersion = await approver.post(`/api/review/${approverToken}/versions/${v1.id}/approve`, { confirm: true, versionNumber: 2 }, h);
+  const wrongVersion = await approver.post(`/api/review/${approverToken}/versions/${v1.id}/approve`, { requestId: rid(), confirm: true, versionNumber: 2 }, h);
   assert.equal(wrongVersion.status, 409);
-  const ok = await approver.post(`/api/review/${approverToken}/versions/${v1.id}/approve`, { confirm: true, versionNumber: 1 }, h);
+  const ok = await approver.post(`/api/review/${approverToken}/versions/${v1.id}/approve`, { requestId: rid(), confirm: true, versionNumber: 1 }, h);
   assert.equal(ok.status, 200);
 
   // Nieuwe versie uploaden onder dezelfde video
@@ -216,7 +216,7 @@ test('goedkeuring geldt alleen voor de bekeken versie; nieuwe versie bewaart fee
   assert.equal(review.versions[1].status, 'approved');
 
   // Oude versie kan niet opnieuw goedgekeurd of becommentarieerd worden
-  const oldApprove = await approver.post(`/api/review/${approverToken}/versions/${v1.id}/approve`, { confirm: true, versionNumber: 1 }, h);
+  const oldApprove = await approver.post(`/api/review/${approverToken}/versions/${v1.id}/approve`, { requestId: rid(), confirm: true, versionNumber: 1 }, h);
   assert.equal(oldApprove.status, 409);
   const v1Comments = (await approver.get(`/api/review/${approverToken}/versions/${v1.id}/comments`)).data;
   assert.equal(v1Comments.length, 1);
@@ -224,7 +224,7 @@ test('goedkeuring geldt alleen voor de bekeken versie; nieuwe versie bewaart fee
   assert.equal(v2Comments.length, 0);
 
   // Goedkeuren van v2 laat v1 ongemoeid
-  await approver.post(`/api/review/${approverToken}/versions/${v2.id}/approve`, { confirm: true, versionNumber: 2 }, h);
+  await approver.post(`/api/review/${approverToken}/versions/${v2.id}/approve`, { requestId: rid(), confirm: true, versionNumber: 2 }, h);
   const approvals = srv.db.prepare('SELECT version_id FROM approvals WHERE version_id IN (?, ?) ORDER BY id').all(v1.id, v2.id);
   assert.deepEqual(approvals.map((a) => a.version_id), [v1.id, v2.id]);
 });
@@ -260,7 +260,7 @@ test('ingetrokken klantlink geeft geen toegang meer, ook niet tot media', async 
   assert.equal((await guest.get(`/api/review/${token}/versions/${ver.id}/comments`)).status, 410);
   const c = await guest.post(`/api/review/${token}/versions/${ver.id}/comments`, { body: 'x', authorName: 'Eva' }, { 'x-reviewer-key': reviewerKey(4) });
   assert.equal(c.status, 410);
-  const fb = await guest.post(`/api/review/${token}/versions/${ver.id}/feedback`, { authorName: 'Eva', message: 'x' }, { 'x-reviewer-key': reviewerKey(4) });
+  const fb = await guest.post(`/api/review/${token}/versions/${ver.id}/feedback`, { requestId: rid(), authorName: 'Eva', message: 'x' }, { 'x-reviewer-key': reviewerKey(4) });
   assert.equal(fb.status, 410);
   assert.equal((await guest.get('/api/review/bestaatnietbestaatnietbestaatniet')).status, 404);
 });

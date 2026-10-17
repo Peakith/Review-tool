@@ -131,3 +131,6 @@
   .stat-row { grid-template-columns: repeat(2, 1fr); }
   .title-form { grid-template-columns: 1fr; }
 }
+
+.system-banner { background: var(--st-review-bg); color: #6f4c0c; padding: 10px 24px; font-size: 14px; text-align: center; border-bottom: 1px solid var(--line); }
+.system-banner-error { background: var(--st-changes-bg); color: var(--st-changes); font-weight: 500; }

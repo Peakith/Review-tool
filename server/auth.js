@@ -22,6 +22,9 @@ function verifyPassword(password, stored) {
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const randomToken = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
 
+/** Vergelijking in constante tijd (via hashes, dus ook bij ongelijke lengte). */
+const safeEqual = (a, b) => crypto.timingSafeEqual(Buffer.from(sha256(String(a)), 'hex'), Buffer.from(sha256(String(b)), 'hex'));
+
 function parseCookies(header = '') {
   const out = {};
   for (const part of header.split(';')) {
@@ -101,6 +104,6 @@ function loginLimiter() {
 }
 
 module.exports = {
-  hashPassword, verifyPassword, sha256, randomToken, createUser, createSession,
+  hashPassword, verifyPassword, sha256, randomToken, safeEqual, createUser, createSession,
   destroySession, sessionUser, requireTeam, loginLimiter,
 };

@@ -52,8 +52,26 @@ function shell(content, { wide = false } = {}) {
       h('div', { class: 'topbar-user' },
         h('span', { class: 'muted small' }, session.user.name),
         h('button', { class: 'btn btn-small btn-ghost', onClick: logout }, 'Uitloggen'))));
-  root.replaceChildren(nav, h('main', { class: wide ? 'main main-wide' : 'main' }, content));
+  root.replaceChildren(nav, mediaBanner(), h('main', { class: wide ? 'main main-wide' : 'main' }, content));
   window.scrollTo(0, 0);
+}
+
+/** Maakt ontbrekende serverafhankelijkheden zichtbaar voor het team. */
+function mediaBanner() {
+  const m = session.media;
+  if (!m) return null;
+  if (!m.uploadsEnabled) {
+    return h('div', { class: 'system-banner system-banner-error' },
+      'Uploaden is uitgeschakeld: ffprobe (onderdeel van ffmpeg) ontbreekt op de server, dus de inhoud van bestanden kan niet worden gecontroleerd. Bestaande video’s en reviews werken gewoon.');
+  }
+  if (m.unverifiedAllowed && !m.ffprobe) {
+    return h('div', { class: 'system-banner system-banner-error' },
+      'Let op: uploads worden zonder inhoudscontrole geaccepteerd (ALLOW_UNVERIFIED_UPLOADS). Niet geschikt voor productie.');
+  }
+  if (!m.ffmpeg) {
+    return h('div', { class: 'system-banner' }, 'ffmpeg ontbreekt op de server: nieuwe uploads krijgen geen voorvertoning.');
+  }
+  return null;
 }
 
 async function logout() {
@@ -74,7 +92,7 @@ function authForm({ title, intro, fields, submitLabel, onSubmit }) {
     try {
       await onSubmit(Object.fromEntries(new FormData(form)));
       session = null;
-      navigate(location.pathname === '/login' ? '/' : location.pathname, true);
+      navigate(location.pathname === '/login' ? '/' : location.pathname, true); // ook ?setup= verdwijnt uit de adresbalk
     } catch (err) {
       error.textContent = err.message;
       error.hidden = false;
@@ -86,7 +104,7 @@ function authForm({ title, intro, fields, submitLabel, onSubmit }) {
   h('h1', {}, title),
   intro ? h('p', { class: 'muted' }, intro) : null,
   error,
-  fields.map(([name, label, type, extra = {}]) => h('label', { class: 'field' }, h('span', {}, label), h('input', { name, type, required: true, ...extra }))),
+  fields.map(([name, label, type, extra = {}, hint]) => h('label', { class: 'field' }, h('span', {}, label), h('input', { name, type, required: true, ...extra }), hint ? h('span', { class: 'hint' }, hint) : null)),
   btn);
   root.replaceChildren(h('div', { class: 'auth-wrap' }, form));
   form.querySelector('input')?.focus();
@@ -107,7 +125,10 @@ function viewSetup() {
   authForm({
     title: 'Welkom',
     intro: 'Maak het eerste teamaccount aan. Daarna kun je collega’s toevoegen via “Team”.',
-    fields: [['name', 'Naam', 'text', { autocomplete: 'name' }], ['email', 'E-mailadres', 'email', { autocomplete: 'username' }],
+    fields: [
+      ['setupToken', 'Installatiecode', 'text', { autocomplete: 'off', spellcheck: 'false', value: new URLSearchParams(location.search).get('setup') || '' },
+        'Staat in het serverlog bij het starten (of in SETUP_TOKEN). Zo kan alleen de beheerder het eerste account aanmaken.'],
+      ['name', 'Naam', 'text', { autocomplete: 'name' }], ['email', 'E-mailadres', 'email', { autocomplete: 'username' }],
       ['password', 'Wachtwoord (min. 10 tekens)', 'password', { autocomplete: 'new-password', minlength: '10' }]],
     submitLabel: 'Account aanmaken',
     onSubmit: (data) => api('POST', '/api/setup', data),
@@ -272,6 +293,10 @@ function suggestTitle(filename) {
 
 /** Upload-dialoog voor een nieuwe video ({projectId}) of een nieuwe versie ({video}). */
 function uploadDialog({ projectId, video }) {
+  if (session.media && !session.media.uploadsEnabled) {
+    toast('Uploaden is uitgeschakeld omdat ffprobe ontbreekt op de server.', 'error');
+    return;
+  }
   const accept = session.formats.map((f) => `.${f}`).join(',');
   const fileInput = h('input', { type: 'file', accept, class: 'visually-hidden', id: 'upload-file' });
   const titleInput = h('input', { type: 'text', placeholder: 'Bijv. Campagnefilm — Hoofdvideo', maxlength: '200' });

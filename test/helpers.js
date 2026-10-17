@@ -12,14 +12,19 @@ function makeVideo(dir, name, seconds = 2) {
   return file;
 }
 
-async function startServer() {
+const SETUP_TOKEN = 'test-installatiecode-123';
+const rid = () => require('node:crypto').randomBytes(12).toString('hex');
+
+async function startServer(overrides = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
-  const { app, db, config } = createApp({ dataDir, chunkBytes: 4096 });
+  const created = createApp({ dataDir, chunkBytes: 4096, setupToken: SETUP_TOKEN, ...overrides });
+  const { app, db, config } = created;
   const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   return {
-    base, db, config, dataDir,
+    base, db, config, dataDir, created,
     async close() {
+      created.stop();
       await new Promise((r) => server.close(r));
       db.close();
       fs.rmSync(dataDir, { recursive: true, force: true });
@@ -54,6 +59,7 @@ function client(base) {
     put: (u, b, h) => request('PUT', u, b, h),
     patch: (u, b) => request('PATCH', u, b),
     del: (u, h) => request('DELETE', u, undefined, h),
+    cookie: () => cookie,
   };
 }
 
@@ -69,4 +75,4 @@ async function upload(c, file) {
   return id;
 }
 
-module.exports = { makeVideo, startServer, client, upload };
+module.exports = { makeVideo, startServer, client, upload, rid, SETUP_TOKEN };

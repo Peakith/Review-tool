@@ -16,6 +16,17 @@ function loadConfig(overrides = {}) {
     maxUploadBytes: Number(process.env.MAX_UPLOAD_GB || 20) * 1024 ** 3,
     chunkBytes: 8 * 1024 * 1024,
     sessionDays: 14,
+    tools: {
+      ffprobe: process.env.FFPROBE_PATH || 'ffprobe',
+      ffmpeg: process.env.FFMPEG_PATH || 'ffmpeg',
+    },
+    // Uploads zonder inhoudscontrole alleen toestaan als dit expliciet is ingesteld (nooit in productie).
+    allowUnverifiedUploads: process.env.ALLOW_UNVERIFIED_UPLOADS === 'true',
+    // Afgebroken uploads zonder activiteit worden na deze tijd opgeruimd.
+    uploadExpiryHours: Number(process.env.UPLOAD_EXPIRY_HOURS || 24),
+    cleanupIntervalMinutes: Number(process.env.UPLOAD_CLEANUP_INTERVAL_MINUTES || 60),
+    // Eenmalige code voor het eerste account. Zonder waarde genereert de server er een bij het starten.
+    setupToken: process.env.SETUP_TOKEN || null,
     ...overrides,
   };
 }

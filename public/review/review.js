@@ -1,4 +1,4 @@
-import { h, api, statusPill, toast, confirmDialog, formatDate } from '/shared/util.js';
+import { h, api, apiWithRetry, newRequestId, statusPill, toast, confirmDialog, formatDate } from '/shared/util.js';
 import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
@@ -146,7 +146,7 @@ function render() {
       const authorName = reviewerName();
       if (authorName === null) return false;
       try {
-        await api('POST', `${base}/versions/${version.id}/comments`, { body, timecode, authorName }, keyHeader);
+        await apiWithRetry('POST', `${base}/versions/${version.id}/comments`, { body, timecode, authorName, requestId: newRequestId() }, keyHeader);
         await refreshComments();
         toast('Reactie geplaatst. Verstuur je feedback als je klaar bent.');
       } catch (err) {
@@ -214,7 +214,7 @@ function drawComments() {
       const authorName = reviewerName();
       if (authorName === null) return;
       try {
-        await api('POST', `${base}/versions/${state.version.id}/comments`, { body, parentId, authorName }, keyHeader);
+        await apiWithRetry('POST', `${base}/versions/${state.version.id}/comments`, { body, parentId, authorName, requestId: newRequestId() }, keyHeader);
         await refreshComments();
       } catch (err) { toast(err.message, 'error'); }
     },
@@ -254,7 +254,7 @@ async function submitFeedback() {
   });
   if (!ok) return;
   try {
-    await api('POST', `${base}/versions/${state.version.id}/feedback`, { authorName, message: message.value }, keyHeader);
+    await apiWithRetry('POST', `${base}/versions/${state.version.id}/feedback`, { authorName, message: message.value, requestId: newRequestId() }, keyHeader);
     toast('Bedankt! Je feedback is verstuurd naar het team.', 'success');
     await load(state.version.id);
   } catch (err) {
@@ -273,7 +273,7 @@ async function approve() {
   });
   if (!ok) return;
   try {
-    await api('POST', `${base}/versions/${v.id}/approve`, { confirm: true, versionNumber: v.number }, keyHeader);
+    await apiWithRetry('POST', `${base}/versions/${v.id}/approve`, { confirm: true, versionNumber: v.number, requestId: newRequestId() }, keyHeader);
     toast(`Versie ${v.number} is goedgekeurd. Dank je wel!`, 'success');
     await load(v.id);
   } catch (err) {

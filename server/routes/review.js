@@ -1,0 +1,194 @@
+'use strict';
+const path = require('node:path');
+const { now } = require('../db');
+const { HttpError, changeStatus, OPEN_FOR_CLIENT } = require('../status');
+const { downloadFilename, contentDisposition } = require('../media');
+const { versionDto, commentDtos, approvalDto } = require('../views');
+
+/**
+ * Klant-API. Iedere aanvraag controleert opnieuw of de link bestaat en niet is
+ * ingetrokken, en of de gevraagde versie bij deze video hoort en gedeeld is.
+ */
+function reviewRoutes(router, db, config) {
+  router.use('/review/:token', (req, res, next) => {
+    const token = String(req.params.token || '');
+    const link = /^[A-Za-z0-9_-]{20,64}$/.test(token)
+      ? db.prepare('SELECT * FROM share_links WHERE token = ?').get(token)
+      : null;
+    if (!link) return next(new HttpError(404, 'Deze reviewlink bestaat niet.'));
+    if (link.revoked_at) return next(new HttpError(410, 'Deze reviewlink is ingetrokken. Vraag het team om een nieuwe link.'));
+    req.link = link;
+    req.video = db.prepare('SELECT * FROM videos WHERE id = ?').get(link.video_id);
+    if (!req.video) return next(new HttpError(404, 'Deze video bestaat niet meer.'));
+    if (!link.last_used_at || Date.now() - Date.parse(link.last_used_at) > 60_000) {
+      db.prepare('UPDATE share_links SET last_used_at = ? WHERE id = ?').run(now(), link.id);
+    }
+    next();
+  });
+
+  const sharedVersions = (videoId) =>
+    db.prepare('SELECT * FROM versions WHERE video_id = ? AND shared_at IS NOT NULL ORDER BY number DESC').all(videoId);
+
+  const getSharedVersion = (req) => {
+    const id = Number(req.params.versionId);
+    const ver = Number.isSafeInteger(id)
+      ? db.prepare('SELECT * FROM versions WHERE id = ? AND video_id = ? AND shared_at IS NOT NULL').get(id, req.video.id)
+      : null;
+    if (!ver) throw new HttpError(404, 'Deze versie is niet beschikbaar.');
+    return ver;
+  };
+
+  /** Feedback en goedkeuring kunnen alleen op de nieuwste gedeelde versie, als die open staat. */
+  const assertActionable = (req, ver) => {
+    const latest = sharedVersions(req.video.id)[0];
+    if (!latest || latest.id !== ver.id) throw new HttpError(409, 'Er is inmiddels een nieuwere versie. Ververs de pagina om die te bekijken.');
+    if (!OPEN_FOR_CLIENT.has(ver.status)) {
+      throw new HttpError(409, ver.status === 'approved' ? 'Deze versie is al goedgekeurd.' : 'Deze versie staat op dit moment niet open voor review.');
+    }
+  };
+
+  const reviewer = (req) => {
+    if (req.link.role === 'approver') {
+      return { name: req.link.approver_name, type: 'approver', verified: true };
+    }
+    const name = String(req.body?.authorName || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!name) throw new HttpError(400, 'Vul je naam in zodat het team weet van wie de feedback komt.');
+    return { name, type: 'guest', verified: false };
+  };
+
+  const reviewerKey = (req) => {
+    const key = String(req.get('x-reviewer-key') || req.body?.reviewerKey || '');
+    return /^[A-Za-z0-9_-]{16,64}$/.test(key) ? key : null;
+  };
+
+  router.get('/review/:token', (req, res) => {
+    const project = db.prepare('SELECT name, client_name FROM projects WHERE id = ?').get(req.video.project_id);
+    const versions = sharedVersions(req.video.id);
+    res.json({
+      title: req.video.title,
+      project: { name: project.name, clientName: project.client_name },
+      role: req.link.role,
+      allowDownload: !!req.link.allow_download,
+      approver: req.video.approver_name ? { name: req.video.approver_name } : null,
+      // De persoon met de akkoordlink is geverifieerd via die persoonlijke link.
+      identity: req.link.role === 'approver' ? { name: req.link.approver_name, verified: true } : null,
+      versions: versions.map((v, i) => ({ ...versionDto(v), isLatest: i === 0, approval: approvalDto(db, v.id) })),
+      totalShared: versions.length,
+    });
+  });
+
+  router.get('/review/:token/versions/:versionId/comments', (req, res) => {
+    const ver = getSharedVersion(req);
+    res.json(commentDtos(db, ver.id, { reviewerKey: reviewerKey(req) }));
+  });
+
+  // Een losse reactie opslaan verandert de status niet.
+  router.post('/review/:token/versions/:versionId/comments', (req, res) => {
+    const ver = getSharedVersion(req);
+    assertActionable(req, ver);
+    const who = reviewer(req);
+    const key = reviewerKey(req);
+    if (!key) throw new HttpError(400, 'Ontbrekende reviewer-sleutel. Ververs de pagina.');
+    const body = String(req.body?.body || '').trim();
+    if (!body) throw new HttpError(400, 'Een reactie mag niet leeg zijn');
+    let parentId = null;
+    let timecode = null;
+    if (req.body?.parentId) {
+      const parent = db.prepare('SELECT id, version_id, parent_id FROM comments WHERE id = ?').get(Number(req.body.parentId));
+      if (!parent || parent.version_id !== ver.id) throw new HttpError(400, 'Reactie om op te antwoorden bestaat niet');
+      parentId = parent.parent_id || parent.id;
+    } else if (req.body?.timecode !== undefined && req.body?.timecode !== null) {
+      timecode = Math.max(0, Number(req.body.timecode) || 0);
+      if (ver.duration_seconds) timecode = Math.min(timecode, ver.duration_seconds);
+    }
+    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, author_name, author_type, share_link_id, reviewer_key, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(ver.id, parentId, body.slice(0, 5000), timecode, who.name, who.type, req.link.id, key, now());
+    res.status(201).json({ id: Number(info.lastInsertRowid) });
+  });
+
+  // Reviewers mogen hun eigen, nog niet verstuurde reactie verwijderen.
+  router.delete('/review/:token/comments/:commentId', (req, res) => {
+    const key = reviewerKey(req);
+    const c = db.prepare('SELECT c.* FROM comments c JOIN versions v ON v.id = c.version_id WHERE c.id = ? AND v.video_id = ?')
+      .get(Number(req.params.commentId), req.video.id);
+    if (!c || !key || c.reviewer_key !== key || c.share_link_id !== req.link.id) throw new HttpError(404, 'Reactie niet gevonden');
+    if (c.round_id) throw new HttpError(409, 'Verstuurde feedback kan niet meer worden verwijderd');
+    db.prepare('DELETE FROM comments WHERE id = ?').run(c.id);
+    res.json({ ok: true });
+  });
+
+  router.post('/review/:token/versions/:versionId/feedback', (req, res) => {
+    const ver = getSharedVersion(req);
+    assertActionable(req, ver);
+    const who = reviewer(req);
+    const key = reviewerKey(req);
+    if (!key) throw new HttpError(400, 'Ontbrekende reviewer-sleutel. Ververs de pagina.');
+    const message = String(req.body?.message || '').trim().slice(0, 5000);
+    const result = db.tx(() => {
+      const pending = db.prepare('SELECT id FROM comments WHERE version_id = ? AND share_link_id = ? AND reviewer_key = ? AND round_id IS NULL')
+        .all(ver.id, req.link.id, key);
+      if (!pending.length && !message) throw new HttpError(400, 'Plaats eerst een of meer reacties of schrijf een toelichting.');
+      const info = db.prepare(`INSERT INTO feedback_rounds (version_id, share_link_id, reviewer_name, verified, message, comment_count, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(ver.id, req.link.id, who.name, who.verified ? 1 : 0, message, pending.length, now());
+      const roundId = Number(info.lastInsertRowid);
+      db.prepare('UPDATE comments SET round_id = ? WHERE version_id = ? AND share_link_id = ? AND reviewer_key = ? AND round_id IS NULL')
+        .run(roundId, ver.id, req.link.id, key);
+      if (message) {
+        db.prepare(`INSERT INTO comments (version_id, body, timecode, author_name, author_type, share_link_id, reviewer_key, round_id, created_at)
+          VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)`).run(ver.id, message, who.name, who.type, req.link.id, key, roundId, now());
+      }
+      const label = who.verified ? `${who.name} (akkoordgever, geverifieerd)` : `${who.name} (opgegeven naam)`;
+      changeStatus(db, ver.id, 'changes_requested', {
+        event: 'feedback_submitted', actorType: who.type, actorLabel: label, shareLinkId: req.link.id,
+        note: `${pending.length} reactie(s)${message ? ' + toelichting' : ''}`,
+      });
+      return { roundId, commentCount: pending.length };
+    });
+    res.json({ ok: true, ...result, status: 'changes_requested' });
+  });
+
+  // Alleen de aangewezen akkoordgever (persoonlijke link) kan expliciet goedkeuren,
+  // en alleen voor precies de versie die hij of zij bekijkt.
+  router.post('/review/:token/versions/:versionId/approve', (req, res) => {
+    if (req.link.role !== 'approver') throw new HttpError(403, 'Alleen de aangewezen akkoordgever kan deze versie goedkeuren.');
+    if (req.body?.confirm !== true) throw new HttpError(400, 'Bevestig de goedkeuring expliciet.');
+    const ver = getSharedVersion(req);
+    if (Number(req.body?.versionNumber) !== ver.number) throw new HttpError(409, 'De versie die je bekijkt komt niet overeen. Ververs de pagina.');
+    assertActionable(req, ver);
+    if (req.link.approver_name !== req.video.approver_name || req.link.approver_email !== req.video.approver_email) {
+      throw new HttpError(403, 'Deze akkoordlink hoort niet meer bij de huidige akkoordgever.');
+    }
+    db.tx(() => {
+      db.prepare('INSERT INTO approvals (version_id, share_link_id, approver_name, approver_email, ip, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(ver.id, req.link.id, req.link.approver_name, req.link.approver_email, req.ip || '', String(req.get('user-agent') || '').slice(0, 300), now());
+      changeStatus(db, ver.id, 'approved', {
+        event: 'approved', actorType: 'approver', actorLabel: `${req.link.approver_name} (akkoordgever, geverifieerd)`,
+        shareLinkId: req.link.id, note: `Versie ${ver.number} goedgekeurd`,
+      });
+    });
+    res.json({ ok: true, status: 'approved' });
+  });
+
+  router.get('/review/:token/versions/:versionId/media', (req, res) => {
+    const ver = getSharedVersion(req);
+    res.sendFile(path.join(config.mediaDir, ver.stored_name), { headers: { 'Content-Type': ver.mime_type, 'Cache-Control': 'private, no-store' } });
+  });
+
+  router.get('/review/:token/versions/:versionId/poster', (req, res) => {
+    const ver = getSharedVersion(req);
+    if (!ver.has_poster) throw new HttpError(404, 'Geen voorvertoning');
+    res.sendFile(path.join(config.mediaDir, `${ver.stored_name}.jpg`), { headers: { 'Cache-Control': 'private, no-store' } });
+  });
+
+  router.get('/review/:token/versions/:versionId/download', (req, res) => {
+    if (!req.link.allow_download) throw new HttpError(403, 'Downloaden is voor deze link niet ingeschakeld.');
+    const ver = getSharedVersion(req);
+    const name = downloadFilename(`${req.video.title} - v${ver.number}`, ver.extension);
+    res.sendFile(path.join(config.mediaDir, ver.stored_name), {
+      headers: { 'Content-Type': ver.mime_type, 'Content-Disposition': contentDisposition(name) },
+    });
+  });
+}
+
+module.exports = { reviewRoutes };

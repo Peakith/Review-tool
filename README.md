@@ -21,39 +21,76 @@ Eigen reviewplatform voor de filmagency: video's delen met klanten, feedback op 
 - **status_events**: elke statuswijziging met oud → nieuw, gebeurtenis, wie (team, klant met opgegeven naam of geverifieerde akkoordgever) en tijdstip
 - **reacties** (met tijdstip en antwoorden), **feedbackrondes** en **goedkeuringen**: altijd gekoppeld aan één specifieke versie
 
+## Snel starten op een Mac
+
+Eenmalig: installeer [Homebrew](https://brew.sh) en daarna Node.js en ffmpeg:
+```bash
+brew install node ffmpeg
+```
+
+Starten (en na elke update opnieuw starten):
+```bash
+cd ~/pad/naar/Review-tool        # de map van deze repository
+git pull                         # alleen bij een update
+npm install                      # alleen bij een update
+npm run check                    # controleert Node, ffprobe, ffmpeg en je gegevens
+npm start                        # open daarna http://localhost:3000
+```
+Stoppen doe je met **Ctrl + C** in hetzelfde terminalvenster.
+
+**ffprobe wordt niet gevonden?** De server zoekt ffprobe en ffmpeg nu zelf, ook als `/opt/homebrew/bin` (Apple silicon) of `/usr/local/bin` (Intel) niet in je PATH staat. Het lange startcommando met `PATH=… FFPROBE_PATH=…` is daarom niet meer nodig. Staan ze ergens anders, kopieer dan `.env.example` naar `.env` en vul `FFPROBE_PATH` en `FFMPEG_PATH` in; `npm start` leest `.env` automatisch. Bij het starten toont de terminal welke paden gebruikt worden, en in de app zie je dat onder **Team › Systeem**.
+
+**"Poort 3000 is al in gebruik"?** Er draait nog een oude server. Sluit dat terminalvenster, of zoek het proces met `lsof -i :3000` en stop het met `kill <PID>`. Je kunt ook een andere poort kiezen met `PORT=3001` in `.env`.
+
+**Je gegevens** (accounts, projecten, video's, reacties en links) staan in de map `data/`. Updates veranderen daar niets aan; maak voor de zekerheid wel een kopie van `data/` voordat je een update installeert.
+
 ## Functionaliteit
 
-**Intern (inloggen verplicht)**
-- Projecten aanmaken. Het overzicht toont per project hoeveel video's in voorbereiding zijn, wachten op feedback, aanpassingen nodig hebben of goedgekeurd zijn. Binnen een project kun je filteren op status.
-- Video uploaden met een vrij te kiezen titel. Het voorstel is de bestandsnaam zonder extensie en kan meteen worden aangepast.
-- De titel kun je altijd wijzigen. Bestand, links, reacties en versiegeschiedenis blijven daarbij hetzelfde.
-- Nieuwe versie uploaden onder dezelfde video. Die neemt de titel, de links en de akkoordgever over en begint als Concept.
-- Status: *Klaar voor review* → *Delen met klant* (wordt *In review*). Je kunt de status ook handmatig corrigeren, met een reden.
-- Statusgeschiedenis per versie: wie of wat de wijziging veroorzaakte, met datum en tijd.
-- Reacties beantwoorden en als afgehandeld markeren. Afvinken verandert de status niet.
-- Reviewlinks aanmaken (met optionele downloadtoestemming), kopiëren en intrekken.
-- Eén akkoordgever per video, met een eigen persoonlijke akkoordlink. Wijzig je de akkoordgever, dan wordt de oude akkoordlink automatisch ingetrokken.
-- Downloaden geeft `Titel - vN.<echte extensie>`, bijvoorbeeld `Campagnefilm — Hoofdvideo - v2.mp4`.
-- Teamleden toevoegen.
+**Teamomgeving (inloggen verplicht)**
+- **Vaste zijbalk** met Projecten, Team, recente projecten (met een stip als er feedback ligt) en de systeemstatus.
+- **Projectoverzicht:**
+  - zoeken op project of klant, filters (*Actie nodig*, *Wacht op klant*, *Goedgekeurd*) en sorteren;
+  - per project: thumbnails, het aantal video's, de laatste activiteit, statuslabels en één zin met de volgende actie (bijv. "Feedback binnen · 1 video aanpassen");
+  - een leeg account krijgt een korte uitleg met één knop.
+- **Projectpagina:**
+  - uploaden door te slepen of met de bestandskiezer, meerdere bestanden tegelijk;
+  - een uploadpaneel met per bestand voortgang, verwerking, succes of een concrete fout, en opnieuw proberen (gaat verder waar de upload was);
+  - per video: thumbnail, duur, een inline bewerkbare titel, en "Intern vN" naast "Klant ziet vM", met open reacties.
+- **"Nieuwe video" en "Nieuwe versie" zijn gescheiden.** Een nieuwe video maak je op de projectpagina. Een nieuwe versie upload je vanaf de video, via een venster dat uitlegt dat de versie intern blijft tot je publiceert.
+- **Reviewwerkplek:**
+  - de speler krijgt de meeste ruimte, met daarnaast een paneel met de tabs *Reacties*, *Versies* en *Geschiedenis*;
+  - een vaste statusbalk zegt waar de versie staat en wat de volgende stap is (*Klaar voor review* → *Publiceren naar klant*);
+  - een versiekeuze, *Nieuwe versie* en *Delen* staan altijd op dezelfde plek.
+- **Reacties** filter je op open, afgehandeld of alles. Je kunt ze beantwoorden en afhandelen. Het invoerveld toont live op welk moment de reactie komt, en een klik maakt er een algemene reactie van.
+- **Deelvenster** met een duidelijk verschil tussen de **reviewlink** (bekijken, reageren, feedback; kan niet goedkeuren) en de **akkoordlink** (persoonlijk; alleen hiermee kan worden goedgekeurd). Links kopieer je en trek je in vanuit dit venster.
+- **Status corrigeren** kan alleen met een verplichte reden, die in de geschiedenis wordt bewaard.
+- **Downloaden** geeft `Titel - vN.<echte extensie>`, bijvoorbeeld `Campagnefilm — Hoofdvideo - v2.mp4`.
+- **Team & systeem:** teamleden toevoegen, en zien of ffprobe en ffmpeg gevonden zijn (met paden).
 
-**Klant (via link, zonder account)**
-- Ziet standaard de nieuwste gedeelde versie, met duidelijk "Versie N (nieuwste)". Oudere gedeelde versies zijn alleen te bekijken.
-- Eigen speler met afspeelknoppen, tijdlijn met reactiemarkeringen en volledig scherm (ook op iOS).
-- Reacties worden automatisch aan het tijdstip gekoppeld. Een klik op een reactie springt naar dat moment. Antwoorden is mogelijk.
-- De reviewer vult een naam in, getoond als *opgegeven naam*. De akkoordgever wordt getoond als *✓ Akkoordgever* (geverifieerd via de persoonlijke link).
-- **Feedback versturen** bundelt de eigen reacties tot een feedbackronde en zet de status op *Aanpassingen nodig*.
-- **Deze versie goedkeuren** (alleen via de akkoordlink, met expliciete bevestiging en het versienummer). Zet de status op *Goedgekeurd* voor precies die versie.
-- De pagina openen, een losse reactie opslaan of reacties afvinken verandert de status niet.
+**Klantpagina (via link, zonder account)**
+- Bovenaan staat welke video en versie het is ("Versie 2 · nieuwste") en de status in gewone taal ("Klaar voor jouw review", "Feedback verstuurd", "Goedgekeurd").
+- Een inklapbare "Zo werkt het"-uitleg: reageren, versturen en goedkeuren.
+- Elke reactie toont "Nog niet verstuurd" of "Verstuurd als feedback". Een vaste actiebalk telt de nog niet verstuurde reacties.
+- **Reactie plaatsen**, **Feedback versturen** en **Deze versie goedkeuren** (alleen akkoordgever) zijn aparte stappen, elk met een bevestiging.
+- Er wordt niets dubbel verstuurd: knoppen zijn geblokkeerd tijdens het versturen, en er is een request-id per actie. Ingevulde tekst blijft bewaard bij fouten en na een herlaadbeurt.
+- Op mobiel staat de speler boven en de reacties eronder, met grote knoppen in een vaste onderbalk.
+
+**Toegankelijkheid en robuustheid**
+- Bediening met het toetsenbord en een zichtbare focusrand.
+- Sneltoetsen in de speler: spatie/K afspelen, J/L of ←/→ 5 seconden terug of vooruit, `,` en `.` één beeld, F volledig scherm, M geluid aan/uit.
+- Statuslabels altijd met icoon én tekst. Tekstcontrast minimaal 4,5:1.
+- Lange titels worden netjes afgekapt (de volledige titel staat in de tooltip). Ontbreekt een thumbnail, dan verschijnt een vervangend vlak; ontbrekende thumbnails worden bij het starten alsnog gemaakt.
+- Laadindicatoren, en na 30 seconden zonder antwoord een duidelijke melding met "Opnieuw proberen".
 
 ### Statusregels
 | Gebeurtenis | Nieuwe status |
 |---|---|
 | Upload (nieuwe video of versie) | Concept |
-| Team: "Zet op Klaar voor review" | Klaar voor review |
-| Team: "Delen met klant" | In review |
+| Team: "Klaar voor review" | Klaar voor review |
+| Team: "Publiceren naar klant" | In review (klanten zien vanaf nu deze versie) |
 | Klant: "Feedback versturen" | Aanpassingen nodig |
 | Akkoordgever: "Deze versie goedkeuren" | Goedgekeurd |
-| Team: handmatige correctie | Elke status (gelogd met naam en reden) |
+| Team: "Status corrigeren" (reden verplicht) | Elke status (gelogd met naam en reden) |
 
 Feedback en goedkeuring zijn alleen mogelijk op de nieuwste gedeelde versie met status *In review* of *Aanpassingen nodig*.
 
@@ -77,10 +114,10 @@ Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan
 
 ### Tests
 ```bash
-npm test                                         # 24 server-tests (vereist ffmpeg)
+npm test                                         # 30 server-tests (vereist ffmpeg)
 CHROME_PATH=/pad/naar/chrome npm run test:browser  # volledige klantflow in een echte browser
 ```
-De browsertest maakt zelf een 1080p H.264/AAC-MP4 en draait 25 controles: afspelen, geluid, vooruitspoelen, volledig scherm, tijdgebonden reacties, downloadnaam, versieflow en goedkeuring op mobiel. Hij heeft een Chrome **met H.264** nodig, zoals Google Chrome of [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/). De Chromium die Playwright standaard meelevert speelt geen H.264 af.
+De browsertest maakt zelf 1080p H.264/AAC-MP4's en doorloopt in een tijdelijke, lege omgeving de hele flow met 51 controles: leeg account, project maken, uploaden, titel aanpassen, publiceren, reageren, feedback versturen, nieuwe versie, goedkeuren op mobiel, handmatig corrigeren, intrekken, veel reacties, ontbrekende thumbnails en een trage of wegvallende verbinding. Hij heeft een Chrome **met H.264** nodig, zoals Google Chrome of [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/). De Chromium die Playwright standaard meelevert speelt geen H.264 af.
 
 ### Omgevingsvariabelen
 | Variabele | Standaard | Betekenis |
@@ -92,7 +129,7 @@ De browsertest maakt zelf een 1080p H.264/AAC-MP4 en draait 25 controles: afspel
 | `TRUST_PROXY` | `false` | Op `true` achter een reverse proxy (nginx, Caddy) |
 | `SETUP_TOKEN` | (willekeurig, in log) | Installatiecode voor het eerste account |
 | `MAX_UPLOAD_GB` | `20` | Maximale bestandsgrootte |
-| `FFPROBE_PATH` / `FFMPEG_PATH` | `ffprobe` / `ffmpeg` | Paden naar de hulpprogramma's |
+| `FFPROBE_PATH` / `FFMPEG_PATH` | automatisch gezocht | Alleen nodig als ffprobe/ffmpeg niet in PATH, `/opt/homebrew/bin`, `/usr/local/bin` of `/usr/bin` staan |
 | `ALLOW_UNVERIFIED_UPLOADS` | `false` | Alleen voor ontwikkeling: uploads accepteren zonder ffprobe. **Nooit in productie.** |
 | `UPLOAD_EXPIRY_HOURS` | `24` | Afgebroken uploads zonder activiteit worden na deze tijd verwijderd |
 | `UPLOAD_CLEANUP_INTERVAL_MINUTES` | `60` | Hoe vaak de opruiming draait (ook direct bij het starten) |

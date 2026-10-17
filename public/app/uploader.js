@@ -4,9 +4,18 @@ const HEADERS = { 'x-requested-with': 'review-tool' };
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function json(res) {
-  const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : null;
+  const data = (res.headers.get('content-type') || '').includes('json') ? await res.json().catch(() => null) : null;
   if (!res.ok) throw Object.assign(new Error(data?.error || `Upload mislukt (${res.status})`), { status: res.status, data });
   return data;
+}
+
+async function request(url, opts = {}) {
+  try {
+    return await json(await fetch(url, { ...opts, headers: { ...HEADERS, ...(opts.headers || {}) } }));
+  } catch (err) {
+    if (err.status) throw err;
+    throw Object.assign(new Error('Geen verbinding met de server.'), { status: 0 });
+  }
 }
 
 function putChunk(url, blob, onProgress, signal) {
@@ -16,6 +25,7 @@ function putChunk(url, blob, onProgress, signal) {
     xhr.open('PUT', url);
     xhr.setRequestHeader('x-requested-with', 'review-tool');
     xhr.setRequestHeader('content-type', 'application/octet-stream');
+    xhr.timeout = 120_000;
     xhr.upload.onprogress = (e) => onProgress(e.loaded);
     xhr.onload = () => {
       let data = null;
@@ -24,23 +34,34 @@ function putChunk(url, blob, onProgress, signal) {
       else reject(Object.assign(new Error(data?.error || `Upload mislukt (${xhr.status})`), { status: xhr.status, data }));
     };
     xhr.onerror = () => reject(Object.assign(new Error('Verbinding onderbroken'), { status: 0 }));
-    signal?.addEventListener('abort', () => { xhr.abort(); reject(Object.assign(new Error('Upload geannuleerd'), { aborted: true })); });
+    xhr.ontimeout = () => reject(Object.assign(new Error('Verbinding te traag'), { status: 0 }));
+    const abort = () => { xhr.abort(); reject(Object.assign(new Error('Upload geannuleerd'), { aborted: true })); };
+    if (signal?.aborted) return abort();
+    signal?.addEventListener('abort', abort, { once: true });
     xhr.send(blob);
   });
 }
 
-/**
- * Uploadt een bestand en geeft het upload-id terug.
- * onProgress(fraction, sentBytes) wordt tijdens het uploaden aangeroepen.
- */
-export async function uploadFile(file, { onProgress = () => {}, onRetry = () => {}, signal } = {}) {
-  const init = await json(await fetch('/api/uploads', {
+/** Meldt een nieuwe upload aan bij de server. */
+export function createUpload(file) {
+  return request('/api/uploads', {
     method: 'POST',
-    headers: { ...HEADERS, 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ filename: file.name, size: file.size }),
-  }));
-  const { id, chunkSize } = init;
-  let offset = 0;
+  });
+}
+
+export function cancelUpload(id) {
+  return fetch(`/api/uploads/${id}`, { method: 'DELETE', headers: HEADERS }).catch(() => {});
+}
+
+/**
+ * Stuurt de (resterende) blokken. Begint bij wat de server al heeft, dus ook geschikt
+ * om een onderbroken upload te hervatten. onProgress(fraction, sentBytes).
+ */
+export async function sendChunks(file, id, chunkSize, { onProgress = () => {}, onRetry = () => {}, signal } = {}) {
+  let offset = (await request(`/api/uploads/${id}`)).receivedBytes;
+  onProgress(offset / file.size, offset);
   let failures = 0;
 
   while (offset < file.size) {
@@ -52,25 +73,18 @@ export async function uploadFile(file, { onProgress = () => {}, onRetry = () => 
       failures = 0;
       onProgress(offset / file.size, offset);
     } catch (err) {
-      if (err.aborted) {
-        fetch(`/api/uploads/${id}`, { method: 'DELETE', headers: HEADERS }).catch(() => {});
-        throw err;
-      }
+      if (err.aborted) throw err;
       if (err.status === 409 && Number.isFinite(err.data?.receivedBytes)) {
         offset = err.data.receivedBytes; // server weet tot waar het bestand binnen is
         continue;
       }
       if (err.status && err.status < 500 && err.status !== 408 && err.status !== 429) throw err;
       failures += 1;
-      if (failures > 6) throw new Error('De upload is na meerdere pogingen mislukt. Controleer je verbinding en probeer het opnieuw.');
+      if (failures > 6) throw Object.assign(new Error('De verbinding viel herhaaldelijk weg. Controleer je netwerk en klik op "Opnieuw proberen"; de upload gaat verder waar hij was.'), { status: 0 });
       const wait = Math.min(30, 2 ** failures) * 1000;
       onRetry(failures, wait);
       await sleep(wait);
-      try {
-        const status = await json(await fetch(`/api/uploads/${id}`, { headers: HEADERS }));
-        offset = status.receivedBytes;
-      } catch { /* volgende poging */ }
+      try { offset = (await request(`/api/uploads/${id}`)).receivedBytes; } catch { /* volgende poging */ }
     }
   }
-  return id;
 }

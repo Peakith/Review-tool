@@ -1,16 +1,22 @@
-import { h, api, statusPill, STATUS_LABELS, toast, confirmDialog, formatDate, relativeDate, formatBytes, timecode, copyText } from '/shared/util.js';
-import { createPlayer, icon } from '/shared/player.js';
-import { renderComments, markersFrom } from '/shared/comments.js';
+import {
+  h, mount, icon, button, busy, api, statusPill, STATUS, STATUS_LABELS, toast, confirmDialog, openDialog, field,
+  formatDate, relativeDate, formatBytes, timecode, copyText, emptyState, errorState, skeletonRows, plural, draftStore,
+} from '/shared/util.js';
+import { createPlayer } from '/shared/player.js';
+import { renderComments, markersFrom, commentCounts } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
-import { uploadFile } from './uploader.js';
+import { configureUploads, enqueue, checkFile, suggestTitle, createUploadTray, onUploadsChange } from './uploads.js';
 
 const root = document.getElementById('root');
 let session = null;
 let cleanup = () => {};
+let shellEl = null;
+let pageEl = null;
+let sidebarProjects = null;
 
 // ---------- Router ----------
 
-function navigate(path, replace = false) {
+function navigate(path, { replace = false } = {}) {
   if (replace) history.replaceState(null, '', path);
   else history.pushState(null, '', path);
   route();
@@ -27,93 +33,178 @@ document.addEventListener('click', (e) => {
 async function route() {
   cleanup();
   cleanup = () => {};
-  if (!session) session = await api('GET', '/api/session');
-  if (!session.user) return session.needsSetup ? viewSetup() : viewLogin();
+  try {
+    if (!session) session = await api('GET', '/api/session');
+  } catch (err) {
+    mount(root, h('div', { class: 'auth-wrap' }, h('div', { class: 'auth-card' }, errorState(err, () => route()))));
+    return;
+  }
+  if (!session.user) { shellEl = null; return session.needsSetup ? viewSetup() : viewLogin(); }
+  configureUploads(session);
+  ensureShell();
   const path = location.pathname;
   let m;
+  const views = [
+    [/^\/projecten\/(\d+)$/, (id) => viewProject(Number(id)), 'projects'],
+    [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
+    [/^\/team$/, () => viewTeam(), 'team'],
+    [/^\/?$/, () => viewProjects(), 'projects'],
+  ];
+  const match = views.find(([re]) => (m = path.match(re)));
+  const [, render, section] = match || [null, () => viewNotFound(), 'projects'];
+  setActiveNav(section);
+  mount(pageEl, h('div', { class: 'loading-page' }, h('div', { class: 'spinner', role: 'status', 'aria-label': 'Laden' })));
   try {
-    if ((m = path.match(/^\/projecten\/(\d+)$/))) return await viewProject(Number(m[1]));
-    if ((m = path.match(/^\/video\/(\d+)$/))) return await viewVideo(Number(m[1]));
-    if (path === '/team') return await viewTeam();
-    return await viewProjects();
+    await render(...(m ? m.slice(1) : []));
   } catch (err) {
     if (err.status === 401) { session = null; return route(); }
-    shell(h('div', { class: 'page' }, h('div', { class: 'notice notice-error' }, err.message), h('a', { href: '/', 'data-nav': true }, '← Terug naar projecten')));
+    mount(pageEl, h('div', { class: 'page' },
+      pageHeader({ title: err.status === 404 ? 'Niet gevonden' : 'Er ging iets mis' }),
+      errorState(err, () => route()),
+      h('p', { class: 'muted', style: null }, h('a', { href: '/', 'data-nav': true }, '← Terug naar projecten'))));
   }
+  pageEl.focus({ preventScroll: true });
 }
 
-function shell(content, { wide = false } = {}) {
-  const nav = h('header', { class: 'topbar' },
-    h('div', { class: 'topbar-inner' },
-      h('a', { href: '/', 'data-nav': true, class: 'brand' }, h('span', { class: 'brand-mark' }), 'Studio Review'),
-      h('nav', { class: 'topnav' },
-        h('a', { href: '/', 'data-nav': true, class: location.pathname === '/' || location.pathname.startsWith('/projecten') ? 'is-active' : '' }, 'Projecten'),
-        h('a', { href: '/team', 'data-nav': true, class: location.pathname === '/team' ? 'is-active' : '' }, 'Team')),
-      h('div', { class: 'topbar-user' },
-        h('span', { class: 'muted small' }, session.user.name),
-        h('button', { class: 'btn btn-small btn-ghost', onClick: logout }, 'Uitloggen'))));
-  root.replaceChildren(nav, mediaBanner(), h('main', { class: wide ? 'main main-wide' : 'main' }, content));
-  window.scrollTo(0, 0);
+function viewNotFound() {
+  document.title = 'Niet gevonden — Studio Review';
+  mount(pageEl, h('div', { class: 'page' }, pageHeader({ title: 'Pagina niet gevonden' }),
+    emptyState({ icon: 'folder', title: 'Deze pagina bestaat niet', text: 'Misschien is het project of de video verwijderd.', action: button('Naar projecten', { variant: 'primary', onClick: () => navigate('/') }) })));
 }
 
-/** Maakt ontbrekende serverafhankelijkheden zichtbaar voor het team. */
-function mediaBanner() {
+// ---------- Shell: vaste zijbalk ----------
+
+function ensureShell() {
+  if (shellEl && root.contains(shellEl)) { refreshSidebar(); return; }
+  const tray = createUploadTray({
+    openItem: (item) => navigate(item.target.kind === 'video' ? `/video/${item.result.videoId}` : `/video/${item.target.videoId}?v=${item.result.versionId}`),
+  });
+  sidebarProjects = h('nav', { class: 'side-projects', 'aria-label': 'Recente projecten' });
+  const menuBtn = button('', { icon: 'grid', variant: 'ghost', 'aria-label': 'Menu', class: 'btn btn-ghost btn-icon menu-btn', onClick: () => shellEl.classList.toggle('nav-open') });
+  const sidebar = h('aside', { class: 'sidebar' },
+    h('div', { class: 'side-top' },
+      h('a', { href: '/', 'data-nav': true, class: 'brand' }, h('span', { class: 'brand-mark' }, icon('play')), h('span', {}, 'Studio Review')),
+      menuBtn),
+    h('div', { class: 'side-scroll' },
+      h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
+        h('a', { href: '/', 'data-nav': true, dataset: { section: 'projects' } }, icon('folder'), 'Projecten'),
+        h('a', { href: '/team', 'data-nav': true, dataset: { section: 'team' } }, icon('users'), 'Team')),
+      h('div', { class: 'side-label' }, 'Recent'),
+      sidebarProjects),
+    h('div', { class: 'side-foot' },
+      systemStatus(),
+      h('div', { class: 'side-user' },
+        h('span', { class: 'avatar', 'aria-hidden': 'true' }, initials(session.user.name)),
+        h('div', { class: 'side-user-text' }, h('div', { class: 'truncate' }, session.user.name), h('div', { class: 'truncate small muted' }, session.user.email)),
+        button('', { icon: 'logout', variant: 'ghost', size: 'sm', 'aria-label': 'Uitloggen', title: 'Uitloggen', onClick: logout }))));
+  pageEl = h('main', { class: 'page-host', id: 'main', tabindex: '-1' });
+  shellEl = h('div', { class: 'app' },
+    h('a', { class: 'skip-link', href: '#main' }, 'Naar inhoud'),
+    sidebar,
+    h('div', { class: 'main-col' }, systemBanner(), pageEl),
+    tray);
+  shellEl.addEventListener('click', (e) => { if (e.target.closest('.side-nav a, .side-projects a')) shellEl.classList.remove('nav-open'); });
+  mount(root, shellEl);
+  refreshSidebar();
+}
+
+const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
+
+function setActiveNav(section) {
+  shellEl.querySelectorAll('.side-nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.section === section && (section !== 'projects' || location.pathname === '/')));
+  shellEl.querySelectorAll('.side-projects a').forEach((a) => {
+    const id = a.dataset.project;
+    a.classList.toggle('is-active', location.pathname === `/projecten/${id}` || a.dataset.current === 'true');
+  });
+}
+
+async function refreshSidebar(currentProjectId) {
+  try {
+    const projects = await api('GET', '/api/projects');
+    mount(sidebarProjects, projects.length
+      ? projects.slice(0, 12).map((p) => h('a', {
+        href: `/projecten/${p.id}`, 'data-nav': true, dataset: { project: p.id, current: String(p.id === currentProjectId) },
+        class: location.pathname === `/projecten/${p.id}` || p.id === currentProjectId ? 'is-active' : '',
+        title: p.name,
+      }, h('span', { class: 'truncate' }, p.name), needsAttention(p) ? h('span', { class: 'side-dot', title: 'Actie nodig' }) : null))
+      : h('p', { class: 'side-empty' }, 'Nog geen projecten'));
+  } catch { /* zijbalk is niet kritisch */ }
+}
+
+/** Waarschuwt als er serveronderdelen ontbreken. */
+function systemBanner() {
   const m = session.media;
   if (!m) return null;
   if (!m.uploadsEnabled) {
-    return h('div', { class: 'system-banner system-banner-error' },
-      'Uploaden is uitgeschakeld: ffprobe (onderdeel van ffmpeg) ontbreekt op de server, dus de inhoud van bestanden kan niet worden gecontroleerd. Bestaande video’s en reviews werken gewoon.');
+    return h('div', { class: 'system-banner is-error', role: 'alert' }, icon('alert'),
+      h('span', {}, h('strong', {}, 'Uploaden is uitgeschakeld. '), 'ffprobe (onderdeel van ffmpeg) is niet gevonden, dus de inhoud van bestanden kan niet worden gecontroleerd. Bestaande video’s en reviews werken gewoon. Zie “Team › Systeem” voor de oplossing.'));
   }
   if (m.unverifiedAllowed && !m.ffprobe) {
-    return h('div', { class: 'system-banner system-banner-error' },
-      'Let op: uploads worden zonder inhoudscontrole geaccepteerd (ALLOW_UNVERIFIED_UPLOADS). Niet geschikt voor productie.');
+    return h('div', { class: 'system-banner is-error', role: 'alert' }, icon('alert'), 'Uploads worden zonder inhoudscontrole geaccepteerd (ALLOW_UNVERIFIED_UPLOADS). Niet geschikt voor productie.');
   }
-  if (!m.ffmpeg) {
-    return h('div', { class: 'system-banner' }, 'ffmpeg ontbreekt op de server: nieuwe uploads krijgen geen voorvertoning.');
-  }
+  if (!m.ffmpeg) return h('div', { class: 'system-banner' }, icon('info'), 'ffmpeg ontbreekt: nieuwe uploads krijgen geen thumbnail.');
   return null;
 }
 
+function systemStatus() {
+  const m = session.media;
+  const ok = m && m.ffprobe && m.ffmpeg;
+  return h('a', { href: '/team', 'data-nav': true, class: `side-status${ok ? '' : ' is-warn'}`, title: ok ? 'ffprobe en ffmpeg gevonden' : 'Er ontbreekt een onderdeel' },
+    h('span', { class: 'status-dot' }), ok ? 'Systeem in orde' : 'Systeem: actie nodig');
+}
+
 async function logout() {
-  await api('POST', '/api/logout');
+  await api('POST', '/api/logout').catch(() => {});
   session = null;
-  navigate('/', true);
+  shellEl = null;
+  navigate('/', { replace: true });
+}
+
+function pageHeader({ crumbs = [], title, meta, actions }) {
+  return h('header', { class: 'page-head' },
+    h('div', { class: 'page-head-main' },
+      crumbs.length ? h('nav', { class: 'crumbs', 'aria-label': 'Kruimelpad' }, crumbs.map((c, i) => [
+        i ? h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, icon('chevronRight')) : null,
+        h('a', { href: c.href, 'data-nav': true, class: 'truncate', title: c.label }, c.label)])) : null,
+      typeof title === 'string' ? h('h1', { class: 'page-title' }, title) : title,
+      meta ? h('div', { class: 'page-meta' }, meta) : null),
+    actions ? h('div', { class: 'page-actions' }, actions) : null);
 }
 
 // ---------- Inloggen ----------
 
-function authForm({ title, intro, fields, submitLabel, onSubmit }) {
-  const error = h('p', { class: 'form-error', hidden: true });
-  const btn = h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, submitLabel);
+function authScreen({ title, intro, fields, submitLabel, onSubmit }) {
+  const error = h('div', { class: 'form-error', role: 'alert', hidden: true });
+  const submit = h('button', { class: 'btn btn-primary btn-block btn-lg', type: 'submit' }, h('span', { class: 'btn-label' }, submitLabel));
   const form = h('form', { class: 'auth-card', onSubmit: async (e) => {
     e.preventDefault();
-    btn.disabled = true;
+    const restore = busy(submit);
     error.hidden = true;
     try {
       await onSubmit(Object.fromEntries(new FormData(form)));
       session = null;
-      navigate(location.pathname === '/login' ? '/' : location.pathname, true); // ook ?setup= verdwijnt uit de adresbalk
+      navigate('/', { replace: true }); // ook ?setup= verdwijnt uit de adresbalk
     } catch (err) {
-      error.textContent = err.message;
+      mount(error, icon('alert'), h('span', {}, err.message));
       error.hidden = false;
-    } finally {
-      btn.disabled = false;
+      restore();
     }
   } },
-  h('div', { class: 'brand brand-center' }, h('span', { class: 'brand-mark' }), 'Studio Review'),
+  h('div', { class: 'brand brand-center' }, h('span', { class: 'brand-mark' }, icon('play')), h('span', {}, 'Studio Review')),
   h('h1', {}, title),
   intro ? h('p', { class: 'muted' }, intro) : null,
   error,
-  fields.map(([name, label, type, extra = {}, hint]) => h('label', { class: 'field' }, h('span', {}, label), h('input', { name, type, required: true, ...extra }), hint ? h('span', { class: 'hint' }, hint) : null)),
-  btn);
-  root.replaceChildren(h('div', { class: 'auth-wrap' }, form));
-  form.querySelector('input')?.focus();
+  fields.map(([name, label, type, extra = {}, hint]) => field(label, h('input', { name, type, required: true, ...extra }), hint)),
+  submit);
+  mount(root, h('div', { class: 'auth-wrap' }, form));
+  form.querySelector('input:not([value]), input[value=""]')?.focus() || form.querySelector('input')?.focus();
 }
 
 function viewLogin() {
   document.title = 'Inloggen — Studio Review';
-  authForm({
+  authScreen({
     title: 'Inloggen',
+    intro: 'Log in met je teamaccount.',
     fields: [['email', 'E-mailadres', 'email', { autocomplete: 'username' }], ['password', 'Wachtwoord', 'password', { autocomplete: 'current-password' }]],
     submitLabel: 'Inloggen',
     onSubmit: (data) => api('POST', '/api/login', data),
@@ -122,14 +213,16 @@ function viewLogin() {
 
 function viewSetup() {
   document.title = 'Eerste account — Studio Review';
-  authForm({
+  authScreen({
     title: 'Welkom',
-    intro: 'Maak het eerste teamaccount aan. Daarna kun je collega’s toevoegen via “Team”.',
+    intro: 'Maak het eerste teamaccount aan. Collega’s voeg je daarna toe via Team.',
     fields: [
       ['setupToken', 'Installatiecode', 'text', { autocomplete: 'off', spellcheck: 'false', value: new URLSearchParams(location.search).get('setup') || '' },
         'Staat in het serverlog bij het starten (of in SETUP_TOKEN). Zo kan alleen de beheerder het eerste account aanmaken.'],
-      ['name', 'Naam', 'text', { autocomplete: 'name' }], ['email', 'E-mailadres', 'email', { autocomplete: 'username' }],
-      ['password', 'Wachtwoord (min. 10 tekens)', 'password', { autocomplete: 'new-password', minlength: '10' }]],
+      ['name', 'Naam', 'text', { autocomplete: 'name' }],
+      ['email', 'E-mailadres', 'email', { autocomplete: 'username' }],
+      ['password', 'Wachtwoord', 'password', { autocomplete: 'new-password', minlength: '10' }, 'Minimaal 10 tekens.'],
+    ],
     submitLabel: 'Account aanmaken',
     onSubmit: (data) => api('POST', '/api/setup', data),
   });
@@ -137,528 +230,789 @@ function viewSetup() {
 
 // ---------- Projecten ----------
 
-const GROUPS = [
-  { key: 'prep', label: 'In voorbereiding', statuses: ['concept', 'ready_for_review'], cls: 'concept' },
-  { key: 'waiting', label: 'Wacht op feedback', statuses: ['in_review'], cls: 'in_review' },
-  { key: 'changes', label: 'Aanpassingen nodig', statuses: ['changes_requested'], cls: 'changes_requested' },
-  { key: 'approved', label: 'Goedgekeurd', statuses: ['approved'], cls: 'approved' },
+const toShareCount = (c) => (c.concept || 0) + (c.ready_for_review || 0);
+function needsAttention(p) {
+  return (p.statusCounts.changes_requested || 0) > 0 || p.openComments > 0;
+}
+
+/** Eén zin over wat er in het project speelt, op volgorde van urgentie. */
+function projectSignal(p) {
+  const c = p.statusCounts;
+  if (!p.videoCount) return { cls: 'is-muted', icon: 'upload', text: 'Nog geen video’s' };
+  if (c.changes_requested) return { cls: 'is-changes', icon: 'wrench', text: `Feedback binnen · ${plural(c.changes_requested, 'video', 'video’s')} aanpassen` };
+  if (p.openComments) return { cls: 'is-review', icon: 'chat', text: `${plural(p.openComments, 'open reactie', 'open reacties')} van de klant` };
+  if (toShareCount(c)) return { cls: 'is-ready', icon: 'flag', text: `${plural(toShareCount(c), 'video', 'video’s')} nog niet gedeeld` };
+  if (c.in_review) return { cls: 'is-muted', icon: 'eye', text: 'Wacht op de klant' };
+  return { cls: 'is-approved', icon: 'checkCircle', text: 'Alles goedgekeurd' };
+}
+
+const PROJECT_FILTERS = [
+  { key: 'all', label: 'Alle', test: () => true },
+  { key: 'action', label: 'Actie nodig', test: (p) => needsAttention(p) || toShareCount(p.statusCounts) > 0 },
+  { key: 'waiting', label: 'Wacht op klant', test: (p) => p.statusCounts.in_review > 0 },
+  { key: 'approved', label: 'Goedgekeurd', test: (p) => p.videoCount > 0 && p.statusCounts.approved === p.videoCount },
 ];
 
 async function viewProjects() {
   document.title = 'Projecten — Studio Review';
+  const newBtn = button('Nieuw project', { icon: 'plus', variant: 'primary', onClick: newProjectDialog });
+  mount(pageEl, h('div', { class: 'page' }, pageHeader({ title: 'Projecten', actions: newBtn }),
+    h('div', { class: 'project-grid' }, skeletonRows(3, 'skeleton-card'))));
   const projects = await api('GET', '/api/projects');
 
-  const list = projects.length
-    ? h('div', { class: 'project-grid' }, projects.map((p) => h('a', { class: 'project-card', href: `/projecten/${p.id}`, 'data-nav': true },
-      h('div', { class: 'project-card-head' },
-        h('h2', {}, p.name),
-        p.clientName ? h('div', { class: 'muted small' }, p.clientName) : null),
-      h('div', { class: 'project-card-count muted small' }, `${p.videoCount} video${p.videoCount === 1 ? '' : '’s'}`),
-      h('div', { class: 'stat-row' }, GROUPS.map((g) => {
-        const n = g.statuses.reduce((s, st) => s + (p.statusCounts[st] || 0), 0);
-        return h('div', { class: `stat stat-${g.cls}${n ? '' : ' is-zero'}` }, h('strong', {}, n), h('span', {}, g.label));
-      })))))
-    : h('div', { class: 'empty-state' },
-      h('h2', {}, 'Nog geen projecten'),
-      h('p', { class: 'muted' }, 'Maak een project aan voor een klant of opdracht, en upload daarin de video’s.'));
+  if (!projects.length) {
+    mount(pageEl, h('div', { class: 'page' }, pageHeader({ title: 'Projecten' }), onboarding()));
+    return;
+  }
 
-  shell(h('div', { class: 'page' },
-    h('div', { class: 'page-head' },
-      h('h1', {}, 'Projecten'),
-      h('button', { class: 'btn btn-primary', onClick: newProjectDialog }, '+ Nieuw project')),
-    list));
+  const params = new URLSearchParams(location.search);
+  const state = { q: params.get('q') || '', filter: params.get('filter') || 'all', sort: params.get('sort') || 'activity' };
+  const grid = h('div', { class: 'project-grid' });
+  const filterBar = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Filter projecten' });
+  const search = h('input', { type: 'search', placeholder: 'Zoek op project of klant', value: state.q, 'aria-label': 'Zoek projecten' });
+  const sort = h('select', { 'aria-label': 'Sorteren' },
+    h('option', { value: 'activity' }, 'Laatste activiteit'), h('option', { value: 'name' }, 'Naam (A–Z)'), h('option', { value: 'created' }, 'Nieuwste project'));
+  sort.value = state.sort;
+
+  const sync = () => {
+    const q = new URLSearchParams();
+    if (state.q) q.set('q', state.q);
+    if (state.filter !== 'all') q.set('filter', state.filter);
+    if (state.sort !== 'activity') q.set('sort', state.sort);
+    history.replaceState(null, '', `/${q.toString() ? `?${q}` : ''}`);
+  };
+  function draw() {
+    const term = state.q.trim().toLowerCase();
+    const searched = projects.filter((p) => !term || `${p.name} ${p.clientName}`.toLowerCase().includes(term));
+    mount(filterBar, PROJECT_FILTERS.map((f) => h('button', {
+      type: 'button', 'aria-pressed': String(state.filter === f.key),
+      onClick: () => { state.filter = f.key; sync(); draw(); },
+    }, f.label, h('span', { class: 'seg-count' }, searched.filter(f.test).length))));
+    const shown = searched.filter(PROJECT_FILTERS.find((f) => f.key === state.filter)?.test || (() => true));
+    shown.sort(state.sort === 'name' ? (a, b) => a.name.localeCompare(b.name, 'nl')
+      : state.sort === 'created' ? (a, b) => b.createdAt.localeCompare(a.createdAt)
+        : (a, b) => String(b.lastActivityAt).localeCompare(String(a.lastActivityAt)));
+    if (!shown.length) {
+      mount(grid, h('div', { class: 'grid-empty' }, emptyState({
+        icon: 'search', compact: true, title: 'Geen projecten gevonden',
+        text: term ? `Er is geen project dat overeenkomt met “${state.q}” binnen dit filter.` : 'Er zijn geen projecten binnen dit filter.',
+        action: button('Zoeken en filters wissen', { onClick: () => { state.q = ''; search.value = ''; state.filter = 'all'; sync(); draw(); } }),
+      })));
+      return;
+    }
+    mount(grid, shown.map(projectCard));
+  }
+  search.addEventListener('input', () => { state.q = search.value; sync(); draw(); });
+  sort.addEventListener('change', () => { state.sort = sort.value; sync(); draw(); });
+
+  mount(pageEl, h('div', { class: 'page' },
+    pageHeader({ title: 'Projecten', meta: `${plural(projects.length, 'project', 'projecten')} · ${plural(projects.reduce((n, p) => n + p.videoCount, 0), 'video', 'video’s')}`, actions: newBtn }),
+    h('div', { class: 'toolbar' },
+      h('div', { class: 'search toolbar-search' }, icon('search'), search),
+      filterBar,
+      h('label', { class: 'toolbar-sort' }, h('span', { class: 'visually-hidden' }, 'Sorteren'), sort)),
+    grid));
+  draw();
+  const onSlash = (e) => { if (e.key === '/' && !e.target.closest('input, textarea')) { e.preventDefault(); search.focus(); } };
+  document.addEventListener('keydown', onSlash);
+  cleanup = () => document.removeEventListener('keydown', onSlash);
 }
 
-function newProjectDialog() {
-  const name = h('input', { name: 'name', required: true, placeholder: 'Bijv. Voorjaarscampagne 2026' });
-  const client = h('input', { name: 'clientName', placeholder: 'Bijv. Klant BV' });
-  const dialog = h('dialog', { class: 'dialog' },
-    h('form', { method: 'dialog', onSubmit: async (e) => {
-      if (e.submitter?.value !== 'ok') return;
-      e.preventDefault();
+function onboarding() {
+  return h('section', { class: 'onboarding' },
+    h('div', { class: 'empty-icon' }, icon('film')),
+    h('h2', {}, 'Begin met je eerste project'),
+    h('p', { class: 'muted' }, 'Een project bundelt de video’s voor één klant of opdracht.'),
+    h('ol', { class: 'steps' },
+      h('li', {}, h('span', { class: 'step-num' }, '1'), h('div', {}, h('strong', {}, 'Maak een project'), h('span', {}, 'Bijvoorbeeld “Voorjaarscampagne 2026”.'))),
+      h('li', {}, h('span', { class: 'step-num' }, '2'), h('div', {}, h('strong', {}, 'Upload je video’s'), h('span', {}, 'Sleep bestanden in het project; ze blijven intern tot je ze deelt.'))),
+      h('li', {}, h('span', { class: 'step-num' }, '3'), h('div', {}, h('strong', {}, 'Deel en ontvang feedback'), h('span', {}, 'De klant reageert op tijdstip en keurt goed, zonder account.')))),
+    button('Eerste project aanmaken', { icon: 'plus', variant: 'primary', size: 'lg', onClick: newProjectDialog }));
+}
+
+function posterImg(versionId, alt = '') {
+  if (!versionId) return h('div', { class: 'poster-empty' }, icon('film'));
+  const img = h('img', { src: `/api/versions/${versionId}/poster`, alt, loading: 'lazy', decoding: 'async' });
+  img.addEventListener('error', () => img.replaceWith(h('div', { class: 'poster-empty' }, icon('film'))));
+  return img;
+}
+
+function projectCard(p) {
+  const s = projectSignal(p);
+  const statusOrder = ['changes_requested', 'in_review', 'ready_for_review', 'concept', 'approved'];
+  return h('a', { class: 'project-card', href: `/projecten/${p.id}`, 'data-nav': true, 'aria-label': `${p.name}${p.clientName ? `, ${p.clientName}` : ''}` },
+    h('div', { class: `project-cover cover-${Math.min(p.posters.length, 3)}` },
+      p.posters.length ? p.posters.map((id) => posterImg(id)) : h('div', { class: 'poster-empty' }, icon('folder')),
+      p.openComments ? h('span', { class: 'cover-badge', title: 'Open reacties van de klant' }, icon('chat'), p.openComments) : null),
+    h('div', { class: 'project-body' },
+      h('div', { class: 'project-titles' },
+        h('h2', { class: 'project-name', title: p.name }, p.name),
+        h('div', { class: 'project-client truncate' }, p.clientName || 'Geen klant ingevuld')),
+      h('div', { class: 'project-meta small muted' },
+        h('span', {}, plural(p.videoCount, 'video', 'video’s')), h('span', { 'aria-hidden': 'true' }, '·'),
+        h('span', { title: formatDate(p.lastActivityAt) }, `actief ${relativeDate(p.lastActivityAt)}`)),
+      p.videoCount ? h('div', { class: 'status-row' }, statusOrder.filter((st) => p.statusCounts[st]).map((st) =>
+        h('span', { class: `pill pill-sm pill-${st}`, title: STATUS[st].label }, icon(STATUS[st].icon), `${p.statusCounts[st]} ${STATUS[st].label.toLowerCase()}`))) : null,
+      h('div', { class: `project-signal ${s.cls}` }, icon(s.icon), s.text)));
+}
+
+async function projectDialog({ title, project, submitLabel }) {
+  const name = h('input', { name: 'name', required: true, maxlength: '200', placeholder: 'Bijv. Voorjaarscampagne 2026', value: project?.name || '', autofocus: true });
+  const client = h('input', { name: 'clientName', maxlength: '200', placeholder: 'Bijv. Bakkerij Jansen', value: project?.clientName || '' });
+  let result = null;
+  await openDialog({
+    title,
+    body: [field('Projectnaam', name), field('Klant', client, 'Zichtbaar voor de klant boven de video.')],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'),
+      h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, submitLabel))],
+    onSubmit: async () => {
       try {
-        const { id } = await api('POST', '/api/projects', { name: name.value, clientName: client.value });
-        dialog.close();
-        navigate(`/projecten/${id}`);
-      } catch (err) { toast(err.message, 'error'); }
-    } },
-    h('h2', {}, 'Nieuw project'),
-    h('label', { class: 'field' }, h('span', {}, 'Projectnaam'), name),
-    h('label', { class: 'field' }, h('span', {}, 'Klant'), client),
-    h('div', { class: 'dialog-actions' },
-      h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'),
-      h('button', { class: 'btn btn-primary', value: 'ok' }, 'Project aanmaken'))));
-  dialog.addEventListener('close', () => dialog.remove());
-  document.body.append(dialog);
-  dialog.showModal();
+        result = { name: name.value, clientName: client.value };
+        result.response = project
+          ? await api('PATCH', `/api/projects/${project.id}`, result)
+          : await api('POST', '/api/projects', result);
+      } catch (err) { toast(err.message, 'error'); result = null; return false; }
+    },
+  });
+  return result;
+}
+
+async function newProjectDialog() {
+  const r = await projectDialog({ title: 'Nieuw project', submitLabel: 'Project aanmaken' });
+  if (!r) return;
+  toast(`Project “${r.name.trim()}” aangemaakt. Sleep er nu je eerste video in.`, 'success');
+  navigate(`/projecten/${r.response.id}`);
+}
+
+// ---------- Project ----------
+
+const VIDEO_FILTERS = [
+  { key: 'all', label: 'Alle', test: () => true },
+  { key: 'share', label: 'Nog te delen', test: (v) => ['concept', 'ready_for_review'].includes(v.latestVersion?.status) },
+  { key: 'waiting', label: 'Wacht op klant', test: (v) => v.latestVersion?.status === 'in_review' },
+  { key: 'feedback', label: 'Feedback binnen', test: (v) => v.latestVersion?.status === 'changes_requested' || v.openComments > 0 },
+  { key: 'approved', label: 'Goedgekeurd', test: (v) => v.latestVersion?.status === 'approved' },
+];
+
+function pickFiles({ multiple }) {
+  return new Promise((resolve) => {
+    const input = h('input', { type: 'file', accept: session.formats.map((f) => `.${f}`).join(','), multiple, class: 'visually-hidden' });
+    input.addEventListener('change', () => { resolve([...input.files]); input.remove(); });
+    input.addEventListener('cancel', () => { resolve([]); input.remove(); });
+    document.body.append(input);
+    input.click();
+  });
+}
+
+function uploadsDisabled() {
+  if (session.media && !session.media.uploadsEnabled) {
+    toast('Uploaden is uitgeschakeld omdat ffprobe ontbreekt. Zie Team › Systeem.', 'error');
+    return true;
+  }
+  return false;
+}
+
+/** Nieuwe video('s) in een project: elk bestand wordt een eigen video. */
+function addVideos(project, files, onDone) {
+  if (uploadsDisabled()) return;
+  for (const file of files) {
+    const problem = checkFile(file);
+    if (problem) { toast(problem, 'error'); continue; }
+    enqueue(file, { kind: 'video', projectId: project.id, projectName: project.name, title: suggestTitle(file.name) }, onDone);
+  }
+}
+
+/** Sleepzone voor een element. onFiles(files) bij loslaten. */
+function makeDropTarget(el, onFiles, label) {
+  let depth = 0;
+  const overlay = h('div', { class: 'drop-overlay', 'aria-hidden': 'true' }, icon('upload', { size: 28 }), h('strong', {}, label));
+  el.append(overlay);
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  el.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; depth++; el.classList.add('is-dragging'); e.preventDefault(); });
+  el.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+  el.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) el.classList.remove('is-dragging'); });
+  el.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    el.classList.remove('is-dragging');
+    onFiles([...e.dataTransfer.files]);
+  });
 }
 
 async function viewProject(id) {
   const project = await api('GET', `/api/projects/${id}`);
   document.title = `${project.name} — Studio Review`;
+  refreshSidebar(project.id);
   const params = new URLSearchParams(location.search);
-  let filter = params.get('filter') || 'all';
+  const state = { q: '', filter: params.get('filter') || 'all' };
+  const listEl = h('div', { class: 'video-list', role: 'list' });
+  const filterBar = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Filter video’s' });
+  const search = h('input', { type: 'search', placeholder: 'Zoek een video', 'aria-label': 'Zoek video’s' });
 
-  const counts = Object.fromEntries(GROUPS.map((g) => [g.key, project.videos.filter((v) => v.latestVersion && g.statuses.includes(v.latestVersion.status)).length]));
-  const listEl = h('div', { class: 'video-list' });
-  const tabs = h('div', { class: 'tabs', role: 'tablist' });
+  const reload = async () => {
+    if (!location.pathname.endsWith(`/projecten/${id}`)) return;
+    const fresh = await api('GET', `/api/projects/${id}`).catch(() => null);
+    if (fresh) { project.videos = fresh.videos; draw(); refreshSidebar(project.id); }
+  };
+  const onDone = () => reload();
+  const chooseFiles = async () => { const files = await pickFiles({ multiple: true }); if (files.length) addVideos(project, files, onDone); };
 
-  function drawTabs() {
-    tabs.replaceChildren(
-      ...[{ key: 'all', label: 'Alle', n: project.videos.length }, ...GROUPS.map((g) => ({ ...g, n: counts[g.key] }))].map((t) =>
-        h('button', {
-          class: `tab${filter === t.key ? ' is-active' : ''}`, role: 'tab', 'aria-selected': String(filter === t.key),
-          onClick: () => { filter = t.key; history.replaceState(null, '', `?filter=${t.key}`); drawTabs(); drawList(); },
-        }, t.label, h('span', { class: 'tab-count' }, t.n))));
-  }
-
-  function drawList() {
-    const group = GROUPS.find((g) => g.key === filter);
-    const videos = project.videos.filter((v) => !group || (v.latestVersion && group.statuses.includes(v.latestVersion.status)));
-    if (!videos.length) {
-      listEl.replaceChildren(h('div', { class: 'empty-state' },
-        h('p', { class: 'muted' }, project.videos.length ? 'Geen video’s met deze status.' : 'Nog geen video’s in dit project. Upload de eerste video om te beginnen.')));
+  function draw() {
+    const term = state.q.trim().toLowerCase();
+    const searched = project.videos.filter((v) => !term || v.title.toLowerCase().includes(term));
+    mount(filterBar, VIDEO_FILTERS.map((f) => h('button', {
+      type: 'button', 'aria-pressed': String(state.filter === f.key),
+      onClick: () => { state.filter = f.key; history.replaceState(null, '', f.key === 'all' ? location.pathname : `?filter=${f.key}`); draw(); },
+    }, f.label, h('span', { class: 'seg-count' }, searched.filter(f.test).length))));
+    if (!project.videos.length) {
+      mount(listEl, h('button', { type: 'button', class: 'dropzone-big', onClick: chooseFiles },
+        h('div', { class: 'empty-icon' }, icon('upload')),
+        h('strong', {}, 'Sleep video’s hierheen of klik om bestanden te kiezen'),
+        h('span', { class: 'muted' }, `${session.formats.map((f) => f.toUpperCase()).join(', ')} · tot ${formatBytes(session.maxUploadBytes)} per bestand · aanbevolen: H.264 in MP4`),
+        h('span', { class: 'muted small' }, 'Elke upload wordt een eigen video en blijft intern (Concept) tot je hem deelt.')));
       return;
     }
-    listEl.replaceChildren(...videos.map((v) => {
-      const lv = v.latestVersion;
-      return h('a', { class: 'video-row', href: `/video/${v.id}`, 'data-nav': true },
-        h('div', { class: 'thumb' }, lv?.hasPoster ? h('img', { src: `/api/versions/${lv.id}/poster`, alt: '', loading: 'lazy' }) : h('span', { class: 'thumb-empty' }, icon('play'))),
-        h('div', { class: 'video-row-main' },
-          h('div', { class: 'video-row-title' }, v.title),
-          h('div', { class: 'muted small' },
-            `Versie ${v.versionCount}`,
-            v.latestSharedNumber && v.latestSharedNumber !== v.versionCount ? ` · klant ziet versie ${v.latestSharedNumber}` : '',
-            lv?.duration ? ` · ${timecode(lv.duration)}` : '',
-            ` · bijgewerkt ${relativeDate(v.updatedAt)}`)),
-        h('div', { class: 'video-row-meta' },
-          v.openComments ? h('span', { class: 'comment-count', title: 'Open reacties van de klant op de nieuwste versie' }, `${v.openComments} open`) : null,
-          lv ? statusPill(lv.status) : null));
-    }));
+    const shown = searched.filter(VIDEO_FILTERS.find((f) => f.key === state.filter)?.test || (() => true))
+      .sort((a, b) => String(b.lastActivityAt).localeCompare(String(a.lastActivityAt)));
+    if (!shown.length) {
+      mount(listEl, emptyState({ icon: 'search', compact: true, title: 'Geen video’s gevonden', text: 'Pas je zoekterm of filter aan.',
+        action: button('Filters wissen', { onClick: () => { state.q = ''; search.value = ''; state.filter = 'all'; draw(); } }) }));
+      return;
+    }
+    mount(listEl, shown.map((v) => videoRow(v, reload)));
   }
+  search.addEventListener('input', () => { state.q = search.value; draw(); });
 
-  const nameEl = h('h1', {}, project.name);
-  shell(h('div', { class: 'page' },
-    h('div', { class: 'crumbs' }, h('a', { href: '/', 'data-nav': true }, 'Projecten'), ' / '),
-    h('div', { class: 'page-head' },
-      h('div', {}, nameEl, project.clientName ? h('div', { class: 'muted' }, project.clientName) : null),
-      h('div', { class: 'page-actions' },
-        h('button', { class: 'btn btn-ghost btn-small', onClick: () => editProjectDialog(project) }, 'Bewerken'),
-        h('button', { class: 'btn btn-primary', onClick: () => uploadDialog({ projectId: project.id }) }, '+ Video uploaden'))),
-    tabs,
-    listEl));
-  drawTabs();
-  drawList();
+  const content = h('div', { class: 'page page-drop' },
+    pageHeader({
+      crumbs: [{ label: 'Projecten', href: '/' }],
+      title: h('h1', { class: 'page-title', title: project.name }, project.name),
+      meta: [project.clientName ? h('span', {}, project.clientName) : null, h('span', {}, plural(project.videos.length, 'video', 'video’s'))],
+      actions: [
+        button('Bewerken', { icon: 'edit', variant: 'ghost', onClick: () => editProject(project) }),
+        button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }),
+      ],
+    }),
+    project.videos.length ? h('div', { class: 'toolbar' }, h('div', { class: 'search toolbar-search' }, icon('search'), search), filterBar) : null,
+    listEl,
+    project.videos.length ? h('p', { class: 'drop-hint small muted' }, icon('upload'), 'Tip: sleep bestanden op deze pagina om nieuwe video’s toe te voegen. Een nieuwe versie van een bestaande video upload je vanaf die video.') : null);
+  makeDropTarget(content, (files) => addVideos(project, files, onDone), 'Loslaten om als nieuwe video’s toe te voegen');
+  mount(pageEl, content);
+  draw();
 }
 
-function editProjectDialog(project) {
-  const name = h('input', { value: project.name, required: true });
-  const client = h('input', { value: project.clientName });
-  const dialog = h('dialog', { class: 'dialog' },
-    h('form', { method: 'dialog', onSubmit: async (e) => {
-      const action = e.submitter?.value;
-      if (action === 'cancel') return;
-      e.preventDefault();
+function videoRow(v, reload) {
+  const lv = v.latestVersion;
+  const sv = v.sharedVersion;
+  const titleText = h('a', { href: `/video/${v.id}`, 'data-nav': true, class: 'video-row-title', title: v.title }, v.title);
+  const renameBtn = button('', { icon: 'edit', variant: 'ghost', size: 'sm', 'aria-label': `Titel van “${v.title}” wijzigen`, onClick: (e) => { e.preventDefault(); startRename(); } });
+  const titleWrap = h('div', { class: 'video-row-titlewrap' }, titleText, renameBtn);
+
+  function startRename() {
+    const input = h('input', { type: 'text', value: v.title, maxlength: '200', 'aria-label': 'Nieuwe titel', class: 'inline-input' });
+    let saving = false;
+    const restoreTitle = () => mount(titleWrap, titleText, renameBtn);
+    const save = async () => {
+      if (saving) return;
+      const value = input.value.trim();
+      if (!value || value === v.title) { restoreTitle(); return; }
+      saving = true;
+      input.disabled = true;
       try {
-        if (action === 'delete') {
-          dialog.close();
-          const sure = await confirmDialog({ title: 'Project verwijderen?', body: 'Alle video’s, versies, reacties en deel-links in dit project worden definitief verwijderd.', confirmLabel: 'Definitief verwijderen', danger: true });
-          if (!sure) return;
-          await api('DELETE', `/api/projects/${project.id}`);
-          return navigate('/');
-        }
-        await api('PATCH', `/api/projects/${project.id}`, { name: name.value, clientName: client.value });
-        dialog.close();
-        route();
-      } catch (err) { toast(err.message, 'error'); }
-    } },
-    h('h2', {}, 'Project bewerken'),
-    h('label', { class: 'field' }, h('span', {}, 'Projectnaam'), name),
-    h('label', { class: 'field' }, h('span', {}, 'Klant'), client),
-    h('div', { class: 'dialog-actions dialog-actions-split' },
-      h('button', { class: 'btn btn-ghost link-danger', value: 'delete', formnovalidate: true }, 'Verwijderen'),
-      h('span', { class: 'pc-spacer' }),
-      h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'),
-      h('button', { class: 'btn btn-primary', value: 'ok' }, 'Opslaan'))));
-  dialog.addEventListener('close', () => dialog.remove());
-  document.body.append(dialog);
-  dialog.showModal();
-}
-
-// ---------- Uploaden ----------
-
-function suggestTitle(filename) {
-  return filename.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-/** Upload-dialoog voor een nieuwe video ({projectId}) of een nieuwe versie ({video}). */
-function uploadDialog({ projectId, video }) {
-  if (session.media && !session.media.uploadsEnabled) {
-    toast('Uploaden is uitgeschakeld omdat ffprobe ontbreekt op de server.', 'error');
-    return;
+        await api('PATCH', `/api/videos/${v.id}`, { title: value });
+        v.title = value;
+        toast('Titel bijgewerkt. Bestanden, links en reacties blijven ongewijzigd.', 'success');
+        reload();
+      } catch (err) { toast(err.message, 'error'); saving = false; input.disabled = false; input.focus(); }
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); saving = true; restoreTitle(); }
+    });
+    input.addEventListener('blur', save);
+    titleWrap.replaceChildren(input);
+    input.focus();
+    input.select();
   }
-  const accept = session.formats.map((f) => `.${f}`).join(',');
-  const fileInput = h('input', { type: 'file', accept, class: 'visually-hidden', id: 'upload-file' });
-  const titleInput = h('input', { type: 'text', placeholder: 'Bijv. Campagnefilm — Hoofdvideo', maxlength: '200' });
-  const fileInfo = h('div', { class: 'drop-info' }, h('strong', {}, 'Kies een videobestand'), h('span', { class: 'muted small' }, 'of sleep het hierheen'));
-  const drop = h('label', { class: 'dropzone', for: 'upload-file' }, fileInfo);
-  const bar = h('div', { class: 'progress-bar' });
-  const progressText = h('div', { class: 'small muted' });
-  const progress = h('div', { class: 'progress', hidden: true }, h('div', { class: 'progress-track' }, bar), progressText);
-  const error = h('div', { class: 'notice notice-error', hidden: true });
-  const submit = h('button', { class: 'btn btn-primary', type: 'submit', disabled: true }, video ? 'Nieuwe versie uploaden' : 'Uploaden');
-  const cancel = h('button', { class: 'btn btn-ghost', type: 'button' }, 'Annuleren');
-  let file = null;
-  let controller = null;
-  let titleTouched = false;
 
-  titleInput.addEventListener('input', () => { titleTouched = true; });
-
-  function pick(f) {
-    if (!f) return;
-    const ext = f.name.split('.').pop().toLowerCase();
-    error.hidden = true;
-    if (!session.formats.includes(ext)) {
-      error.textContent = `Dit bestandstype wordt niet ondersteund. Gebruik ${session.formats.map((x) => '.' + x).join(', ')}.`;
-      error.hidden = false;
-      return;
-    }
-    if (f.size > session.maxUploadBytes) {
-      error.textContent = `Het bestand is te groot (maximaal ${formatBytes(session.maxUploadBytes)}).`;
-      error.hidden = false;
-      return;
-    }
-    file = f;
-    fileInfo.replaceChildren(h('strong', {}, f.name), h('span', { class: 'muted small' }, `${formatBytes(f.size)} · technische bestandsnaam, niet zichtbaar voor de klant`));
-    if (!video && !titleTouched) titleInput.value = suggestTitle(f.name);
-    submit.disabled = false;
-  }
-  fileInput.addEventListener('change', () => pick(fileInput.files[0]));
-  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
-  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('is-over'); pick(e.dataTransfer.files[0]); });
-
-  const form = h('form', { onSubmit: async (e) => {
-    e.preventDefault();
-    if (!file) return;
-    submit.disabled = true;
-    fileInput.disabled = true;
-    titleInput.disabled = true;
-    progress.hidden = false;
-    error.hidden = true;
-    controller = new AbortController();
-    const started = Date.now();
-    try {
-      const uploadId = await uploadFile(file, {
-        signal: controller.signal,
-        onProgress: (fraction, sent) => {
-          bar.style.width = `${(fraction * 100).toFixed(1)}%`;
-          const secs = (Date.now() - started) / 1000;
-          const speed = secs > 1 ? sent / secs : 0;
-          const remaining = speed ? (file.size - sent) / speed : 0;
-          progressText.textContent = `${Math.floor(fraction * 100)}% · ${formatBytes(sent)} van ${formatBytes(file.size)}${speed ? ` · nog ca. ${timecode(remaining)}` : ''}`;
-        },
-        onRetry: (n, wait) => { progressText.textContent = `Verbinding onderbroken, nieuwe poging ${n} over ${Math.round(wait / 1000)} s…`; },
-      });
-      progressText.textContent = 'Bestand wordt gecontroleerd en verwerkt…';
-      const result = video
-        ? await api('POST', `/api/videos/${video.id}/versions`, { uploadId })
-        : await api('POST', `/api/projects/${projectId}/videos`, { uploadId, title: titleInput.value });
-      dialog.close();
-      toast(video ? `Versie ${result.number} is geüpload als concept` : 'Video is geüpload als concept', 'success');
-      navigate(`/video/${video ? video.id : result.videoId}?v=${result.versionId}`);
-    } catch (err) {
-      if (err.aborted) return;
-      error.textContent = err.message;
-      error.hidden = false;
-      submit.disabled = false;
-      fileInput.disabled = false;
-      titleInput.disabled = false;
-      progress.hidden = true;
-    }
-  } },
-  h('h2', {}, video ? 'Nieuwe versie uploaden' : 'Video uploaden'),
-  video ? h('p', { class: 'muted' }, 'De nieuwe versie komt onder “', h('strong', {}, video.title), '” en neemt deze titel, de deel-links en de akkoordgever over. Ze start als Concept; de klant ziet haar pas als je haar deelt.') : null,
-  fileInput,
-  drop,
-  !video ? h('label', { class: 'field' }, h('span', {}, 'Zichtbare titel'), titleInput,
-    h('span', { class: 'hint' }, 'Deze titel ziet de klant. Je kunt hem later altijd aanpassen; de bestandsnaam blijft ongewijzigd.')) : null,
-  h('p', { class: 'small muted' }, `Ondersteund: ${session.formats.map((x) => x.toUpperCase()).join(', ')} tot ${formatBytes(session.maxUploadBytes)}. Aanbevolen: H.264 in MP4 voor afspelen in alle browsers.`),
-  progress,
-  error,
-  h('div', { class: 'dialog-actions' }, cancel, submit));
-
-  const dialog = h('dialog', { class: 'dialog dialog-wide' }, form);
-  cancel.addEventListener('click', async () => {
-    if (controller && !submit.disabled) return dialog.close();
-    if (controller) {
-      const stop = await confirmDialog({ title: 'Upload annuleren?', body: 'De upload wordt gestopt en het gedeeltelijke bestand verwijderd.', confirmLabel: 'Upload stoppen', cancelLabel: 'Doorgaan', danger: true });
-      if (!stop) return;
-      controller.abort();
-    }
-    dialog.close();
-  });
-  dialog.addEventListener('cancel', (e) => { if (controller && submit.disabled) e.preventDefault(); });
-  dialog.addEventListener('close', () => dialog.remove());
-  document.body.append(dialog);
-  dialog.showModal();
+  return h('div', { class: 'video-row', role: 'listitem', onClick: (e) => { if (!e.target.closest('button, input, a')) navigate(`/video/${v.id}`); } },
+    h('a', { href: `/video/${v.id}`, 'data-nav': true, class: 'thumb', tabindex: '-1', 'aria-hidden': 'true' },
+      posterImg(v.posterVersionId),
+      lv?.duration ? h('span', { class: 'thumb-duration' }, timecode(lv.duration)) : null),
+    h('div', { class: 'video-row-main' },
+      titleWrap,
+      h('div', { class: 'video-versions' },
+        h('span', { class: 'ver-chip', title: 'Nieuwste versie intern' }, h('span', { class: 'muted' }, 'Intern'), ` v${lv?.number ?? '–'}`, lv ? statusPill(lv.status, { small: true }) : null),
+        h('span', { class: `ver-chip${sv ? '' : ' is-none'}`, title: 'Versie die de klant via de link ziet' }, icon('eye'),
+          sv ? [h('span', { class: 'muted' }, 'Klant ziet'), ` v${sv.number}`] : h('span', { class: 'muted' }, 'Nog niet gedeeld')))),
+    h('div', { class: 'video-row-side' },
+      v.openComments ? h('span', { class: 'badge badge-warn', title: 'Open reacties van de klant' }, icon('chat'), `${v.openComments} open`) : null,
+      h('span', { class: 'small muted', title: formatDate(v.lastActivityAt) }, relativeDate(v.lastActivityAt)),
+      icon('chevronRight')));
 }
 
-// ---------- Video ----------
+async function editProject(project) {
+  const r = await projectDialog({ title: 'Project bewerken', project, submitLabel: 'Opslaan' });
+  if (r) { toast('Project bijgewerkt', 'success'); return route(); }
+}
+
+// ---------- Video: reviewwerkplek ----------
 
 async function viewVideo(id) {
   const video = await api('GET', `/api/videos/${id}`);
   document.title = `${video.title} — Studio Review`;
+  refreshSidebar(video.project.id);
   const requested = Number(new URLSearchParams(location.search).get('v'));
   const version = video.versions.find((v) => v.id === requested) || video.versions[0];
-  const isLatest = version.id === video.versions[0].id;
+  const latest = video.versions[0];
+  const clientVersion = video.versions.find((v) => v.isClientVersion) || null;
   let comments = await api('GET', `/api/versions/${version.id}/comments`);
   let activeId = null;
+  let filter = 'all';
+  let tab = new URLSearchParams(location.search).get('tab') || 'comments';
 
   const player = createPlayer({
     src: `/api/versions/${version.id}/media`,
     poster: version.hasPoster ? `/api/versions/${version.id}/poster` : undefined,
     duration: version.duration,
   });
-  cleanup = () => player.destroy();
-  player.onMarkerClick((cid) => { activeId = cid; draw(); document.getElementById(`comment-${cid}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+  player.onMarkerClick((cid) => { activeId = cid; filter = 'all'; selectTab('comments'); drawComments(); scrollToComment(cid); });
 
-  const commentsEl = h('div', { class: 'comments' });
-  const reload = async () => { comments = await api('GET', `/api/versions/${version.id}/comments`); draw(); };
-  function draw() {
+  const commentsEl = h('div', { class: 'panel-scroll' });
+  const filterBar = h('div', { class: 'segmented segmented-sm', role: 'group', 'aria-label': 'Filter reacties' });
+  const tabCount = h('span', { class: 'tab-count' });
+  const reloadComments = async () => { comments = await api('GET', `/api/versions/${version.id}/comments`); drawComments(); };
+  const scrollToComment = (cid) => document.getElementById(`comment-${cid}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  function drawComments() {
+    const n = commentCounts(comments);
+    tabCount.textContent = n.open ? String(n.open) : '';
+    mount(filterBar, [['all', 'Alle', n.all], ['open', 'Open', n.open], ['resolved', 'Afgehandeld', n.resolved]].map(([key, label, count]) =>
+      h('button', { type: 'button', 'aria-pressed': String(filter === key), onClick: () => { filter = key; drawComments(); } }, label, h('span', { class: 'seg-count' }, count))));
     renderComments(commentsEl, comments, {
       mode: 'team',
       canWrite: true,
+      filter,
       activeId,
       isOwnTeamComment: (c) => c.authorType === 'team' && c.authorName === session.user.name,
-      onSeek: (t, cid) => { player.seek(t); activeId = cid; draw(); },
-      onReply: async (parentId, body) => { try { await api('POST', `/api/versions/${version.id}/comments`, { parentId, body }); await reload(); } catch (err) { toast(err.message, 'error'); } },
-      onResolve: async (cid, resolved) => { try { await api('POST', `/api/comments/${cid}/resolve`, { resolved }); await reload(); } catch (err) { toast(err.message, 'error'); } },
-      onDelete: async (cid) => { try { await api('DELETE', `/api/comments/${cid}`); await reload(); } catch (err) { toast(err.message, 'error'); } },
+      onSeek: (t, cid) => { player.seek(t); activeId = cid; drawComments(); },
+      onReply: async (parentId, body) => {
+        try { await api('POST', `/api/versions/${version.id}/comments`, { parentId, body }); await reloadComments(); toast('Antwoord geplaatst', 'success'); return true; } catch (err) { toast(err.message, 'error'); return false; }
+      },
+      onResolve: async (cid, resolved) => {
+        try { await api('POST', `/api/comments/${cid}/resolve`, { resolved }); await reloadComments(); toast(resolved ? 'Reactie afgehandeld. De status van de versie blijft ongewijzigd.' : 'Reactie heropend', 'success'); } catch (err) { toast(err.message, 'error'); drawComments(); }
+      },
+      onDelete: async (cid) => {
+        if (!(await confirmDialog({ title: 'Reactie verwijderen?', body: 'Je eigen reactie wordt definitief verwijderd.', confirmLabel: 'Verwijderen', danger: true }))) return drawComments();
+        try { await api('DELETE', `/api/comments/${cid}`); await reloadComments(); toast('Reactie verwijderd'); } catch (err) { toast(err.message, 'error'); }
+      },
     });
     player.setMarkers(markersFrom(comments, activeId));
   }
+
   const composer = createComposer({
     player,
-    placeholder: 'Interne notitie of reactie bij dit moment…',
+    placeholder: 'Interne notitie of antwoord bij dit moment…',
+    draftKey: `team-draft-${version.id}`,
     onSubmit: async (body, tc) => {
-      try { await api('POST', `/api/versions/${version.id}/comments`, { body, timecode: tc }); await reload(); } catch (err) { toast(err.message, 'error'); return false; }
+      try { await api('POST', `/api/versions/${version.id}/comments`, { body, timecode: tc }); await reloadComments(); toast('Reactie geplaatst', 'success'); return true; } catch (err) { toast(`${err.message} Je tekst is bewaard.`, 'error'); return false; }
     },
   });
 
-  const refresh = () => route();
+  // ---- Panel met tabbladen ----
+  const tabs = [
+    ['comments', 'Reacties', tabCount],
+    ['versions', 'Versies', h('span', { class: 'tab-count' }, video.versions.length)],
+    ['history', 'Geschiedenis', null],
+  ];
+  const tabButtons = tabs.map(([key, label, extra]) => h('button', {
+    type: 'button', role: 'tab', id: `tab-${key}`, 'aria-controls': `tabpanel-${key}`,
+    onClick: () => selectTab(key),
+    onKeydown: (e) => {
+      const i = tabs.findIndex((t) => t[0] === key);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length][0];
+        selectTab(next); document.getElementById(`tab-${next}`).focus(); e.preventDefault();
+      }
+    },
+  }, label, extra));
+  const panels = {
+    comments: h('div', { class: 'tabpanel tabpanel-comments', role: 'tabpanel', id: 'tabpanel-comments', 'aria-labelledby': 'tab-comments' },
+      h('div', { class: 'panel-toolbar' }, filterBar), commentsEl, h('div', { class: 'panel-composer' }, composer.el)),
+    versions: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-versions', 'aria-labelledby': 'tab-versions' }, h('div', { class: 'panel-scroll' }, versionsList(video, version))),
+    history: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-history', 'aria-labelledby': 'tab-history' }, h('div', { class: 'panel-scroll' }, historyList(version))),
+  };
+  function selectTab(key) {
+    tab = key;
+    tabButtons.forEach((b) => { const on = b.id === `tab-${key}`; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; });
+    Object.entries(panels).forEach(([k, p]) => { p.hidden = k !== key; });
+  }
 
-  shell(h('div', { class: 'video-page' },
-    h('div', { class: 'crumbs' },
-      h('a', { href: '/', 'data-nav': true }, 'Projecten'), ' / ',
-      h('a', { href: `/projecten/${video.project.id}`, 'data-nav': true }, video.project.name), ' / '),
-    titleEditor(video),
-    h('div', { class: 'video-layout' },
-      h('section', { class: 'video-main' },
-        !isLatest ? h('div', { class: 'notice notice-warn' }, `Je bekijkt een oudere versie (Versie ${version.number}). `,
-          h('a', { href: `/video/${video.id}`, 'data-nav': true }, `Naar Versie ${video.versions[0].number} →`)) : null,
+  // ---- Kop ----
+  const versionSelect = h('select', { class: 'version-select', 'aria-label': 'Kies versie' },
+    video.versions.map((v) => h('option', { value: v.id }, `Versie ${v.number} · ${STATUS_LABELS[v.status]}${v.isLatest ? ' · nieuwste' : ''}${v.isClientVersion ? ' · bij klant' : ''}`)));
+  versionSelect.value = String(version.id);
+  versionSelect.addEventListener('change', () => navigate(`/video/${video.id}?v=${versionSelect.value}`));
+
+  const refresh = () => route();
+  const shareBtn = button('Delen', { icon: 'link', onClick: () => shareDialog(video, refresh) });
+  const newVersionBtn = button('Nieuwe versie', { icon: 'layers', onClick: () => newVersionDialog(video) });
+
+  const content = h('div', { class: 'workspace page-drop' },
+    pageHeader({
+      crumbs: [{ label: 'Projecten', href: '/' }, { label: video.project.name, href: `/projecten/${video.project.id}` }],
+      title: titleEditor(video),
+      meta: [
+        h('span', { class: 'meta-item' }, h('span', { class: 'muted' }, 'Intern nieuwste: '), `Versie ${latest.number}`),
+        h('span', { class: 'meta-item' }, icon('eye'), h('span', { class: 'muted' }, ' Klant ziet: '), clientVersion ? `Versie ${clientVersion.number}` : 'nog niets gedeeld'),
+      ],
+      actions: [versionSelect, newVersionBtn, shareBtn, moreMenu(video, version)],
+    }),
+    publishBar(video, version, latest, clientVersion, refresh),
+    h('div', { class: 'workspace-grid' },
+      h('section', { class: 'stage', 'aria-label': 'Video' },
         player.el,
-        h('div', { class: 'stage-meta small muted' },
-          h('span', {}, `Versie ${version.number} · ${version.file.originalFilename} · ${formatBytes(version.file.size)}${version.width ? ` · ${version.width}×${version.height}` : ''}`),
-          h('a', { class: 'btn btn-small btn-ghost', href: `/api/versions/${version.id}/download` }, 'Download')),
-        h('div', { class: 'video-comments' },
-          composer.el,
-          h('h2', { class: 'panel-title' }, 'Reacties op Versie ', version.number),
-          commentsEl)),
-      h('aside', { class: 'video-side' },
-        versionsCard(video, version),
-        statusCard(video, version, isLatest, refresh),
-        approverCard(video, refresh),
-        linksCard(video, refresh),
-        historyCard(version),
-        dangerCard(video))),
-  ), { wide: true });
-  draw();
+        h('div', { class: 'stage-meta' },
+          h('span', { class: 'truncate', title: version.file.originalFilename }, icon('film'), version.file.originalFilename),
+          h('span', {}, [formatBytes(version.file.size), version.width ? `${version.width}×${version.height}` : null, version.duration ? timecode(version.duration) : null].filter(Boolean).join(' · ')),
+          h('span', { class: 'kbd-hint' }, 'Spatie afspelen · ←/→ 5 s · , . beeld'))),
+      h('aside', { class: 'side-panel', 'aria-label': 'Reacties en details' },
+        h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Paneel' }, tabButtons),
+        Object.values(panels))));
+  makeDropTarget(content, (files) => newVersionDialog(video, files[0]), `Loslaten als nieuwe versie (Versie ${latest.number + 1})`);
+  mount(pageEl, content);
+  selectTab(['comments', 'versions', 'history'].includes(tab) ? tab : 'comments');
+  drawComments();
+
+  const poll = setInterval(() => {
+    if (document.visibilityState === 'visible' && !document.querySelector('.reply-box:not([hidden]) textarea, dialog[open]')) reloadComments().catch(() => {});
+  }, 30_000);
+  cleanup = () => { clearInterval(poll); player.destroy(); composer.destroy(); };
 }
 
 function titleEditor(video) {
-  const display = h('h1', { class: 'video-title' }, video.title);
-  const edit = h('button', { class: 'btn btn-small btn-ghost', title: 'Titel wijzigen' }, 'Titel wijzigen');
-  const wrap = h('div', { class: 'title-row' }, display, edit);
-  edit.addEventListener('click', () => {
+  const wrap = h('div', { class: 'title-edit' });
+  const show = () => mount(wrap,
+    h('h1', { class: 'page-title', title: video.title }, video.title),
+    button('', { icon: 'edit', variant: 'ghost', size: 'sm', 'aria-label': 'Titel wijzigen', title: 'Titel wijzigen', onClick: edit }));
+  function edit() {
     const input = h('input', { type: 'text', value: video.title, maxlength: '200', class: 'title-input', 'aria-label': 'Zichtbare titel' });
-    const save = h('button', { class: 'btn btn-primary btn-small', type: 'submit' }, 'Opslaan');
-    const cancel = h('button', { class: 'btn btn-ghost btn-small', type: 'button', onClick: () => route() }, 'Annuleren');
+    const save = h('button', { class: 'btn btn-primary btn-sm', type: 'submit' }, h('span', { class: 'btn-label' }, 'Opslaan'));
     const form = h('form', { class: 'title-form', onSubmit: async (e) => {
       e.preventDefault();
+      if (!input.value.trim()) { input.classList.add('input-error'); input.focus(); return; }
+      const restore = busy(save);
       try {
         await api('PATCH', `/api/videos/${video.id}`, { title: input.value });
         toast('Titel bijgewerkt. Bestanden, links en reacties zijn ongewijzigd.', 'success');
         route();
-      } catch (err) { toast(err.message, 'error'); }
-    } }, input, save, cancel,
-    h('div', { class: 'hint' }, 'Alleen de zichtbare titel verandert. Er wordt geen extensie toegevoegd; bij downloaden krijgt het bestand automatisch de juiste extensie.'));
-    wrap.replaceWith(form);
+      } catch (err) { toast(err.message, 'error'); restore(); }
+    } }, input, save, h('button', { class: 'btn btn-ghost btn-sm', type: 'button', onClick: show }, 'Annuleren'),
+    h('span', { class: 'field-hint' }, 'Alleen de zichtbare titel verandert, zonder bestandsextensie. Bij downloaden krijgt het bestand automatisch de juiste extensie.'));
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') show(); });
+    mount(wrap, form);
     input.focus();
     input.select();
-  });
+  }
+  show();
   return wrap;
 }
 
-function card(title, ...children) {
-  return h('section', { class: 'card' }, h('h3', { class: 'card-title' }, title), ...children);
-}
-
-function versionsCard(video, current) {
-  return card('Versies',
-    h('ol', { class: 'version-list' }, video.versions.map((v) => h('li', {},
-      h('a', { href: `/video/${video.id}?v=${v.id}`, 'data-nav': true, class: `version-item${v.id === current.id ? ' is-current' : ''}` },
-        h('span', { class: 'version-num' }, `v${v.number}`),
-        h('span', { class: 'version-info' },
-          h('span', { class: 'small' }, formatDate(v.createdAt)),
-          h('span', { class: 'small muted' }, v.sharedAt ? 'Gedeeld met klant' : 'Niet gedeeld', v.commentCount ? ` · ${v.commentCount} reacties` : '')),
-        statusPill(v.status))))),
-    h('button', { class: 'btn btn-block', onClick: () => uploadDialog({ video }) }, '+ Nieuwe versie uploaden'));
-}
-
-function statusCard(video, version, isLatest, refresh) {
-  const act = async (fn, msg) => { try { await fn(); toast(msg, 'success'); refresh(); } catch (err) { toast(err.message, 'error'); } };
-  const steps = [];
-  if (version.status === 'concept') {
-    steps.push(h('button', { class: 'btn btn-primary btn-block', onClick: () => act(() => api('POST', `/api/versions/${version.id}/ready`), 'Versie staat klaar voor review') }, 'Zet op “Klaar voor review”'));
+/** Vaste plek die zegt waar de geselecteerde versie staat en wat de volgende stap is. */
+function publishBar(video, version, latest, clientVersion, refresh) {
+  const isLatest = version.id === latest.id;
+  const act = async (btn, fn, msg) => {
+    const restore = busy(btn);
+    try { await fn(); toast(msg, 'success'); refresh(); } catch (err) { toast(err.message, 'error'); restore(); }
+  };
+  let text;
+  let actions = [];
+  const round = version.rounds.at(-1);
+  if (!isLatest) {
+    text = [h('strong', {}, `Je bekijkt Versie ${version.number}, een oudere versie.`), ` De nieuwste versie intern is Versie ${latest.number}.`];
+    actions = [button(`Naar Versie ${latest.number}`, { icon: 'arrowLeft', onClick: () => navigate(`/video/${video.id}`) })];
+  } else if (version.status === 'concept') {
+    text = [h('strong', {}, `Versie ${version.number} is intern.`), clientVersion ? ` Klanten zien nog Versie ${clientVersion.number}.` : ' Klanten zien nog niets.', ' Zet de versie klaar zodra hij gecontroleerd is.'];
+    const b = button('Klaar voor review', { icon: 'flag', variant: 'primary', onClick: () => act(b, () => api('POST', `/api/versions/${version.id}/ready`), `Versie ${version.number} staat klaar om te delen`) });
+    actions = [b];
+  } else if (version.status === 'ready_for_review') {
+    text = [h('strong', {}, `Versie ${version.number} is klaar, maar nog niet gedeeld.`), ` Na publiceren zien klanten via hun bestaande link Versie ${version.number}${clientVersion ? ` in plaats van Versie ${clientVersion.number}` : ''}, en wordt de status In review.`];
+    const b = button(`Publiceren naar klant`, { icon: 'send', variant: 'primary', onClick: async () => {
+      const ok = await confirmDialog({
+        title: `Versie ${version.number} publiceren?`,
+        body: h('div', {},
+          h('p', {}, `Klanten zien via de bestaande reviewlink en akkoordlink voortaan Versie ${version.number}. De status wordt In review.`),
+          clientVersion ? h('p', { class: 'muted' }, `Versie ${clientVersion.number} en de feedback daarop blijven bewaard en zichtbaar als oudere versie.`) : h('p', { class: 'muted' }, 'Er wordt automatisch een reviewlink aangemaakt als die nog niet bestaat.')),
+        confirmLabel: 'Publiceren',
+      });
+      if (ok) act(b, () => api('POST', `/api/versions/${version.id}/share`), `Versie ${version.number} is gepubliceerd. Klanten zien deze versie nu.`);
+    } });
+    actions = [b];
+  } else if (version.status === 'in_review') {
+    text = [h('strong', {}, 'Klanten zien deze versie.'), ' Wacht op feedback of goedkeuring van de akkoordgever', video.approverName ? ` (${video.approverName})` : '', '.'];
+    actions = [button('Links bekijken', { icon: 'link', onClick: () => shareDialog(video, refresh) })];
+  } else if (version.status === 'changes_requested') {
+    text = [h('strong', {}, 'Feedback ontvangen.'), round ? ` ${round.reviewerName}${round.verified ? ' (akkoordgever)' : ''} verstuurde ${plural(round.commentCount, 'reactie', 'reacties')} op ${formatDate(round.at)}.` : '', ' Verwerk de feedback en upload een nieuwe versie.'];
+    actions = [button('Nieuwe versie uploaden', { icon: 'layers', variant: 'primary', onClick: () => newVersionDialog(video) })];
+  } else if (version.status === 'approved') {
+    text = version.approval
+      ? [h('strong', {}, `Goedgekeurd door ${version.approval.name}`), ` op ${formatDate(version.approval.at)}. Deze goedkeuring geldt alleen voor Versie ${version.number}.`]
+      : [h('strong', {}, 'Handmatig op Goedgekeurd gezet.'), ' Er is geen klantgoedkeuring vastgelegd voor deze versie.'];
   }
-  if (version.status === 'ready_for_review') {
-    steps.push(isLatest
-      ? h('button', { class: 'btn btn-primary btn-block', onClick: async () => {
-        const ok = await confirmDialog({ title: `Versie ${version.number} delen met de klant?`, body: 'De klant ziet deze versie via de bestaande reviewlink(s). De status wordt “In review”.', confirmLabel: 'Delen met klant' });
-        if (ok) act(() => api('POST', `/api/versions/${version.id}/share`), 'Gedeeld met de klant — status is nu In review');
-      } }, 'Delen met klant')
-      : h('p', { class: 'small muted' }, 'Alleen de nieuwste versie kan worden gedeeld.'));
-  }
-
-  const select = h('select', { 'aria-label': 'Nieuwe status' }, Object.entries(STATUS_LABELS).map(([k, label]) => h('option', { value: k, selected: k === version.status }, label)));
-  const note = h('input', { type: 'text', placeholder: 'Reden (optioneel)', maxlength: '500' });
-  const correction = h('details', { class: 'correction' },
-    h('summary', {}, 'Status handmatig corrigeren'),
-    h('form', { class: 'correction-form', onSubmit: (e) => {
-      e.preventDefault();
-      act(() => api('POST', `/api/versions/${version.id}/status`, { status: select.value, note: note.value }), 'Status gecorrigeerd');
-    } }, select, note, h('button', { class: 'btn btn-small', type: 'submit' }, 'Status opslaan'),
-    h('p', { class: 'small muted' }, 'Wordt vastgelegd met jouw naam en tijdstip. Een handmatige “Goedgekeurd” is geen klantgoedkeuring.')));
-
-  const lastRound = version.rounds.at(-1);
-  return card(`Status van Versie ${version.number}`,
-    h('div', { class: 'status-now' }, statusPill(version.status)),
-    version.approval ? h('div', { class: 'notice notice-ok' }, `Goedgekeurd door ${version.approval.name} (${version.approval.email || 'akkoordgever'}) op ${formatDate(version.approval.at)}`) : null,
-    lastRound ? h('div', { class: 'notice notice-warn' },
-      h('div', {}, `Feedback verstuurd door ${lastRound.reviewerName}${lastRound.verified ? ' (akkoordgever, geverifieerd)' : ' (opgegeven naam)'} op ${formatDate(lastRound.at)} · ${lastRound.commentCount} reactie(s)`),
-      version.rounds.length > 1 ? h('div', { class: 'small' }, `${version.rounds.length} feedbackrondes in totaal`) : null) : null,
-    steps,
-    version.status === 'in_review' ? h('p', { class: 'small muted' }, 'Wacht op feedback of goedkeuring van de klant.') : null,
-    version.status === 'changes_requested' && isLatest ? h('p', { class: 'small muted' }, 'Verwerk de feedback en upload een nieuwe versie.') : null,
-    correction);
+  const correct = h('button', { type: 'button', class: 'link-btn', onClick: () => statusDialog(version, refresh) }, icon('edit'), 'Status corrigeren');
+  return h('section', { class: `publish-bar is-${version.status}${isLatest ? '' : ' is-old'}`, 'aria-label': 'Status en volgende stap' },
+    h('div', { class: 'publish-status' }, h('span', { class: 'publish-version' }, `Versie ${version.number}`), statusPill(version.status)),
+    h('p', { class: 'publish-text' }, text),
+    h('div', { class: 'publish-actions' }, correct, actions));
 }
 
-function approverCard(video, refresh) {
-  const name = h('input', { type: 'text', value: video.approverName, placeholder: 'Naam', 'aria-label': 'Naam akkoordgever' });
-  const email = h('input', { type: 'email', value: video.approverEmail, placeholder: 'E-mailadres', 'aria-label': 'E-mail akkoordgever' });
-  const activeLink = video.links.find((l) => l.role === 'approver' && !l.revokedAt);
-  return card('Akkoordgever',
-    h('p', { class: 'small muted' }, 'Eén persoon per video mag goedkeuren. Deze persoon krijgt een eigen, persoonlijke link; andere reviewers kunnen alleen feedback geven.'),
-    h('form', { class: 'stack', onSubmit: async (e) => {
-      e.preventDefault();
-      if ((video.approverName || video.approverEmail) && activeLink && (name.value !== video.approverName || email.value !== video.approverEmail)) {
-        const ok = await confirmDialog({ title: 'Akkoordgever wijzigen?', body: 'De huidige persoonlijke akkoordlink wordt ingetrokken. Maak daarna een nieuwe link aan voor de nieuwe akkoordgever.', confirmLabel: 'Wijzigen' });
-        if (!ok) return;
-      }
-      try { await api('PATCH', `/api/videos/${video.id}`, { approverName: name.value, approverEmail: email.value }); toast('Akkoordgever opgeslagen', 'success'); refresh(); } catch (err) { toast(err.message, 'error'); }
-    } }, name, email, h('button', { class: 'btn btn-small', type: 'submit' }, 'Opslaan')),
-    video.approverName
-      ? (activeLink
-        ? linkRow(activeLink, refresh)
-        : h('button', { class: 'btn btn-block', onClick: async () => {
-          try { const l = await api('POST', `/api/videos/${video.id}/links`, { role: 'approver' }); await copyText(l.url); toast('Akkoordlink aangemaakt en gekopieerd', 'success'); refresh(); } catch (err) { toast(err.message, 'error'); }
-        } }, 'Maak persoonlijke akkoordlink'))
-      : null);
+function moreMenu(video, version) {
+  const menu = h('div', { class: 'menu', role: 'menu', hidden: true },
+    h('a', { class: 'menu-item', role: 'menuitem', href: `/api/versions/${version.id}/download`, download: '' }, icon('download'), `Download Versie ${version.number}`),
+    h('button', { type: 'button', class: 'menu-item is-danger', role: 'menuitem', onClick: async () => {
+      close();
+      const ok = await confirmDialog({ title: 'Video verwijderen?', body: `“${video.title}” met alle ${plural(video.versions.length, 'versie', 'versies')}, reacties en links wordt definitief verwijderd. Klantlinks werken daarna niet meer.`, confirmLabel: 'Definitief verwijderen', danger: true });
+      if (!ok) return;
+      try { await api('DELETE', `/api/videos/${video.id}`); toast('Video verwijderd'); navigate(`/projecten/${video.project.id}`); } catch (err) { toast(err.message, 'error'); }
+    } }, icon('trash'), 'Video verwijderen'));
+  const trigger = button('', { icon: 'more', variant: 'ghost', 'aria-label': 'Meer acties', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  const close = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', outside); };
+  const outside = (e) => { if (!wrap.contains(e.target)) close(); };
+  trigger.addEventListener('click', () => {
+    if (!menu.hidden) return close();
+    menu.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    menu.querySelector('.menu-item')?.focus();
+    setTimeout(() => document.addEventListener('click', outside));
+  });
+  menu.addEventListener('keydown', (e) => {
+    const items = [...menu.querySelectorAll('.menu-item')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { close(); trigger.focus(); }
+    if (e.key === 'ArrowDown') { items[(i + 1) % items.length].focus(); e.preventDefault(); }
+    if (e.key === 'ArrowUp') { items[(i - 1 + items.length) % items.length].focus(); e.preventDefault(); }
+  });
+  const wrap = h('div', { class: 'menu-wrap' }, trigger, menu);
+  return wrap;
 }
 
-function linkRow(link, refresh) {
-  return h('div', { class: `link-row${link.revokedAt ? ' is-revoked' : ''}` },
+function versionsList(video, current) {
+  return h('ol', { class: 'version-list' }, video.versions.map((v) => h('li', {},
+    h('a', { href: `/video/${video.id}?v=${v.id}`, 'data-nav': true, class: `version-item${v.id === current.id ? ' is-current' : ''}`, 'aria-current': v.id === current.id ? 'true' : null },
+      h('span', { class: 'version-num' }, `v${v.number}`),
+      h('span', { class: 'version-info' },
+        h('span', { class: 'version-tags' }, statusPill(v.status, { small: true }),
+          v.isLatest ? h('span', { class: 'badge badge-neutral' }, 'Nieuwste') : null,
+          v.isClientVersion ? h('span', { class: 'badge badge-accent' }, icon('eye'), 'Klant ziet deze') : null),
+        h('span', { class: 'small muted' }, `Geüpload ${formatDate(v.createdAt)}`),
+        h('span', { class: 'small muted' }, v.sharedAt ? `Gedeeld ${formatDate(v.sharedAt)}` : 'Niet gedeeld', ' · ', plural(v.commentCount, 'reactie', 'reacties'),
+          v.openComments ? ` (${v.openComments} open)` : ''))))));
+}
+
+function historyList(version) {
+  const items = [...version.events].reverse();
+  return h('div', { class: 'history' },
+    version.approval ? h('div', { class: 'notice notice-ok' }, icon('shield'), h('div', {}, h('strong', {}, `Goedgekeurd door ${version.approval.name}`), h('div', { class: 'small' }, `${version.approval.email} · ${formatDate(version.approval.at)}`))) : null,
+    version.rounds.length ? h('div', { class: 'history-block' }, h('h3', {}, 'Feedbackrondes'), version.rounds.map((r) => h('div', { class: 'round' },
+      icon('send'), h('div', {}, h('div', {}, h('strong', {}, r.reviewerName), r.verified ? ' (akkoordgever)' : ' (opgegeven naam)', ` · ${plural(r.commentCount, 'reactie', 'reacties')}`),
+        h('div', { class: 'small muted' }, formatDate(r.at)), r.message ? h('div', { class: 'small' }, `“${r.message}”`) : null)))) : null,
+    h('div', { class: 'history-block' }, h('h3', {}, 'Statuswijzigingen'),
+      h('ol', { class: 'timeline' }, items.map((e) => h('li', {},
+        h('div', { class: 'timeline-head' }, statusPill(e.to, { small: true }), h('time', { class: 'small muted', datetime: e.at }, formatDate(e.at))),
+        h('div', { class: 'small' }, e.eventLabel, ' · ', h('strong', {}, e.actorLabel)),
+        e.note ? h('div', { class: 'small muted' }, `Reden: ${e.note}`) : null)))));
+}
+
+async function statusDialog(version, refresh) {
+  const select = h('select', { 'aria-label': 'Nieuwe status', required: true },
+    Object.entries(STATUS_LABELS).map(([k, label]) => h('option', { value: k, disabled: k === version.status }, `${label}${k === version.status ? ' (huidig)' : ''}`)));
+  select.value = Object.keys(STATUS_LABELS).find((k) => k !== version.status);
+  const reason = h('textarea', { rows: '2', required: true, maxlength: '500', placeholder: 'Bijv. “Klant gaf telefonisch akkoord”' });
+  await openDialog({
+    title: `Status van Versie ${version.number} corrigeren`,
+    body: [
+      h('p', {}, 'Gebruik dit alleen om een fout te herstellen. De wijziging wordt met jouw naam, tijdstip en reden in de geschiedenis bewaard.'),
+      field('Nieuwe status', select),
+      field('Reden (verplicht)', reason),
+      h('p', { class: 'small muted' }, 'Een handmatige “Goedgekeurd” is geen goedkeuring door de akkoordgever. Zichtbaarheid voor de klant verandert hier niet; delen doe je met “Publiceren naar klant”.'),
+    ],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, 'Status opslaan'))],
+    onSubmit: async () => {
+      try {
+        await api('POST', `/api/versions/${version.id}/status`, { status: select.value, note: reason.value });
+        toast(`Status gecorrigeerd naar ${STATUS_LABELS[select.value]}`, 'success');
+        refresh();
+      } catch (err) { toast(err.message, 'error'); return false; }
+    },
+  });
+}
+
+/** "Nieuwe versie": altijd onder deze video, blijft intern tot publiceren. */
+async function newVersionDialog(video, droppedFile) {
+  if (uploadsDisabled()) return;
+  const next = video.versions[0].number + 1;
+  const client = video.versions.find((v) => v.isClientVersion);
+  let file = droppedFile || null;
+  const fileInfo = h('div', { class: 'drop-info' });
+  const showFile = () => mount(fileInfo, file
+    ? [icon('film'), h('div', {}, h('strong', { class: 'truncate' }, file.name), h('div', { class: 'small muted' }, `${formatBytes(file.size)} · technische bestandsnaam, niet zichtbaar voor de klant`))]
+    : [icon('upload'), h('div', {}, h('strong', {}, 'Kies een bestand of sleep het hierheen'), h('div', { class: 'small muted' }, session.formats.map((f) => f.toUpperCase()).join(', ')))]);
+  const choose = h('button', { type: 'button', class: 'dropzone', onClick: async () => { const [f] = await pickFiles({ multiple: false }); if (f) { file = f; showFile(); } } }, fileInfo);
+  choose.addEventListener('dragover', (e) => e.preventDefault());
+  choose.addEventListener('drop', (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) { file = e.dataTransfer.files[0]; showFile(); } });
+  showFile();
+  await openDialog({
+    title: `Nieuwe versie van “${video.title}”`,
+    body: [
+      h('ul', { class: 'facts' },
+        h('li', {}, icon('layers'), h('span', {}, 'Wordt ', h('strong', {}, `Versie ${next}`), ' en neemt titel, links en akkoordgever over.')),
+        h('li', {}, icon('lock'), h('span', {}, 'Blijft ', h('strong', {}, 'intern (Concept)'), ' tot je hem publiceert.')),
+        h('li', {}, icon('eye'), h('span', {}, client ? `Klanten blijven tot dan Versie ${client.number} zien.` : 'Klanten zien nog niets.')),
+        h('li', {}, icon('history'), h('span', {}, 'Feedback en goedkeuring van eerdere versies blijven bewaard; de nieuwe versie is niet automatisch goedgekeurd.'))),
+      choose,
+    ],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, `Uploaden als Versie ${next}`))],
+    onSubmit: async () => {
+      if (!file) { toast('Kies eerst een bestand.', 'error'); return false; }
+      const problem = checkFile(file);
+      if (problem) { toast(problem, 'error'); return false; }
+      enqueue(file, { kind: 'version', videoId: video.id, videoTitle: video.title, nextNumber: next }, (item) => {
+        toast(`Versie ${next} is geüpload en staat intern als Concept.`, 'success', { action: { label: 'Openen', onClick: () => navigate(`/video/${video.id}?v=${item.result.versionId}`) } });
+        if (location.pathname === `/video/${video.id}`) navigate(`/video/${video.id}?v=${item.result.versionId}`, { replace: true });
+      });
+    },
+  });
+}
+
+// ---------- Delen ----------
+
+async function shareDialog(video, refresh) {
+  const client = video.versions.find((v) => v.isClientVersion);
+  const reviewerLinks = video.links.filter((l) => l.role === 'reviewer' && !l.revokedAt);
+  const approverLink = video.links.find((l) => l.role === 'approver' && !l.revokedAt);
+  const revoked = video.links.filter((l) => l.revokedAt);
+  let changed = false;
+
+  const linkRow = (link) => h('div', { class: 'link-row' },
     h('div', { class: 'link-row-head' },
-      h('strong', { class: 'small' }, link.role === 'approver' ? `Akkoordlink · ${link.approverName}` : (link.label || 'Reviewlink')),
-      link.allowDownload ? h('span', { class: 'badge badge-guest' }, 'download aan') : null,
-      link.revokedAt ? h('span', { class: 'badge badge-guest' }, 'ingetrokken') : null),
-    h('input', { type: 'text', readonly: true, value: link.url, class: 'link-url', onFocus: (e) => e.target.select(), 'aria-label': 'Deel-link' }),
-    h('div', { class: 'link-row-foot small muted' },
-      h('span', {}, link.revokedAt ? `Ingetrokken ${formatDate(link.revokedAt)}` : (link.lastUsedAt ? `Laatst geopend ${relativeDate(link.lastUsedAt)}` : 'Nog niet geopend')),
-      !link.revokedAt ? h('span', { class: 'link-row-actions' },
-        h('button', { class: 'link-btn link-strong', onClick: async () => { await copyText(link.url); toast('Link gekopieerd'); } }, 'Kopiëren'),
-        h('button', { class: 'link-btn link-danger', onClick: async () => {
-          const ok = await confirmDialog({ title: 'Link intrekken?', body: 'Wie deze link heeft, krijgt direct geen toegang meer. Reacties en goedkeuringen blijven bewaard.', confirmLabel: 'Intrekken', danger: true });
-          if (!ok) return;
-          try { await api('POST', `/api/links/${link.id}/revoke`); toast('Link ingetrokken'); refresh(); } catch (err) { toast(err.message, 'error'); }
-        } }, 'Intrekken')) : null));
-}
+      h('strong', { class: 'truncate' }, link.role === 'approver' ? link.approverName : (link.label || 'Reviewlink')),
+      link.allowDownload ? h('span', { class: 'badge badge-neutral' }, icon('download'), 'download aan') : null,
+      h('span', { class: 'small muted link-used' }, link.lastUsedAt ? `geopend ${relativeDate(link.lastUsedAt)}` : 'nog niet geopend')),
+    h('div', { class: 'link-copy' },
+      h('input', { type: 'text', readonly: true, value: link.url, class: 'link-url', 'aria-label': 'Deel-link', onFocus: (e) => e.target.select() }),
+      button('Kopiëren', { icon: 'copy', size: 'sm', onClick: async () => { await copyText(link.url); toast('Link gekopieerd', 'success'); } }),
+      button('', { icon: 'trash', size: 'sm', variant: 'ghost', 'aria-label': 'Link intrekken', title: 'Intrekken', onClick: async () => {
+        const ok = await confirmDialog({ title: 'Link intrekken?', body: 'Wie deze link heeft, krijgt direct geen toegang meer, ook niet tot het videobestand. Reacties en goedkeuringen blijven bewaard.', confirmLabel: 'Intrekken', danger: true });
+        if (!ok) return;
+        try { await api('POST', `/api/links/${link.id}/revoke`); toast('Link ingetrokken', 'success'); dialogDone(); } catch (err) { toast(err.message, 'error'); }
+      } })));
 
-function linksCard(video, refresh) {
-  const reviewerLinks = video.links.filter((l) => l.role === 'reviewer');
-  const active = reviewerLinks.filter((l) => !l.revokedAt);
-  const revoked = reviewerLinks.filter((l) => l.revokedAt);
+  let close;
+  const dialogDone = () => { changed = true; close?.(); };
+
   const label = h('input', { type: 'text', placeholder: 'Label, bijv. “Marketingteam”', maxlength: '100' });
   const allowDownload = h('input', { type: 'checkbox' });
-  return card('Reviewlinks',
-    h('p', { class: 'small muted' }, 'Klanten openen de nieuwste gedeelde versie zonder account. De link blijft gelijk bij nieuwe versies en titelwijzigingen.'),
-    active.length ? active.map((l) => linkRow(l, refresh)) : h('p', { class: 'small' }, 'Nog geen actieve reviewlink.'),
-    h('details', { class: 'correction' },
-      h('summary', {}, 'Nieuwe reviewlink'),
-      h('form', { class: 'stack', onSubmit: async (e) => {
-        e.preventDefault();
-        try {
-          const l = await api('POST', `/api/videos/${video.id}/links`, { role: 'reviewer', label: label.value, allowDownload: allowDownload.checked });
-          await copyText(l.url);
-          toast('Reviewlink aangemaakt en gekopieerd', 'success');
-          refresh();
-        } catch (err) { toast(err.message, 'error'); }
-      } }, label, h('label', { class: 'small check' }, allowDownload, ' Klant mag downloaden'), h('button', { class: 'btn btn-small', type: 'submit' }, 'Link aanmaken'))),
-    revoked.length ? h('details', { class: 'correction' }, h('summary', {}, `Ingetrokken links (${revoked.length})`), revoked.map((l) => linkRow(l, refresh))) : null);
-}
+  const createReviewer = button('Reviewlink maken', { icon: 'plus', size: 'sm', onClick: async (e) => {
+    const restore = busy(e.currentTarget);
+    try {
+      const l = await api('POST', `/api/videos/${video.id}/links`, { role: 'reviewer', label: label.value, allowDownload: allowDownload.checked });
+      await copyText(l.url);
+      toast('Reviewlink gemaakt en gekopieerd', 'success');
+      dialogDone();
+    } catch (err) { toast(err.message, 'error'); restore(); }
+  } });
 
-function historyCard(version) {
-  return card(`Statusgeschiedenis Versie ${version.number}`,
-    h('ol', { class: 'timeline' }, [...version.events].reverse().map((e) => h('li', {},
-      h('div', { class: 'timeline-head' }, statusPill(e.to), h('time', { class: 'small muted', datetime: e.at }, formatDate(e.at))),
-      h('div', { class: 'small' }, e.eventLabel, ' · ', h('strong', {}, e.actorLabel)),
-      e.note ? h('div', { class: 'small muted' }, e.note) : null))));
-}
-
-function dangerCard(video) {
-  return h('div', { class: 'danger-zone' },
-    h('button', { class: 'link-btn link-danger', onClick: async () => {
-      const ok = await confirmDialog({ title: 'Video verwijderen?', body: `“${video.title}” met alle versies, reacties en links wordt definitief verwijderd.`, confirmLabel: 'Definitief verwijderen', danger: true });
+  const approverName = h('input', { type: 'text', value: video.approverName, placeholder: 'Naam', 'aria-label': 'Naam akkoordgever', maxlength: '200' });
+  const approverEmail = h('input', { type: 'email', value: video.approverEmail, placeholder: 'E-mailadres', 'aria-label': 'E-mail akkoordgever', maxlength: '200' });
+  const saveApprover = button(video.approverName ? 'Akkoordgever wijzigen' : 'Akkoordgever opslaan', { size: 'sm', onClick: async (e) => {
+    if (!approverName.value.trim()) { approverName.classList.add('input-error'); approverName.focus(); return; }
+    if (approverLink && (approverName.value !== video.approverName || approverEmail.value !== video.approverEmail)) {
+      const ok = await confirmDialog({ title: 'Akkoordgever wijzigen?', body: 'De huidige persoonlijke akkoordlink wordt ingetrokken. Maak daarna een nieuwe akkoordlink voor de nieuwe akkoordgever.', confirmLabel: 'Wijzigen' });
       if (!ok) return;
-      await api('DELETE', `/api/videos/${video.id}`);
-      navigate(`/projecten/${video.project.id}`);
-    } }, 'Video verwijderen'));
+    }
+    const restore = busy(e.currentTarget);
+    try { await api('PATCH', `/api/videos/${video.id}`, { approverName: approverName.value, approverEmail: approverEmail.value }); toast('Akkoordgever opgeslagen', 'success'); dialogDone(); } catch (err) { toast(err.message, 'error'); restore(); }
+  } });
+  const createApprover = video.approverName && !approverLink ? button('Persoonlijke akkoordlink maken', { icon: 'shield', size: 'sm', variant: 'primary', onClick: async (e) => {
+    const restore = busy(e.currentTarget);
+    try { const l = await api('POST', `/api/videos/${video.id}/links`, { role: 'approver' }); await copyText(l.url); toast('Akkoordlink gemaakt en gekopieerd', 'success'); dialogDone(); } catch (err) { toast(err.message, 'error'); restore(); }
+  } }) : null;
+
+  const body = [
+    h('div', { class: `notice ${client ? 'notice-info' : 'notice-warn'}` }, icon(client ? 'eye' : 'lock'),
+      h('span', {}, client ? [`Via deze links zien klanten `, h('strong', {}, `Versie ${client.number}`), ' (de nieuwste gedeelde versie). De links blijven gelijk bij nieuwe versies.']
+        : 'Er is nog geen versie gepubliceerd. Wie een link opent, ziet een wachtmelding tot je een versie publiceert.')),
+    h('section', { class: 'share-section' },
+      h('div', { class: 'share-head' }, h('span', { class: 'share-icon' }, icon('globe')),
+        h('div', {}, h('h3', {}, 'Reviewlink'), h('p', { class: 'small muted' }, 'Voor iedereen die mag meekijken. Bekijken, reageren en feedback versturen, zonder account. ', h('strong', {}, 'Kan niet goedkeuren.')))),
+      reviewerLinks.length ? reviewerLinks.map(linkRow) : h('p', { class: 'small muted' }, 'Nog geen reviewlink. Bij publiceren wordt er automatisch een gemaakt.'),
+      h('details', { class: 'share-more' }, h('summary', {}, 'Extra reviewlink maken'),
+        h('div', { class: 'share-form' }, label, h('label', { class: 'check' }, allowDownload, 'Klant mag het bestand downloaden'), createReviewer))),
+    h('section', { class: 'share-section is-approver' },
+      h('div', { class: 'share-head' }, h('span', { class: 'share-icon' }, icon('shield')),
+        h('div', {}, h('h3', {}, 'Akkoordlink'), h('p', { class: 'small muted' }, 'Persoonlijke link voor de ene aangewezen akkoordgever. ', h('strong', {}, 'Alleen met deze link kan een versie worden goedgekeurd.'), ' Deel hem alleen met die persoon.'))),
+      h('div', { class: 'share-form share-form-row' }, approverName, approverEmail, saveApprover),
+      approverLink ? linkRow(approverLink) : createApprover || h('p', { class: 'small muted' }, 'Vul eerst de akkoordgever in.')),
+    revoked.length ? h('details', { class: 'share-more' }, h('summary', {}, `Ingetrokken links (${revoked.length})`),
+      revoked.map((l) => h('div', { class: 'link-row is-revoked' }, h('strong', { class: 'small' }, l.role === 'approver' ? `Akkoordlink · ${l.approverName}` : (l.label || 'Reviewlink')), h('span', { class: 'small muted' }, ` · ingetrokken ${formatDate(l.revokedAt)}`)))) : null,
+  ];
+
+  const promise = openDialog({ title: `Delen: ${video.title}`, body, wide: true, actions: [h('button', { class: 'btn btn-primary', value: 'cancel' }, 'Klaar')] });
+  close = () => document.querySelector('dialog[open]')?.close('');
+  await promise;
+  if (changed) { refresh(); setTimeout(() => shareDialogReopen(video.id), 50); }
+}
+
+async function shareDialogReopen(videoId) {
+  if (location.pathname !== `/video/${videoId}`) return;
+  try { const fresh = await api('GET', `/api/videos/${videoId}`); shareDialog(fresh, () => route()); } catch { /* pagina toont al de fout */ }
 }
 
 // ---------- Team ----------
 
 async function viewTeam() {
   document.title = 'Team — Studio Review';
-  const users = await api('GET', '/api/users');
-  const form = h('form', { class: 'card stack', onSubmit: async (e) => {
+  const [users, freshSession] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/session')]);
+  session = { ...session, media: freshSession.media };
+  const m = session.media;
+  const name = h('input', { name: 'name', required: true, autocomplete: 'off' });
+  const email = h('input', { name: 'email', type: 'email', required: true, autocomplete: 'off' });
+  const password = h('input', { name: 'password', type: 'password', minlength: '10', required: true, autocomplete: 'new-password' });
+  const submit = h('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), h('span', { class: 'btn-label' }, 'Teamlid toevoegen'));
+  const form = h('form', { class: 'card', onSubmit: async (e) => {
     e.preventDefault();
+    const restore = busy(submit);
     try {
-      await api('POST', '/api/users', Object.fromEntries(new FormData(form)));
+      await api('POST', '/api/users', { name: name.value, email: email.value, password: password.value });
       toast('Teamlid toegevoegd. Deel het wachtwoord via een veilig kanaal.', 'success');
       route();
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) { toast(err.message, 'error'); restore(); }
   } },
-  h('h3', { class: 'card-title' }, 'Teamlid toevoegen'),
-  h('label', { class: 'field' }, h('span', {}, 'Naam'), h('input', { name: 'name', required: true })),
-  h('label', { class: 'field' }, h('span', {}, 'E-mailadres'), h('input', { name: 'email', type: 'email', required: true })),
-  h('label', { class: 'field' }, h('span', {}, 'Tijdelijk wachtwoord (min. 10 tekens)'), h('input', { name: 'password', type: 'password', minlength: '10', required: true, autocomplete: 'new-password' })),
-  h('button', { class: 'btn btn-primary', type: 'submit' }, 'Toevoegen'));
+  h('h2', { class: 'card-title' }, 'Teamlid toevoegen'),
+  h('div', { class: 'form-grid' }, field('Naam', name), field('E-mailadres', email), field('Tijdelijk wachtwoord', password, 'Minimaal 10 tekens.')),
+  submit);
 
-  shell(h('div', { class: 'page page-narrow' },
-    h('div', { class: 'page-head' }, h('h1', {}, 'Team')),
-    h('div', { class: 'card' }, h('ul', { class: 'user-list' }, users.map((u) => h('li', {}, h('strong', {}, u.name), h('span', { class: 'muted small' }, u.email))))),
-    form));
+  const tool = (label, ok, p, missing) => h('li', { class: ok ? 'is-ok' : 'is-bad' }, icon(ok ? 'checkCircle' : 'alert'),
+    h('div', {}, h('strong', {}, label), h('div', { class: 'small muted mono' }, ok ? p : missing)));
+
+  mount(pageEl, h('div', { class: 'page page-narrow' },
+    pageHeader({ title: 'Team', meta: plural(users.length, 'teamlid', 'teamleden') }),
+    h('section', { class: 'card' }, h('h2', { class: 'card-title' }, 'Teamleden'),
+      h('ul', { class: 'user-list' }, users.map((u) => h('li', {},
+        h('span', { class: 'avatar' }, initials(u.name)),
+        h('div', { class: 'user-text' }, h('strong', { class: 'truncate' }, u.name, u.id === session.user.id ? h('span', { class: 'muted' }, ' (jij)') : null), h('span', { class: 'small muted truncate' }, u.email)),
+        h('span', { class: 'small muted' }, `sinds ${formatDate(u.createdAt).split(',')[0]}`))))),
+    form,
+    h('section', { class: 'card', id: 'systeem' }, h('h2', { class: 'card-title' }, 'Systeem'),
+      h('ul', { class: 'system-list' },
+        tool('ffprobe · inhoudscontrole van uploads', m?.ffprobe, m?.paths?.ffprobe, 'Niet gevonden. Installeer ffmpeg (macOS: brew install ffmpeg) of zet FFPROBE_PATH in .env en herstart.'),
+        tool('ffmpeg · thumbnails', m?.ffmpeg, m?.paths?.ffmpeg, 'Niet gevonden. Zonder ffmpeg krijgen nieuwe uploads geen thumbnail.'),
+        tool('Uploads', m?.uploadsEnabled, m?.unverifiedAllowed && !m?.ffprobe ? 'Zonder inhoudscontrole (alleen voor ontwikkeling)' : 'Ingeschakeld, met inhoudscontrole', 'Uitgeschakeld tot ffprobe beschikbaar is.')),
+      h('p', { class: 'small muted' }, 'Controleer de installatie in de terminal met ', h('code', {}, 'npm run check'), '.'))));
 }
+
+// Uploads die klaar zijn, verversen het zijbalkoverzicht.
+onUploadsChange((all) => { if (all.some((i) => i.state === 'done' && !i.counted)) { all.forEach((i) => { if (i.state === 'done') i.counted = true; }); refreshSidebar(); } });
 
 route();

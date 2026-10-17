@@ -1,85 +1,130 @@
-import { h, timecode, relativeDate, formatDate } from './util.js';
+import { h, icon, timecode, relativeDate, formatDate, busy, emptyState } from './util.js';
 
 function authorBadge(c) {
   if (c.authorType === 'team') return h('span', { class: 'badge badge-team' }, 'Team');
-  if (c.authorType === 'approver') return h('span', { class: 'badge badge-verified', title: 'Identiteit bevestigd via persoonlijke akkoordlink' }, '✓ Akkoordgever');
+  if (c.authorType === 'approver') return h('span', { class: 'badge badge-verified', title: 'Identiteit bevestigd via persoonlijke akkoordlink' }, icon('shield'), 'Akkoordgever');
   return h('span', { class: 'badge badge-guest', title: 'Naam is door de reviewer zelf ingevuld en niet geverifieerd' }, 'opgegeven naam');
 }
 
+/** Aantallen voor filterknoppen. */
+export function commentCounts(comments) {
+  const open = comments.filter((c) => !c.resolved).length;
+  return { all: comments.length, open, resolved: comments.length - open };
+}
+
 /**
- * Reactielijst. opts: { mode: 'team'|'client', canWrite, canDeleteOwnTeam, activeId,
- *   onSeek(t, id), onReply(parentId, body), onResolve(id, resolved), onDelete(id) }
+ * Reactielijst.
+ * opts: { mode: 'team'|'client', canWrite, filter: 'all'|'open'|'resolved', activeId,
+ *   onSeek(t, id), onReply(parentId, body) → bool, onResolve(id, resolved), onDelete(id), isOwnTeamComment(c) }
  */
 export function renderComments(container, comments, opts) {
-  container.replaceChildren();
+  const filter = opts.filter || 'all';
+  const list = comments.filter((c) => filter === 'all' || (filter === 'open' ? !c.resolved : c.resolved));
   if (!comments.length) {
-    container.append(h('div', { class: 'empty-comments' },
-      h('p', {}, 'Nog geen reacties op deze versie.'),
-      opts.canWrite ? h('p', { class: 'muted' }, 'Pauzeer de video en typ je opmerking: die wordt automatisch aan dat tijdstip gekoppeld.') : null));
+    container.replaceChildren(emptyState({
+      icon: 'chat',
+      compact: true,
+      title: 'Nog geen reacties',
+      text: opts.canWrite
+        ? 'Pauzeer de video op het juiste moment en typ je opmerking. Die wordt automatisch aan dat tijdstip gekoppeld.'
+        : 'Op deze versie zijn geen reacties geplaatst.',
+    }));
     return;
   }
+  if (!list.length) {
+    container.replaceChildren(emptyState({
+      icon: filter === 'open' ? 'checkCircle' : 'chat',
+      compact: true,
+      title: filter === 'open' ? 'Alles is afgehandeld' : 'Nog niets afgehandeld',
+      text: filter === 'open' ? 'Er staan geen open reacties meer op deze versie.' : 'Afgehandelde reacties verschijnen hier.',
+    }));
+    return;
+  }
+  container.replaceChildren(h('div', { class: 'comment-list' }, list.map((c) => commentCard(c, opts, false))));
+}
 
-  const open = comments.filter((c) => !c.resolved).length;
-  container.append(h('div', { class: 'comments-meta' }, `${comments.length} reactie${comments.length === 1 ? '' : 's'} · ${open} open`));
-
-  for (const c of comments) container.append(commentCard(c, opts, false));
+function stateLabel(c, opts) {
+  if (c.resolved) {
+    return h('span', { class: 'comment-state is-resolved', title: c.resolvedBy ? `Door ${c.resolvedBy}, ${formatDate(c.resolvedAt)}` : '' },
+      icon('checkCircle'), opts.mode === 'client' ? 'Afgehandeld door team' : 'Afgehandeld');
+  }
+  if (c.pending) {
+    return h('span', { class: 'comment-state is-pending', title: 'Hoort nog niet bij een verstuurde feedbackronde' },
+      icon('clock'), c.mine ? 'Nog niet verstuurd' : 'Nog niet verstuurd door reviewer');
+  }
+  if (c.authorType === 'team') return null;
+  if (opts.mode === 'client') {
+    return c.sent
+      ? h('span', { class: 'comment-state is-open' }, icon('send'), 'Verstuurd als feedback')
+      : h('span', { class: 'comment-state is-pending' }, icon('eye'), 'Zichtbaar voor het team');
+  }
+  return h('span', { class: 'comment-state is-open' }, icon('dashed'), 'Open');
 }
 
 function commentCard(c, opts, isReply) {
   const replyBox = h('div', { class: 'reply-box', hidden: true });
-  const actions = h('div', { class: 'comment-actions' });
+  const foot = h('div', { class: 'comment-foot' });
+  const seekable = !isReply && c.timecode !== null && c.timecode !== undefined;
 
+  if (!isReply) {
+    const state = stateLabel(c, opts);
+    if (state) foot.append(state);
+  }
   if (!isReply && opts.canWrite) {
-    actions.append(h('button', { type: 'button', class: 'link-btn', onClick: () => toggleReply() }, 'Beantwoorden'));
+    foot.append(h('button', { type: 'button', class: 'link-btn', onClick: () => toggleReply() }, icon('reply'), 'Beantwoorden'));
   }
   if (!isReply && opts.mode === 'team') {
-    actions.append(h('button', {
+    foot.append(h('button', {
       type: 'button',
-      class: `link-btn${c.resolved ? '' : ' link-strong'}`,
-      onClick: () => opts.onResolve(c.id, !c.resolved),
-    }, c.resolved ? 'Heropenen' : '✓ Markeer als afgehandeld'));
+      class: `link-btn${c.resolved ? '' : ' is-accent'}`,
+      onClick: (e) => { busy(e.currentTarget); opts.onResolve(c.id, !c.resolved); },
+    }, icon(c.resolved ? 'refresh' : 'check'), c.resolved ? 'Heropenen' : 'Afhandelen'));
   }
   const canDelete = (opts.mode === 'client' && c.mine && c.pending) || (opts.mode === 'team' && opts.isOwnTeamComment?.(c));
-  if (canDelete) actions.append(h('button', { type: 'button', class: 'link-btn link-danger', onClick: () => opts.onDelete(c.id) }, 'Verwijderen'));
+  if (canDelete) {
+    foot.append(h('button', { type: 'button', class: 'link-btn is-danger', onClick: (e) => { busy(e.currentTarget); opts.onDelete(c.id); } }, icon('trash'), 'Verwijderen'));
+  }
 
   function toggleReply() {
     replyBox.hidden = !replyBox.hidden;
     if (!replyBox.hidden && !replyBox.firstChild) {
-      const ta = h('textarea', { rows: '2', placeholder: 'Schrijf een antwoord…', 'aria-label': 'Antwoord' });
-      const send = h('button', { type: 'submit', class: 'btn btn-small btn-primary' }, 'Antwoorden');
+      const ta = h('textarea', { rows: '2', placeholder: `Antwoord aan ${c.authorName}…`, 'aria-label': `Antwoord aan ${c.authorName}`, maxlength: '5000' });
+      const send = h('button', { type: 'submit', class: 'btn btn-sm btn-primary' }, h('span', { class: 'btn-label' }, 'Antwoorden'));
       const form = h('form', { class: 'reply-form', onSubmit: async (e) => {
         e.preventDefault();
-        if (!ta.value.trim()) return;
-        send.disabled = true;
-        try { await opts.onReply(c.id, ta.value.trim()); } finally { send.disabled = false; }
+        if (!ta.value.trim()) { ta.focus(); return; }
+        const restore = busy(send);
+        // Bij een fout blijft de tekst staan, zodat je het opnieuw kunt proberen.
+        const ok = await opts.onReply(c.id, ta.value.trim()).catch(() => false);
+        restore();
+        if (ok !== false) ta.value = '';
       } }, ta, h('div', { class: 'reply-form-actions' },
-        h('button', { type: 'button', class: 'btn btn-small btn-ghost', onClick: () => { replyBox.hidden = true; } }, 'Annuleren'), send));
+        h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => { replyBox.hidden = true; } }, 'Annuleren'), send));
+      ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); form.requestSubmit(); } });
       replyBox.append(form);
     }
     replyBox.querySelector('textarea')?.focus();
   }
 
-  const tc = c.timecode !== null && c.timecode !== undefined
-    ? h('button', { type: 'button', class: 'timecode', onClick: () => opts.onSeek(c.timecode, c.id), title: 'Spring naar dit moment' }, timecode(c.timecode))
+  const tc = seekable
+    ? h('button', { type: 'button', class: 'timecode', onClick: () => opts.onSeek(c.timecode, c.id), title: 'Spring naar dit moment', 'aria-label': `Spring naar ${timecode(c.timecode)}` }, icon('play'), timecode(c.timecode))
     : (!isReply ? h('span', { class: 'timecode timecode-general' }, 'Algemeen') : null);
 
   const card = h('article', {
-    class: `comment${isReply ? ' comment-reply' : ''}${c.resolved ? ' is-resolved' : ''}${opts.activeId === c.id ? ' is-active' : ''}`,
+    class: `comment${isReply ? ' comment-reply' : ''}${c.resolved ? ' is-resolved' : ''}${opts.activeId === c.id ? ' is-active' : ''}${seekable ? ' is-seekable' : ''}`,
     id: `comment-${c.id}`,
+    'aria-label': `Reactie van ${c.authorName}${seekable ? ` op ${timecode(c.timecode)}` : ''}`,
     onClick: (e) => {
-      if (!isReply && c.timecode !== null && !e.target.closest('button, textarea, form, a')) opts.onSeek(c.timecode, c.id);
+      if (seekable && !e.target.closest('button, textarea, form, a')) opts.onSeek(c.timecode, c.id);
     },
   },
   h('header', { class: 'comment-head' },
     tc,
-    h('strong', { class: 'comment-author' }, c.authorName),
+    h('span', { class: 'comment-author' }, c.authorName),
     authorBadge(c),
     h('time', { class: 'comment-time', datetime: c.createdAt, title: formatDate(c.createdAt) }, relativeDate(c.createdAt))),
   h('p', { class: 'comment-body' }, c.body),
-  (c.pending || c.resolved) ? h('div', { class: 'comment-tags' },
-    c.pending ? h('span', { class: 'tag tag-pending', title: 'Deze reactie hoort nog niet bij een verstuurde feedbackronde' }, 'Nog niet verstuurd') : null,
-    c.resolved ? h('span', { class: 'tag tag-resolved', title: c.resolvedBy ? `Door ${c.resolvedBy}, ${formatDate(c.resolvedAt)}` : '' }, '✓ Afgehandeld') : null) : null,
-  actions.childNodes.length ? actions : null,
+  foot.childNodes.length ? foot : null,
   c.replies?.length ? h('div', { class: 'replies' }, c.replies.map((r) => commentCard(r, opts, true))) : null,
   replyBox);
   return card;

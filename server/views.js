@@ -46,6 +46,8 @@ function commentDtos(db, versionId, { reviewerKey = null } = {}) {
       // "verified": identiteit is vastgesteld via teamaccount of persoonlijke akkoordlink.
       verified: c.author_type !== 'guest',
       pending: c.author_type !== 'team' && !c.round_id && !approved,
+      // Hoort bij een verstuurde feedbackronde.
+      sent: !!c.round_id,
       mine: !!reviewerKey && c.reviewer_key === reviewerKey,
       resolved: !!c.resolved_at,
       resolvedAt: c.resolved_at,

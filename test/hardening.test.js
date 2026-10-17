@@ -122,6 +122,7 @@ describe('versieflow en herhaalde verzoeken', () => {
     assert.equal(v1Comments.length, 1);
     assert.equal(v1Comments[0].body, 'Logo groter');
     assert.equal(v1Comments[0].pending, false);
+    assert.equal(v1Comments[0].sent, true, 'hoort bij verstuurde feedbackronde');
     assert.equal((await guest.get(`/api/review/${reviewerToken}/versions/${v2}/comments`)).data.length, 0);
     const teamV1 = await statusOf(v1, videoId);
     assert.equal(teamV1.rounds.length, 1);

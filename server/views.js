@@ -28,6 +28,8 @@ function versionFileDto(v) {
 }
 
 function commentDtos(db, versionId, { reviewerKey = null } = {}) {
+  // Na goedkeuring is er geen feedbackronde meer te versturen; dan is niets meer "nog niet verstuurd".
+  const approved = db.prepare('SELECT status FROM versions WHERE id = ?').get(versionId)?.status === 'approved';
   const rows = db.prepare(`SELECT c.*, u.name AS resolved_by_name FROM comments c
     LEFT JOIN users u ON u.id = c.resolved_by
     WHERE c.version_id = ? ORDER BY c.created_at, c.id`).all(versionId);
@@ -43,7 +45,7 @@ function commentDtos(db, versionId, { reviewerKey = null } = {}) {
       authorType: c.author_type,
       // "verified": identiteit is vastgesteld via teamaccount of persoonlijke akkoordlink.
       verified: c.author_type !== 'guest',
-      pending: c.author_type !== 'team' && !c.round_id,
+      pending: c.author_type !== 'team' && !c.round_id && !approved,
       mine: !!reviewerKey && c.reviewer_key === reviewerKey,
       resolved: !!c.resolved_at,
       resolvedAt: c.resolved_at,

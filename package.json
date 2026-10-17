@@ -11,9 +11,13 @@
     "start": "node --disable-warning=ExperimentalWarning server/index.js",
     "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
     "create-user": "node --disable-warning=ExperimentalWarning scripts/create-user.js",
-    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
+    "test:browser": "node --disable-warning=ExperimentalWarning scripts/browser-test.js"
   },
   "dependencies": {
     "express": "^4.22.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
   }
 }

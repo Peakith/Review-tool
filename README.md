@@ -60,26 +60,27 @@ Feedback en goedkeuring zijn alleen mogelijk op de nieuwste gedeelde versie met 
 ### Ondersteunde videoformaten (eerste versie)
 `.mp4`, `.m4v`, `.mov` en `.webm`, standaard tot 20 GB (instelbaar). Er wordt **niet getranscodeerd**: wat de browser van de klant niet kan afspelen (bijv. ProRes in `.mov`), krijgt een duidelijke melding. **Aanbevolen: H.264/AAC in MP4.** Die speelt in alle gangbare browsers, ook op iPhone en Android.
 
-## Installatie
+## Installatie (lokaal)
 
-Vereist: **Node.js ≥ 22.13** en bij voorkeur **ffmpeg** (met ffprobe).
+Vereist: **Node.js ≥ 22.13** en **ffmpeg** (met ffprobe). Zonder ffprobe weigert de server uploads, omdat de inhoud dan niet gecontroleerd kan worden.
 
 ```bash
 npm install
 npm start                # http://localhost:3000
 ```
 
-Bij het eerste bezoek maak je het eerste teamaccount aan. Dat kan ook via de commandoregel:
+### Eerste account (beveiligd)
+Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan een willekeurige bezoeker het eerste account niet claimen.
+- Stel zelf `SETUP_TOKEN` in, of laat de server bij het starten een willekeurige code genereren. Die code verschijnt alleen in het serverlog, samen met een directe link (`/?setup=…`).
+- Of maak het account via de commandoregel: `npm run create-user -- sanne@agency.nl "Sanne de Vries" "een-lang-wachtwoord"`.
+- Zodra er één account bestaat, is de installatiepagina definitief dicht (409). Collega's voeg je toe via **Team**.
 
+### Tests
 ```bash
-npm run create-user -- sanne@agency.nl "Sanne de Vries" "een-lang-wachtwoord"
+npm test                                         # 24 server-tests (vereist ffmpeg)
+CHROME_PATH=/pad/naar/chrome npm run test:browser  # volledige klantflow in een echte browser
 ```
-
-Tests (vereist ffmpeg):
-
-```bash
-npm test
-```
+De browsertest maakt zelf een 1080p H.264/AAC-MP4 en draait 25 controles: afspelen, geluid, vooruitspoelen, volledig scherm, tijdgebonden reacties, downloadnaam, versieflow en goedkeuring op mobiel. Hij heeft een Chrome **met H.264** nodig, zoals Google Chrome of [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/). De Chromium die Playwright standaard meelevert speelt geen H.264 af.
 
 ### Omgevingsvariabelen
 | Variabele | Standaard | Betekenis |
@@ -87,28 +88,30 @@ npm test
 | `PORT` | `3000` | Poort van de server |
 | `DATA_DIR` | `./data` | Map voor database, video's en tijdelijke uploads |
 | `PUBLIC_URL` | (host van de aanvraag) | Publiek adres voor deel-links, bijv. `https://review.jouwagency.nl` |
-| `SECURE_COOKIES` | `false` | Op `true` zetten achter HTTPS |
+| `SECURE_COOKIES` | `false` | Op `true` achter HTTPS |
 | `TRUST_PROXY` | `false` | Op `true` achter een reverse proxy (nginx, Caddy) |
+| `SETUP_TOKEN` | (willekeurig, in log) | Installatiecode voor het eerste account |
 | `MAX_UPLOAD_GB` | `20` | Maximale bestandsgrootte |
+| `FFPROBE_PATH` / `FFMPEG_PATH` | `ffprobe` / `ffmpeg` | Paden naar de hulpprogramma's |
+| `ALLOW_UNVERIFIED_UPLOADS` | `false` | Alleen voor ontwikkeling: uploads accepteren zonder ffprobe. **Nooit in productie.** |
+| `UPLOAD_EXPIRY_HOURS` | `24` | Afgebroken uploads zonder activiteit worden na deze tijd verwijderd |
+| `UPLOAD_CLEANUP_INTERVAL_MINUTES` | `60` | Hoe vaak de opruiming draait (ook direct bij het starten) |
 
-## Wat werkt en wat nog configuratie nodig heeft
+### Afhankelijkheden zichtbaar
+- `GET /api/health` geeft `database`, `ffprobe`, `ffmpeg` en `uploads` (`ok`, `uitgeschakeld` of `zonder controle`).
+- Ontbreekt ffprobe of ffmpeg, dan toont de teamomgeving een balk bovenaan en meldt het serverlog dit bij het starten.
 
-**Werkt nu volledig (getest):** accounts, projecten, chunked uploads met voortgang en herhaalpogingen, controle met ffprobe, voorvertoningen, titels los van bestandsnamen, versies, statussen met automatische regels en logboek, reacties op tijdstip met antwoorden en afvinken, feedbackrondes, goedkeuring door de akkoordgever, deel-links die je kunt intrekken, downloads met de juiste extensie, en een mobiele reviewpagina.
+### Betrouwbaarheid van klantacties
+"Feedback versturen", "Deze versie goedkeuren" en reacties sturen een unieke request-id mee. Valt de verbinding weg, dan probeert de browser het opnieuw met dezelfde id. De server herkent een herhaald verzoek en wijzigt dan niets. Een oud feedbackverzoek kan dus nooit een latere goedkeuring of een handmatige correctie overschrijven. Een nieuwe klantactie (met een nieuwe id) volgt gewoon de statusregels.
 
-Geautomatiseerd getest met `npm test` (12 tests), waaronder:
-- een titelwijziging breekt geen bestanden, links, reacties of geschiedenis;
-- ingediende feedback zet de status op *Aanpassingen nodig* (openen, losse reactie en afvinken doen dat niet);
-- goedkeuring geldt alleen voor de bekeken versie;
-- een nieuwe versie bewaart de eerdere feedback en goedkeuring en is zelf niet goedgekeurd;
-- een ingetrokken link geeft geen toegang meer, ook niet tot het videobestand.
+## Testomgeving en livegang
+Zie **[DEPLOY.md](DEPLOY.md)** voor een afgeschermde testomgeving met Docker en Caddy (HTTPS en een wachtwoord). Zie **[ACCEPTATIETEST.md](ACCEPTATIETEST.md)** om de klantflow zelf te doorlopen en voor de handmatige browsertestlijst.
 
-**Resterende configuratiestappen voor productie**
-1. **HTTPS en domein**: zet een reverse proxy (Caddy of nginx) met TLS voor de app. Stel `PUBLIC_URL`, `SECURE_COOKIES=true` en `TRUST_PROXY=true` in. Zet in nginx `client_max_body_size` op minimaal `10m` (blokken zijn 8 MB).
-2. **ffmpeg installeren** op de server (`apt install ffmpeg`). Zonder ffmpeg worden uploads niet gecontroleerd en is er geen voorvertoning.
-3. **Opslag en back-ups**: `DATA_DIR` op een schijf met voldoende ruimte, plus regelmatige back-ups van `review.db` en `media/`. Wil je objectopslag (S3, R2), dan is daarvoor nog een opslagadapter nodig.
-4. **E-mail (niet gebouwd)**: links worden nu door het team gekopieerd en zelf verstuurd. Voor automatische uitnodigingen en meldingen bij feedback of goedkeuring is een SMTP-dienst nodig.
-5. **Verificatie van de akkoordgever**: die gebeurt nu via het bezit van een persoonlijke, intrekbare link. Een sterkere controle (eenmalige code per e-mail) vraagt om punt 4.
-6. **Procesbeheer**: draai de app als service (systemd, pm2 of Docker) met automatische herstart.
-7. **Opruimen**: afgebroken uploads blijven in `data/uploads-tmp` staan. Ruim die periodiek op (bijv. bestanden ouder dan 2 dagen).
+### Nog nodig voor livegebruik
+1. **Hosting**: een server of VPS met Docker, een domein (DNS A-record) en een persistente schijf (zie DEPLOY.md).
+2. **Back-ups** van `review.db` en `media/`. Voor objectopslag (S3, R2) is nog een opslagadapter nodig.
+3. **E-mail (niet gebouwd)**: links worden nu gekopieerd en zelf verstuurd. Voor uitnodigingen en meldingen is een SMTP-dienst nodig.
+4. **Verificatie van de akkoordgever**: nu via het bezit van een persoonlijke, intrekbare link. Een sterkere controle (eenmalige code per e-mail) vraagt om punt 3.
+5. **Handmatige browsertest** in Safari (macOS en iOS) en op echte Android-toestellen: die zijn niet automatisch getest.
 
 Bewust buiten deze versie gelaten: facturatie, videobewerking/transcoding, integraties en annotaties op het beeld.

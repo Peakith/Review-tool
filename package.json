@@ -8,11 +8,12 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server/index.js",
-    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
-    "create-user": "node --disable-warning=ExperimentalWarning scripts/create-user.js",
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch server/index.js",
+    "create-user": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/create-user.js",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
-    "test:browser": "node --disable-warning=ExperimentalWarning scripts/browser-test.js"
+    "test:browser": "node --disable-warning=ExperimentalWarning scripts/browser-test.js",
+    "check": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/check.js"
   },
   "dependencies": {
     "express": "^4.22.3"

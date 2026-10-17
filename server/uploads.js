@@ -5,7 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { now } = require('./db');
 const { HttpError } = require('./status');
-const { extensionOf, FORMATS, probe, makePoster, toolAvailable } = require('./media');
+const { extensionOf, FORMATS, probe, makePoster, resolveTools } = require('./media');
 
 /**
  * Hervatbare uploads in blokken. De browser stuurt blokken van ~8 MB met een
@@ -21,7 +21,7 @@ function uploadRoutes(router, db, config) {
   /** Zonder ffprobe geen uploads, tenzij dat expliciet is toegestaan (alleen voor ontwikkeling). */
   async function assertMediaCheck() {
     if (config.allowUnverifiedUploads) return;
-    if (!(await toolAvailable(config.tools.ffprobe))) {
+    if (!(await resolveTools(config.tools)).ffprobe) {
       throw new HttpError(503, 'Uploaden is uitgeschakeld: ffprobe (onderdeel van ffmpeg) ontbreekt op de server, waardoor de inhoud van bestanden niet kan worden gecontroleerd. Neem contact op met de beheerder.');
     }
   }
@@ -117,10 +117,10 @@ function uploadRoutes(router, db, config) {
       if (stat.size !== up.size_bytes) throw new HttpError(400, 'De upload is onvolledig, probeer het opnieuw');
 
       let info = null;
-      const canProbe = await toolAvailable(config.tools.ffprobe);
-      if (canProbe) {
+      const tools = await resolveTools(config.tools);
+      if (tools.ffprobe) {
         try {
-          info = await probe(source, ext, config.tools);
+          info = await probe(source, ext, tools);
         } catch (err) {
           db.prepare('DELETE FROM uploads WHERE id = ?').run(up.id);
           await fsp.rm(source, { force: true });
@@ -129,7 +129,7 @@ function uploadRoutes(router, db, config) {
       }
       await fsp.rename(source, target);
       db.prepare('DELETE FROM uploads WHERE id = ?').run(up.id);
-      const hasPoster = await makePoster(target, path.join(config.mediaDir, `${storedName}.jpg`), info?.duration, config.tools);
+      const hasPoster = await makePoster(target, path.join(config.mediaDir, `${storedName}.jpg`), info?.duration, tools);
       return {
         originalFilename: up.original_filename,
         storedName,

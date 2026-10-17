@@ -67,19 +67,40 @@ function run(cmd, args, timeout = 60_000) {
   });
 }
 
-// Paden naar ffprobe/ffmpeg zijn instelbaar (FFPROBE_PATH / FFMPEG_PATH).
-const availability = new Map();
-async function toolAvailable(cmd) {
-  if (!availability.has(cmd)) {
-    availability.set(cmd, run(cmd, ['-version'], 5000).then(() => true, () => false));
+// Vind ffprobe/ffmpeg. Een ingesteld pad (FFPROBE_PATH / FFMPEG_PATH) wordt als enige
+// geprobeerd. Anders zoeken we in PATH en daarna in de gangbare installatiemappen: op een Mac
+// met Homebrew staat ffmpeg in /opt/homebrew/bin (Apple silicon) of /usr/local/bin (Intel),
+// en die mappen ontbreken vaak in PATH als de app niet vanuit een login-shell start.
+const FALLBACK_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'];
+const resolved = new Map();
+
+function resolveTool(name, configured) {
+  const key = `${name}|${configured || ''}`;
+  if (!resolved.has(key)) {
+    const candidates = configured ? [configured] : [name, ...FALLBACK_DIRS.map((dir) => path.join(dir, name))];
+    resolved.set(key, (async () => {
+      for (const candidate of candidates) {
+        try {
+          await run(candidate, ['-version'], 5000);
+          return candidate;
+        } catch { /* volgende kandidaat */ }
+      }
+      return null;
+    })());
   }
-  return availability.get(cmd);
+  return resolved.get(key);
+}
+
+/** Werkende paden (of null) voor ffprobe en ffmpeg. */
+async function resolveTools(tools) {
+  const [ffprobe, ffmpeg] = await Promise.all([resolveTool('ffprobe', tools.ffprobe), resolveTool('ffmpeg', tools.ffmpeg)]);
+  return { ffprobe, ffmpeg };
 }
 
 /** Status van de externe hulpmiddelen, voor de startmelding, /api/health en de teamomgeving. */
 async function toolStatus(tools) {
-  const [ffprobe, ffmpeg] = await Promise.all([toolAvailable(tools.ffprobe), toolAvailable(tools.ffmpeg)]);
-  return { ffprobe, ffmpeg };
+  const paths = await resolveTools(tools);
+  return { ffprobe: !!paths.ffprobe, ffmpeg: !!paths.ffmpeg, paths };
 }
 
 // Containerfamilie die bij de extensie hoort (ffprobe format_name).
@@ -94,10 +115,10 @@ const CONTAINERS = {
  * Controleert de inhoud en leest technische gegevens uit. Gooit een fout als
  * het bestand geen leesbare video is of niet bij de extensie past.
  */
-async function probe(file, extension, tools) {
+async function probe(file, extension, paths) {
   let out;
   try {
-    out = await run(tools.ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file]);
+    out = await run(paths.ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file]);
   } catch {
     throw new Error('Het bestand kon niet als video worden gelezen. Controleer of het een geldig videobestand is.');
   }
@@ -120,11 +141,11 @@ async function probe(file, extension, tools) {
   };
 }
 
-async function makePoster(file, posterFile, duration, tools) {
-  if (!(await toolAvailable(tools.ffmpeg))) return false;
+async function makePoster(file, posterFile, duration, paths) {
+  if (!paths.ffmpeg) return false;
   const at = duration ? Math.min(1, duration / 3) : 0;
   try {
-    await run(tools.ffmpeg, ['-y', '-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'scale=640:-2', posterFile], 120_000);
+    await run(paths.ffmpeg, ['-y', '-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'scale=640:-2', posterFile], 120_000);
     return true;
   } catch {
     return false;
@@ -133,5 +154,5 @@ async function makePoster(file, posterFile, duration, tools) {
 
 module.exports = {
   FORMATS, extensionOf, titleFromFilename, normalizeTitle, downloadFilename,
-  contentDisposition, probe, makePoster, toolAvailable, toolStatus,
+  contentDisposition, probe, makePoster, resolveTools, toolStatus,
 };

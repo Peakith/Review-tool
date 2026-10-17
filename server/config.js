@@ -17,8 +17,9 @@ function loadConfig(overrides = {}) {
     chunkBytes: 8 * 1024 * 1024,
     sessionDays: 14,
     tools: {
-      ffprobe: process.env.FFPROBE_PATH || 'ffprobe',
-      ffmpeg: process.env.FFMPEG_PATH || 'ffmpeg',
+      // Leeg = automatisch zoeken (PATH, /opt/homebrew/bin, /usr/local/bin, /usr/bin).
+      ffprobe: process.env.FFPROBE_PATH || null,
+      ffmpeg: process.env.FFMPEG_PATH || null,
     },
     // Uploads zonder inhoudscontrole alleen toestaan als dit expliciet is ingesteld (nooit in productie).
     allowUnverifiedUploads: process.env.ALLOW_UNVERIFIED_UPLOADS === 'true',

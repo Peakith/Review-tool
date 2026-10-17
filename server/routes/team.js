@@ -34,6 +34,38 @@ function teamRoutes(router, db, config, { finalize }) {
 
   const linkUrl = (req, token) => `${config.publicUrl || `${req.protocol}://${req.get('host')}`}/r/${token}`;
 
+  const latestShared = (videoId) =>
+    db.prepare('SELECT * FROM versions WHERE video_id = ? AND shared_at IS NOT NULL ORDER BY number DESC LIMIT 1').get(videoId);
+  // Open klantreacties: hoofdreacties van klant of akkoordgever die het team nog niet heeft afgehandeld.
+  const openClientComments = (versionId) => db.prepare(
+    "SELECT COUNT(*) AS n FROM comments WHERE version_id = ? AND parent_id IS NULL AND resolved_at IS NULL AND author_type != 'team'",
+  ).get(versionId).n;
+  const videoActivity = (video) => db.prepare(`SELECT MAX(at) AS at FROM (
+      SELECT ? AS at
+      UNION ALL SELECT MAX(c.created_at) FROM comments c JOIN versions v ON v.id = c.version_id WHERE v.video_id = ?
+      UNION ALL SELECT MAX(e.created_at) FROM status_events e JOIN versions v ON v.id = e.version_id WHERE v.video_id = ?
+    )`).get(video.updated_at, video.id, video.id).at;
+
+  /** Samenvatting van een video voor overzichten: interne nieuwste versie én wat de klant ziet. */
+  function videoSummary(v) {
+    const latest = latestVersion(v.id);
+    const shared = latestShared(v.id);
+    const poster = db.prepare('SELECT id FROM versions WHERE video_id = ? AND has_poster = 1 ORDER BY number DESC LIMIT 1').get(v.id);
+    return {
+      id: v.id,
+      title: v.title,
+      approverName: v.approver_name,
+      updatedAt: v.updated_at,
+      lastActivityAt: videoActivity(v),
+      versionCount: latest?.number || 0,
+      latestVersion: latest ? versionDto(latest) : null,
+      sharedVersion: shared ? versionDto(shared) : null,
+      latestSharedNumber: shared?.number || null,
+      posterVersionId: poster?.id || null,
+      openComments: shared ? openClientComments(shared.id) : 0,
+    };
+  }
+
   // ---------- Team & accounts ----------
 
   router.get('/users', (req, res) => {
@@ -49,23 +81,26 @@ function teamRoutes(router, db, config, { finalize }) {
 
   router.get('/projects', (req, res) => {
     const projects = db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
-    const counts = db.prepare(`SELECT v.project_id, ver.status, COUNT(*) AS n FROM videos v
-      JOIN versions ver ON ver.video_id = v.id
-      AND ver.number = (SELECT MAX(number) FROM versions WHERE video_id = v.id)
-      GROUP BY v.project_id, ver.status`).all();
-    const totals = db.prepare('SELECT project_id, COUNT(*) AS n FROM videos GROUP BY project_id').all();
-    res.json(projects.map((p) => {
-      const statusCounts = Object.fromEntries(Object.keys(STATUSES).map((s) => [s, 0]));
-      for (const c of counts) if (c.project_id === p.id) statusCounts[c.status] = c.n;
+    const result = projects.map((p) => {
+      const videos = db.prepare('SELECT * FROM videos WHERE project_id = ?').all(p.id).map(videoSummary);
+      const statusCounts = Object.fromEntries(Object.keys(STATUSES).map((st) => [st, 0]));
+      for (const v of videos) if (v.latestVersion) statusCounts[v.latestVersion.status] += 1;
+      videos.sort((a, b) => String(b.lastActivityAt).localeCompare(String(a.lastActivityAt)));
+      const lastActivityAt = [p.created_at, ...videos.map((v) => v.lastActivityAt)].filter(Boolean).sort().at(-1);
       return {
         id: p.id,
         name: p.name,
         clientName: p.client_name,
         createdAt: p.created_at,
-        videoCount: totals.find((t) => t.project_id === p.id)?.n || 0,
+        lastActivityAt,
+        videoCount: videos.length,
         statusCounts,
+        openComments: videos.reduce((n, v) => n + v.openComments, 0),
+        posters: videos.filter((v) => v.posterVersionId).slice(0, 3).map((v) => v.posterVersionId),
       };
-    }));
+    });
+    result.sort((a, b) => String(b.lastActivityAt).localeCompare(String(a.lastActivityAt)));
+    res.json(result);
   });
 
   router.post('/projects', (req, res) => {
@@ -94,21 +129,7 @@ function teamRoutes(router, db, config, { finalize }) {
       name: p.name,
       clientName: p.client_name,
       createdAt: p.created_at,
-      videos: videos.map((v) => {
-        const latest = latestVersion(v.id);
-        const shared = db.prepare('SELECT number FROM versions WHERE video_id = ? AND shared_at IS NOT NULL ORDER BY number DESC LIMIT 1').get(v.id);
-        const openComments = latest ? db.prepare("SELECT COUNT(*) AS n FROM comments WHERE version_id = ? AND parent_id IS NULL AND resolved_at IS NULL AND author_type != 'team'").get(latest.id).n : 0;
-        return {
-          id: v.id,
-          title: v.title,
-          approverName: v.approver_name,
-          updatedAt: v.updated_at,
-          versionCount: latest?.number || 0,
-          latestVersion: latest ? versionDto(latest) : null,
-          latestSharedNumber: shared?.number || null,
-          openComments,
-        };
-      }),
+      videos: videos.map(videoSummary),
     });
   });
 
@@ -166,6 +187,7 @@ function teamRoutes(router, db, config, { finalize }) {
     const project = db.prepare('SELECT id, name, client_name FROM projects WHERE id = ?').get(v.project_id);
     const versions = db.prepare('SELECT * FROM versions WHERE video_id = ? ORDER BY number DESC').all(v.id);
     const links = db.prepare('SELECT * FROM share_links WHERE video_id = ? ORDER BY created_at DESC').all(v.id);
+    const shared = latestShared(v.id);
     res.json({
       id: v.id,
       title: v.title,
@@ -173,8 +195,13 @@ function teamRoutes(router, db, config, { finalize }) {
       approverEmail: v.approver_email,
       project: { id: project.id, name: project.name, clientName: project.client_name },
       createdAt: v.created_at,
-      versions: versions.map((ver) => ({
+      // De versie die klanten via hun link zien (nieuwste gedeelde), los van de interne nieuwste.
+      clientVersionId: shared?.id || null,
+      versions: versions.map((ver, i) => ({
         ...versionDto(ver),
+        isLatest: i === 0,
+        isClientVersion: ver.id === shared?.id,
+        openComments: openClientComments(ver.id),
         file: versionFileDto(ver),
         events: eventDtos(db, ver.id),
         approval: approvalDto(db, ver.id),
@@ -263,6 +290,7 @@ function teamRoutes(router, db, config, { finalize }) {
     if (!STATUSES[status]) throw new HttpError(400, 'Onbekende status');
     if (status === ver.status) throw new HttpError(409, 'De versie heeft deze status al');
     const note = String(req.body?.note || '').trim().slice(0, 500);
+    if (!note) throw new HttpError(400, 'Geef een reden voor de handmatige correctie; die wordt in de geschiedenis bewaard.');
     db.tx(() => changeStatus(db, ver.id, status, { event: 'manual', note, ...actor(req) }));
     res.json({ ok: true });
   });

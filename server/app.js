@@ -61,6 +61,7 @@ function createApp(overrides = {}) {
     return {
       ffprobe: tools.ffprobe,
       ffmpeg: tools.ffmpeg,
+      paths: tools.paths,
       uploadsEnabled: tools.ffprobe || config.allowUnverifiedUploads,
       unverifiedAllowed: config.allowUnverifiedUploads,
     };

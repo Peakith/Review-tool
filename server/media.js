@@ -43,8 +43,16 @@ function downloadFilename(title, extension) {
 }
 
 function contentDisposition(filename) {
-  const ascii = filename.normalize('NFKD').replace(/[^\x20-\x7e]/g, '').replace(/["\\]/g, '') || 'video';
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  // Terugval voor oudere clients: gangbare tekens omzetten, rest weglaten.
+  const ascii = filename
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7e]/g, '')
+    .replace(/["\\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'video';
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*!]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 }
 
 function run(cmd, args, timeout = 60_000) {

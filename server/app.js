@@ -101,6 +101,7 @@ function createApp(overrides = {}) {
 
   // ---------- Frontend ----------
   app.use(express.static(publicDir, { index: false, maxAge: '1h' }));
+  app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
   app.get('/r/:token', (req, res) => res.sendFile(path.join(publicDir, 'review', 'index.html')));
   app.get(['/', '/login', '/projecten*', '/video*', '/team'], (req, res) => res.sendFile(path.join(publicDir, 'app', 'index.html')));
 

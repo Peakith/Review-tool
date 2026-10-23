@@ -211,7 +211,8 @@ code { font: 12.5px var(--mono); background: var(--surface-3); padding: 1px 5px;
   height: 100%; min-height: 0;
   display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden;
 }
-.tabs { display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line); background: var(--bg-2); }
+.tabs { display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line); background: var(--bg-2); overflow-x: auto; scrollbar-width: none; }
+.tabs [role=tab] { flex-shrink: 0; }
 .tabs [role=tab] {
   display: inline-flex; align-items: center; gap: 6px; padding: 9px 12px; background: none; border: 0; border-bottom: 2px solid transparent;
   color: var(--text-2); font: 500 13.5px var(--font); cursor: pointer; margin-bottom: -1px; border-radius: 6px 6px 0 0;
@@ -504,3 +505,56 @@ code { font: 12.5px var(--mono); background: var(--surface-3); padding: 1px 5px;
 }
 
 .form-grid.is-2 { grid-template-columns: 1fr 1fr; }
+
+/* ---------- Bouwronde 3: taken en rondes ---------- */
+.side-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; }
+.task-chip { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 5px; background: var(--surface-3); color: var(--text-2); }
+.task-chip .icon { --icon-size: 13px; }
+.task-chip.is-open { color: #f8d690; background: var(--st-review-bg); }
+.task-chip.is-in_progress { color: #bcd6ff; background: var(--st-ready-bg); }
+.task-chip.is-done { color: #9be8bd; background: var(--st-approved-bg); }
+.task-chip em { font-style: normal; opacity: .8; }
+.task-sep { opacity: .55; }
+.task-prio { font-weight: 700; }
+.task-chip.is-high .task-prio { color: #ffb3aa; }
+.task-overdue { color: #ffb3aa; }
+.task-quote { margin: 0 0 12px; padding: 10px 12px; border-left: 3px solid var(--line-2); background: var(--bg-2); border-radius: 0 var(--r) var(--r) 0; display: grid; gap: 4px; white-space: pre-line; }
+.dialog-actions .spacer { flex: 1; }
+.fb-intro { margin-bottom: 12px; }
+.fb-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.fb-filter { display: grid; gap: 4px; min-width: 160px; flex: 1 1 160px; max-width: 240px; }
+.fb-list { display: grid; gap: 8px; }
+.fb-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.fb-row.is-done { opacity: .75; }
+.fb-main { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.fb-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fb-video { font-weight: 650; color: var(--text); }
+.fb-body { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.fb-task { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fb-note { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-side { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.fb-quick { display: flex; gap: 6px; }
+.timecode-static { cursor: default; }
+.round-meta.is-over { color: var(--st-review); }
+.rounds { display: grid; gap: 10px; }
+.rounds-intro { margin: 0; }
+.round-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.round-item { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg-2); display: grid; gap: 4px; }
+.round-item.is-over { border-color: rgba(244, 190, 85, .4); }
+.round-head { display: flex; gap: 8px; align-items: center; }
+.round-head .link-btn { margin-left: auto; }
+.round-note { color: var(--text-2); white-space: pre-line; }
+.round-choice { display: grid; gap: 8px; margin-bottom: 10px; }
+.round-option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: var(--r); cursor: pointer; }
+.round-option.is-selected { border-color: var(--accent); background: var(--accent-soft); }
+.round-option input { margin-top: 3px; accent-color: var(--accent); }
+.round-option span { display: grid; gap: 2px; }
+.round-new-fields { display: grid; }
+.deadline-fields { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.deadline-fields input[type=date] { width: 170px; }
+.deadline-fields input[type=time] { width: 120px; }
+.dialog-sub { font-size: 13.5px; margin: 6px 0 8px; color: var(--text-2); }
+.input-narrow { max-width: 140px; }
+.version-change { color: var(--text-2); white-space: pre-line; }
+@media (max-width: 860px) { .fb-row { flex-wrap: wrap; } .fb-side { width: 100%; } .fb-filter { max-width: none; } }
+.deadline-said { color: var(--text-2); }

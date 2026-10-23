@@ -1,7 +1,7 @@
 // Klantportaal: alle gepubliceerde video's van één project via één stabiele link.
 // Dezelfde pagina toont het team als voorbeeld (/voorbeeld/project/<id>), gevuld met
 // dezelfde serverfilters, zodat het team precies ziet wat de klant ziet.
-import { h, mount, icon, button, api, emptyState, plural, timecode, formatDate } from '/shared/util.js';
+import { h, mount, icon, button, api, emptyState, plural, timecode, formatDate, formatDeadline, isPast } from '/shared/util.js';
 import { applyBrand, brandMark } from '/shared/brand.js';
 import { clientPill, clientStatusOf, metaLine, fileLabel, fileIcon } from '/shared/client.js';
 
@@ -117,6 +117,7 @@ function card(v) {
       h('h3', { class: 'p-card-title', title: v.title }, v.title),
       h('div', { class: 'p-card-meta small muted' }, [metaLine(v.meta), `Versie ${v.version.number}`].filter(Boolean).join(' · ')),
       h('div', { class: 'p-card-status' }, clientPill(v.version.status, { small: true })),
+      v.round ? h('div', { class: 'p-note' }, icon('history'), `Ronde ${v.round.number}${v.round.deadline && v.version.status === 'in_review' ? ` · reactie graag vóór ${formatDeadline(v.round.deadline)}${isPast(v.round.deadline) ? ' (verstreken; reageren kan nog)' : ''}` : ''}`) : null,
       approval),
     h('div', { class: 'p-card-action' }, h('span', { class: `btn btn-sm ${v.version.status === 'in_review' && !v.archived ? 'btn-primary' : 'btn-secondary'}` }, icon(s.icon === 'eye' ? 'chat' : 'play'), h('span', { class: 'btn-label' }, action))),
   ];

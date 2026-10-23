@@ -270,3 +270,23 @@ export const draftStore = {
   get(key) { try { return sessionStorage.getItem(key) || ''; } catch { return ''; } },
   set(key, value) { try { if (value) sessionStorage.setItem(key, value); else sessionStorage.removeItem(key); } catch { /* negeren */ } },
 };
+
+// ---------- Deadlines (datum + tijd, ondubbelzinnig met tijdzone) ----------
+
+const deadlineFmt = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+const dayOnlyFmt = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+/** "di 10 nov 2026, 17:00 CET" — in de tijdzone van de kijker, met de naam van die tijdzone erbij. */
+export const formatDeadline = (iso) => (iso ? deadlineFmt.format(new Date(iso)) : '');
+/** Een kalenderdag (JJJJ-MM-DD) zonder tijdstip, dus zonder verschuiving door tijdzones. */
+export const formatDay = (day) => (day ? dayOnlyFmt.format(new Date(`${day}T12:00:00`)) : '');
+export const isPast = (iso) => !!iso && Date.parse(iso) < Date.now();
+/** Lokale datum- en tijdvelden → ISO (UTC) voor de server. */
+export const localToIso = (date, time) => (date ? new Date(`${date}T${time || '17:00'}`).toISOString() : null);
+/** ISO → { date: 'JJJJ-MM-DD', time: 'UU:MM' } in lokale tijd, voor invoervelden. */
+export function isoToLocal(iso) {
+  if (!iso) return { date: '', time: '' };
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` };
+}

@@ -47,6 +47,17 @@ const P = {
   external: '<path d="M13.5 4.5h6v6M19.5 4.5 11 13"/><path d="M17 13.5V18a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V8.5A1.5 1.5 0 0 1 6 7h4.5"/>',
   palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.2-1-1.6-1-2.6 0-1 .8-1.7 1.8-1.7h2.2a3.7 3.7 0 0 0 3.7-3.7C20.5 7 16.7 3.5 12 3.5z"/><circle cx="7.8" cy="11" r="1" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1" fill="currentColor"/><circle cx="14.8" cy="7.8" r="1" fill="currentColor"/>',
   clipboard: '<rect x="5.5" y="5" width="13" height="15.5" rx="1.5"/><path d="M9 5V3.5h6V5M8.5 10h7M8.5 13.5h7M8.5 17h4"/>',
+  range: '<path d="M4.5 7v10M19.5 7v10M4.5 12h15"/><path d="m8 9.5-3.5 2.5L8 14.5M16 9.5l3.5 2.5-3.5 2.5"/>',
+  pen: '<path d="M15.5 4.5 19.5 8.5 9 19H5v-4z"/><path d="M4.5 21h6"/>',
+  arrowTool: '<path d="M5 19 18.5 5.5M10 5.5h8.5V14"/>',
+  rect: '<rect x="4.5" y="6" width="15" height="12" rx="1"/>',
+  undo: '<path d="M8.5 6 4.5 10l4 4"/><path d="M4.5 10h10a5 5 0 0 1 0 10H11"/>',
+  eraser: '<path d="m8.5 19.5-4-4 9.5-9.5 6 6-6.5 6.5H8.5z"/><path d="M10 9.5l5 5M8.5 19.5h11"/>',
+  tasks: '<rect x="4" y="4.5" width="16" height="16" rx="2"/><path d="m7.5 9 1.6 1.6 3-3M7.5 15.5l1.6 1.6 3-3M14 9.5h3M14 16h3"/>',
+  compare: '<rect x="3.5" y="5" width="7.5" height="14" rx="1.2"/><rect x="13" y="5" width="7.5" height="14" rx="1.2"/><path d="M12.25 3v18"/>',
+  fileDown: '<path d="M7 3.5h7l4.5 4.5v11A1.5 1.5 0 0 1 17 20.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M12 10v6.5M9.3 13.8 12 16.5l2.7-2.7"/>',
+  link2: '<path d="M9 12h6"/><path d="M10 8H8a4 4 0 0 0 0 8h2M14 8h2a4 4 0 0 1 0 8h-2"/>',
+  unlink: '<path d="M10 8H8a4 4 0 0 0 0 8h2M14 8h2a4 4 0 0 1 0 8h-2"/><path d="M5 5l14 14"/>',
   sparkle: '<path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.5 6.5l2.5 2.5M15 15l2.5 2.5M6.5 17.5 9 15M15 9l2.5-2.5"/>',
 };
 

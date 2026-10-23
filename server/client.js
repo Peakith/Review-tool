@@ -59,6 +59,15 @@ function brandDto(db, brandId) {
   };
 }
 
+/** Reviewronde en "wat is aangepast" bij een gepubliceerde versie (voor de klant). */
+function clientRound(db, version) {
+  const r = version.round_id ? db.prepare('SELECT * FROM review_rounds WHERE id = ?').get(version.round_id) : null;
+  return {
+    round: r ? { number: r.number, deadline: r.deadline_at, note: r.client_note } : null,
+    changeNote: version.change_note || '',
+  };
+}
+
 /** Goedkeuring zoals de klant die ziet: naam en moment (geen e-mailadres). */
 function clientApproval(db, versionId) {
   const a = approvalDto(db, versionId);
@@ -82,7 +91,7 @@ function clientVideoInfo(db, { video, project, role = 'reviewer', allowDownload 
     approver: video.approver_name ? { name: video.approver_name } : null,
     // De persoon met de akkoordlink is geverifieerd via die persoonlijke link.
     identity: role === 'approver' ? { name: approverName, verified: true } : null,
-    versions: versions.map((v, i) => ({ ...versionDto(v), isLatest: i === 0, approval: clientApproval(db, v.id) })),
+    versions: versions.map((v, i) => ({ ...versionDto(v), isLatest: i === 0, approval: clientApproval(db, v.id), ...clientRound(db, v) })),
     totalShared: versions.length,
     // Kwam de klant via het klantportaal, dan kan hij terug naar het overzicht.
     portal,
@@ -122,6 +131,7 @@ function portalDto(db, project, { videoLink, posterUrl, fileUrl }) {
       version: { number: ver.number, status: ver.status, sharedAt: ver.shared_at, duration: ver.duration_seconds, width: ver.width, height: ver.height, hasPoster: !!ver.has_poster },
       posterUrl: ver.has_poster ? posterUrl(v, ver) : null,
       approval,
+      round: clientRound(db, ver).round,
       approverName: v.approver_name || null,
       archived: archivedProject || !!v.archived_at,
       href: videoLink(v),
@@ -138,4 +148,4 @@ function portalDto(db, project, { videoLink, posterUrl, fileUrl }) {
   };
 }
 
-module.exports = { KINDS, ASPECTS, detectAspect, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions, HEX };
+module.exports = { clientRound, KINDS, ASPECTS, detectAspect, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions, HEX };

@@ -5,6 +5,7 @@ const auth = require('../auth');
 const { normalizeTitle, titleFromFilename, downloadFilename, contentDisposition } = require('../media');
 const { versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos } = require('../views');
 const { intParam } = require('../access');
+const { syncTaskFromComment } = require('./tasks');
 const { KINDS, ASPECTS, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions } = require('../client');
 
 // Media voor het team: wel cachen, maar bij elk gebruik opnieuw laten controleren, zodat
@@ -33,6 +34,14 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       UNION ALL SELECT MAX(e.created_at) FROM status_events e JOIN versions v ON v.id = e.version_id WHERE v.video_id = ?
     )`).get(video.updated_at, video.id, video.id).at;
 
+  /** Afgesproken aantal rondes: per video afwijkend, anders de projectstandaard (of niet ingesteld). */
+  function roundsIncluded(video, project) {
+    if (video.rounds_included) return { count: video.rounds_included, source: 'video' };
+    const p = project || db.prepare('SELECT rounds_included FROM projects WHERE id = ?').get(video.project_id);
+    return p?.rounds_included ? { count: p.rounds_included, source: 'project' } : { count: null, source: null };
+  }
+  const roundCount = (videoId) => db.prepare('SELECT COUNT(*) AS n FROM review_rounds WHERE video_id = ?').get(videoId).n;
+
   /** Samenvatting van een video voor overzichten: interne nieuwste versie én wat de klant ziet. */
   function videoSummary(v) {
     const latest = latestVersion(v.id);
@@ -52,6 +61,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       latestSharedNumber: shared?.number || null,
       posterVersionId: poster?.id || null,
       openComments: shared ? openClientComments(shared.id) : 0,
+      rounds: { count: roundCount(v.id), included: roundsIncluded(v) },
     };
   }
 
@@ -94,10 +104,17 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     const brandId = req.body?.brandId ? Number(req.body.brandId) : null;
     if (brandId !== null && !db.prepare('SELECT id FROM brands WHERE id = ?').get(brandId)) throw new HttpError(400, 'Onbekend merk');
     const intro = String(req.body?.portalIntro || '').trim().slice(0, 2000);
-    const info = db.prepare('INSERT INTO projects (name, client_name, brand_id, portal_intro, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(name, clientName, brandId, intro, req.user.id, now());
+    const info = db.prepare('INSERT INTO projects (name, client_name, brand_id, portal_intro, rounds_included, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(name, clientName, brandId, intro, parseRounds(req.body?.roundsIncluded), req.user.id, now());
     res.status(201).json({ id: Number(info.lastInsertRowid) });
   });
+
+  const parseRounds = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > 50) throw new HttpError(400, 'Het afgesproken aantal rondes moet een heel getal van 1 tot 50 zijn.');
+    return n;
+  };
 
   router.patch('/projects/:id', (req, res) => {
     const { project: p } = access.project(req, req.params.id, 'manage', { write: true });
@@ -111,7 +128,8 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       if (brandId !== null && !db.prepare('SELECT id FROM brands WHERE id = ?').get(brandId)) throw new HttpError(400, 'Onbekend merk');
     }
     const intro = body.portalIntro !== undefined ? String(body.portalIntro).trim().slice(0, 2000) : p.portal_intro;
-    db.prepare('UPDATE projects SET name = ?, client_name = ?, brand_id = ?, portal_intro = ? WHERE id = ?').run(name, clientName, brandId, intro, p.id);
+    const rounds = body.roundsIncluded !== undefined ? parseRounds(body.roundsIncluded) : p.rounds_included;
+    db.prepare('UPDATE projects SET name = ?, client_name = ?, brand_id = ?, portal_intro = ?, rounds_included = ? WHERE id = ?').run(name, clientName, brandId, intro, rounds, p.id);
     res.json({ ok: true });
   });
 
@@ -129,9 +147,16 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       brandId: p.brand_id,
       brand: brandDto(db, p.brand_id),
       portalIntro: p.portal_intro || '',
+      roundsIncluded: p.rounds_included,
       briefingCount: db.prepare('SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ? AND trashed_at IS NULL').get(p.id).n,
       sharedBriefingCount: db.prepare("SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ? AND trashed_at IS NULL AND visibility = 'client'").get(p.id).n,
       portalLinkActive: !!activePortalLink(p.id),
+      // Nog af te handelen feedback (zelfde regels als het overzicht "Feedback & taken").
+      openFeedback: db.prepare(`SELECT COUNT(*) AS n FROM comments c JOIN versions ver ON ver.id = c.version_id JOIN videos v ON v.id = ver.video_id
+        LEFT JOIN comment_tasks t ON t.comment_id = c.id
+        WHERE v.project_id = ? AND v.trashed_at IS NULL AND ver.trashed_at IS NULL AND c.parent_id IS NULL
+          AND ((c.author_type != 'team' AND (c.round_id IS NOT NULL OR ver.status = 'approved')) OR t.id IS NOT NULL)
+          AND COALESCE(t.status, CASE WHEN c.resolved_at IS NULL THEN 'open' ELSE 'done' END) != 'done'`).get(p.id).n,
       archivedVideoCount: db.prepare('SELECT COUNT(*) AS n FROM videos WHERE project_id = ? AND trashed_at IS NULL AND archived_at IS NOT NULL').get(p.id).n,
       videos: videos.map(videoSummary),
     });
@@ -211,10 +236,23 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       archivedAt: v.archived_at || project.archived_at || null,
       myLevel: level,
       trashedVersionCount: db.prepare('SELECT COUNT(*) AS n FROM versions WHERE video_id = ? AND trashed_at IS NOT NULL').get(v.id).n,
+      roundsIncluded: roundsIncluded(v, project),
+      projectRoundsIncluded: project.rounds_included,
+      videoRoundsIncluded: v.rounds_included,
+      rounds: db.prepare('SELECT * FROM review_rounds WHERE video_id = ? ORDER BY number').all(v.id).map((r) => ({
+        id: r.id, number: r.number, deadline: r.deadline_at, clientNote: r.client_note, createdAt: r.created_at,
+        versions: versions.filter((x) => x.round_id === r.id).map((x) => ({ id: x.id, number: x.number, status: x.status })),
+        clientComments: db.prepare("SELECT COUNT(*) AS n FROM comments c JOIN versions x ON x.id = c.version_id WHERE x.round_id = ? AND x.trashed_at IS NULL AND c.parent_id IS NULL AND c.author_type != 'team'").get(r.id).n,
+        submissions: db.prepare('SELECT COUNT(*) AS n FROM feedback_rounds f JOIN versions x ON x.id = f.version_id WHERE x.round_id = ? AND x.trashed_at IS NULL').get(r.id).n,
+      })),
+      unroundedSharedVersions: versions.filter((x) => x.shared_at && !x.round_id).map((x) => x.number),
       // De versie die klanten via hun link zien (nieuwste gedeelde), los van de interne nieuwste.
       clientVersionId: shared?.id || null,
       versions: versions.map((ver, i) => ({
         ...versionDto(ver),
+        roundId: ver.round_id,
+        roundNumber: ver.round_id ? db.prepare('SELECT number FROM review_rounds WHERE id = ?').get(ver.round_id)?.number : null,
+        changeNote: ver.change_note,
         isLatest: i === 0,
         isClientVersion: ver.id === shared?.id,
         openComments: openClientComments(ver.id),
@@ -256,6 +294,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       if (aspect && !ASPECTS.includes(aspect)) throw new HttpError(400, 'Onbekende beeldverhouding');
     }
     const channel = body.channel !== undefined ? String(body.channel).replace(/\s+/g, ' ').trim().slice(0, 80) : v.channel;
+    const videoRounds = body.roundsIncluded !== undefined ? parseRounds(body.roundsIncluded) : v.rounds_included;
     let title = v.title;
     if (body.title !== undefined) {
       // Alleen de zichtbare titel verandert; bestanden, links en versies niet.
@@ -266,8 +305,8 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     const approverEmail = body.approverEmail !== undefined ? String(body.approverEmail).trim().slice(0, 200) : v.approver_email;
     if (approverEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(approverEmail)) throw new HttpError(400, 'Vul een geldig e-mailadres voor de akkoordgever in');
     db.tx(() => {
-      db.prepare('UPDATE videos SET title = ?, approver_name = ?, approver_email = ?, kind = ?, aspect_ratio = ?, channel = ?, updated_at = ? WHERE id = ?')
-        .run(title, approverName, approverEmail, kind, aspect, channel, now(), v.id);
+      db.prepare('UPDATE videos SET title = ?, approver_name = ?, approver_email = ?, kind = ?, aspect_ratio = ?, channel = ?, rounds_included = ?, updated_at = ? WHERE id = ?')
+        .run(title, approverName, approverEmail, kind, aspect, channel, videoRounds, now(), v.id);
       if (approverName !== v.approver_name || approverEmail !== v.approver_email) {
         // Andere akkoordgever: oude persoonlijke akkoordlinks verliezen hun geldigheid.
         db.prepare("UPDATE share_links SET revoked_at = ?, revoked_by = ? WHERE video_id = ? AND role = 'approver' AND revoked_at IS NULL")
@@ -308,21 +347,78 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     res.json({ ok: true });
   });
 
+  /**
+   * Publiceren. Het team kiest of deze versie bij de huidige reviewronde hoort ("current") of een
+   * nieuwe ronde start ("new"); zonder keuze: bij de huidige ronde, of ronde 1 als er nog geen is.
+   * Met dezelfde requestId nogmaals (opnieuw proberen na een verbindingsfout) verandert niets.
+   */
   router.post('/versions/:id/share', (req, res) => {
     const { version: ver } = access.version(req, req.params.id, 'publish', { write: true });
+    const body = req.body || {};
+    const requestId = /^[A-Za-z0-9_-]{8,64}$/.test(String(body.requestId || '')) ? String(body.requestId) : null;
+    if (requestId && ver.shared_at && ver.share_request_id === requestId) {
+      return res.json({ ok: true, replayed: true, roundNumber: ver.round_id ? db.prepare('SELECT number FROM review_rounds WHERE id = ?').get(ver.round_id).number : null });
+    }
     if (ver.status !== 'ready_for_review') throw new HttpError(409, 'Zet de versie eerst op "Klaar voor review"');
     const latest = latestVersion(ver.video_id);
     if (latest.id !== ver.id) throw new HttpError(409, 'Alleen de nieuwste versie kan worden gedeeld');
+    const lastRound = db.prepare('SELECT * FROM review_rounds WHERE video_id = ? ORDER BY number DESC LIMIT 1').get(ver.video_id);
+    const choice = body.round === 'new' ? 'new' : body.round === 'current' ? 'current' : (lastRound ? 'current' : 'new');
+    if (choice === 'current' && !lastRound) throw new HttpError(400, 'Er is nog geen reviewronde voor deze video. Kies “Ronde 1 starten”.');
+    const deadline = parseDeadline(body.deadline);
+    const clientNote = String(body.roundNote || '').trim().slice(0, 1000);
+    const changeNote = String(body.changeNote || '').trim().slice(0, 2000);
     let createdLink = null;
+    let roundNumber;
     db.tx(() => {
-      db.prepare('UPDATE versions SET shared_at = ? WHERE id = ?').run(now(), ver.id);
-      changeStatus(db, ver.id, 'in_review', { event: 'shared', ...actor(req) });
+      let roundId;
+      if (choice === 'new') {
+        roundNumber = (lastRound?.number || 0) + 1;
+        roundId = Number(db.prepare('INSERT INTO review_rounds (video_id, number, deadline_at, client_note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(ver.video_id, roundNumber, deadline ?? null, clientNote, req.user.id, now()).lastInsertRowid);
+      } else {
+        roundId = lastRound.id;
+        roundNumber = lastRound.number;
+        if (deadline !== undefined || clientNote) {
+          db.prepare('UPDATE review_rounds SET deadline_at = ?, client_note = ? WHERE id = ?').run(deadline !== undefined ? deadline : lastRound.deadline_at, clientNote || lastRound.client_note, roundId);
+        }
+      }
+      db.prepare('UPDATE versions SET shared_at = ?, round_id = ?, change_note = ?, share_request_id = ? WHERE id = ?').run(now(), roundId, changeNote, requestId, ver.id);
+      changeStatus(db, ver.id, 'in_review', { event: 'shared', ...actor(req), note: `Ronde ${roundNumber}${choice === 'new' ? ' (nieuw)' : ''}` });
       const active = db.prepare("SELECT id FROM share_links WHERE video_id = ? AND role = 'reviewer' AND revoked_at IS NULL AND project_link_id IS NULL").get(ver.video_id);
       if (!active) {
         createdLink = createLink(ver.video_id, { role: 'reviewer', label: 'Reviewlink' }, req.user);
       }
     });
-    res.json({ ok: true, createdLink: !!createdLink });
+    res.json({ ok: true, createdLink: !!createdLink, roundNumber });
+  });
+
+  /** Deadline: ISO-tijdstip met tijdzone (de browser stuurt UTC). Leeg = geen deadline. */
+  function parseDeadline(value) {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    const t = Date.parse(String(value));
+    if (!Number.isFinite(t) || !/[zZ]|[+-]\d{2}:?\d{2}$/.test(String(value))) throw new HttpError(400, 'Ongeldige deadline. Kies een datum en tijd.');
+    return new Date(t).toISOString();
+  }
+
+  // Ronde bijwerken (deadline, toelichting voor de klant). Verandert nooit een status.
+  router.patch('/rounds/:id', (req, res) => {
+    const round = db.prepare('SELECT * FROM review_rounds WHERE id = ?').get(intParam(req.params.id));
+    if (!round) throw new HttpError(404, 'Ronde niet gevonden');
+    access.video(req, round.video_id, 'publish', { write: true });
+    const deadline = parseDeadline(req.body?.deadline);
+    const note = req.body?.clientNote !== undefined ? String(req.body.clientNote).trim().slice(0, 1000) : round.client_note;
+    db.prepare('UPDATE review_rounds SET deadline_at = ?, client_note = ? WHERE id = ?').run(deadline !== undefined ? deadline : round.deadline_at, note, round.id);
+    res.json({ ok: true });
+  });
+
+  // Toelichting "wat is aangepast" bij een gepubliceerde versie achteraf corrigeren.
+  router.patch('/versions/:id', (req, res) => {
+    const { version: ver } = access.version(req, req.params.id, 'publish', { write: true });
+    if (req.body?.changeNote === undefined) throw new HttpError(400, 'Niets om te wijzigen');
+    db.prepare('UPDATE versions SET change_note = ? WHERE id = ?').run(String(req.body.changeNote).trim().slice(0, 2000), ver.id);
+    res.json({ ok: true });
   });
 
   router.post('/versions/:id/status', (req, res) => {
@@ -416,8 +512,12 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
   router.post('/comments/:id/resolve', (req, res) => {
     const c = getComment(req);
     const resolved = req.body?.resolved !== false;
-    db.prepare('UPDATE comments SET resolved_at = ?, resolved_by = ? WHERE id = ?')
-      .run(resolved ? now() : null, resolved ? req.user.id : null, c.id);
+    db.tx(() => {
+      db.prepare('UPDATE comments SET resolved_at = ?, resolved_by = ? WHERE id = ?')
+        .run(resolved ? now() : null, resolved ? req.user.id : null, c.id);
+      // Eén afhandelstatus: een eventuele taak volgt mee.
+      syncTaskFromComment(db, c.id, resolved, req.user.id);
+    });
     res.json({ ok: true });
   });
 

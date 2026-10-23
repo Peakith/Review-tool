@@ -1,6 +1,7 @@
 import {
   h, mount, icon, button, busy, api, statusPill, STATUS, STATUS_LABELS, toast, confirmDialog, openDialog, field,
   formatDate, relativeDate, formatBytes, timecode, copyText, emptyState, errorState, skeletonRows, plural, draftStore,
+  newRequestId, formatDeadline, isPast, localToIso, isoToLocal,
 } from '/shared/util.js';
 import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom, commentCounts } from '/shared/comments.js';
@@ -8,6 +9,7 @@ import { createComposer } from '/shared/composer.js';
 import { configureUploads, enqueue, checkFile, suggestTitle, createUploadTray, onUploadsChange } from './uploads.js';
 import { viewTeam, viewStorage, viewTrash, viewArchive, viewBrands, can, menuButton } from './admin.js';
 import { viewBriefing } from './briefing.js';
+import { taskDialog, taskChip, viewFeedback, viewMyTasks } from './tasks.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -49,6 +51,8 @@ async function route() {
   const views = [
     [/^\/projecten\/(\d+)$/, (id) => viewProject(Number(id)), 'projects'],
     [/^\/projecten\/(\d+)\/briefing$/, (id) => viewProject(Number(id), 'briefing'), 'projects'],
+    [/^\/projecten\/(\d+)\/feedback$/, (id) => viewProject(Number(id), 'feedback'), 'projects'],
+    [/^\/taken$/, () => viewMyTasks(ctx()), 'tasks'],
     [/^\/merken$/, () => (session.user.isAdmin ? viewBrands(ctx()) : viewNotFound()), 'brands'],
     [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
     [/^\/team$/, () => viewTeam(ctx()), 'team'],
@@ -98,6 +102,7 @@ function ensureShell() {
     h('div', { class: 'side-scroll' },
       h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
         h('a', { href: '/', 'data-nav': true, dataset: { section: 'projects' } }, icon('folder'), 'Projecten'),
+        h('a', { href: '/taken', 'data-nav': true, dataset: { section: 'tasks' } }, icon('tasks'), 'Mijn taken', h('span', { class: 'side-count', id: 'my-task-count', hidden: true })),
         h('a', { href: '/archief', 'data-nav': true, dataset: { section: 'archive' } }, icon('history'), 'Archief'),
         h('a', { href: '/prullenbak', 'data-nav': true, dataset: { section: 'trash' } }, icon('trash'), 'Prullenbak'),
         session.user.isAdmin
@@ -136,6 +141,10 @@ function setActiveNav(section) {
 }
 
 async function refreshSidebar(currentProjectId) {
+  api('GET', '/api/my/tasks').then((r) => {
+    const el = document.getElementById('my-task-count');
+    if (el) { el.textContent = String(r.items.length); el.hidden = !r.items.length; }
+  }).catch(() => {});
   try {
     const projects = await api('GET', '/api/projects');
     mount(sidebarProjects, projects.length
@@ -396,6 +405,7 @@ async function projectDialog({ title, project, submitLabel }) {
   brand.value = project?.brandId ? String(project.brandId) : '';
   const intro = h('textarea', { name: 'portalIntro', rows: '3', maxlength: '2000', placeholder: 'Bijv. “Hoi! Hier vind je alle video’s voor de voorjaarscampagne. Laat per video je feedback achter.”' });
   intro.value = project?.portalIntro || '';
+  const rounds = h('input', { type: 'number', min: '1', max: '50', step: '1', inputmode: 'numeric', value: project?.roundsIncluded ?? '', placeholder: 'Bijv. 2', class: 'input-narrow' });
   const draftKey = `project-dialog-${project?.id || 'nieuw'}`;
   if (!project && draftStore.get(draftKey)) intro.value = draftStore.get(draftKey);
   intro.addEventListener('input', () => draftStore.set(draftKey, intro.value));
@@ -407,12 +417,13 @@ async function projectDialog({ title, project, submitLabel }) {
       field('Klant', client, 'Zichtbaar voor de klant boven de video’s.'),
       field('Merk', brand, 'Bepaalt logo, naam en accentkleur van de klantweergave (portaal en reviewlinks). Merken beheer je onder “Merken”.'),
       field('Introductie in het klantportaal (optioneel)', intro, 'Korte tekst bovenaan het portaal. Alleen zichtbaar via de projectlink.'),
+      field('Afgesproken reviewrondes per video (optioneel)', rounds, 'Wordt per video bijgehouden. Bij meer rondes verschijnt een waarschuwing; er wordt niets geblokkeerd. Per video kun je afwijken.'),
     ],
     actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'),
       h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, submitLabel))],
     onSubmit: async () => {
       try {
-        result = { name: name.value, clientName: client.value, brandId: brand.value ? Number(brand.value) : null, portalIntro: intro.value };
+        result = { name: name.value, clientName: client.value, brandId: brand.value ? Number(brand.value) : null, portalIntro: intro.value, roundsIncluded: rounds.value ? Number(rounds.value) : null };
         result.response = project
           ? await api('PATCH', `/api/projects/${project.id}`, result)
           : await api('POST', '/api/projects', result);
@@ -581,9 +592,11 @@ async function viewProject(id, tab = 'videos') {
   search.addEventListener('input', () => { state.q = search.value; draw(); });
 
   const isVideos = tab === 'videos';
+  const tabLink = (key, href, iconName, label, extra) => h('a', { href, 'data-nav': true, class: tab === key ? 'is-active' : '', 'aria-current': tab === key ? 'page' : null }, icon(iconName), label, extra);
   const tabs = h('nav', { class: 'page-tabs', 'aria-label': 'Projectonderdelen' },
     h('a', { href: `/projecten/${project.id}`, 'data-nav': true, class: isVideos ? 'is-active' : '', 'aria-current': isVideos ? 'page' : null }, icon('film'), 'Video’s', h('span', { class: 'seg-count' }, project.videos.length)),
-    h('a', { href: `/projecten/${project.id}/briefing`, 'data-nav': true, class: isVideos ? '' : 'is-active', 'aria-current': isVideos ? null : 'page' }, icon('clipboard'), 'Briefing & referenties',
+    tabLink('feedback', `/projecten/${project.id}/feedback`, 'tasks', 'Feedback & taken', project.openFeedback ? h('span', { class: 'seg-count' }, project.openFeedback) : null),
+    h('a', { href: `/projecten/${project.id}/briefing`, 'data-nav': true, class: tab === 'briefing' ? 'is-active' : '', 'aria-current': tab === 'briefing' ? 'page' : null }, icon('clipboard'), 'Briefing & referenties',
       h('span', { class: 'seg-count', dataset: { count: 'briefing' } }, project.briefingCount),
       h('span', { class: 'badge badge-visible', title: 'Onderdelen die de klant kan bekijken', dataset: { count: 'shared' }, hidden: !project.sharedBriefingCount }, icon('eye'), h('span', {}, project.sharedBriefingCount))));
   const briefingHost = h('div', {});
@@ -624,7 +637,9 @@ async function viewProject(id, tab = 'videos') {
   if (mayUpload && isVideos) makeDropTarget(content, (files) => addVideos(project, files, onDone), 'Loslaten om als nieuwe video’s toe te voegen');
   mount(pageEl, content);
   if (isVideos) draw();
-  else {
+  else if (tab === 'feedback') {
+    await viewFeedback({ project, host: briefingHost, session });
+  } else {
     // Aantallen in het tabblad actueel houden na toevoegen, delen of weggooien.
     const onCounts = (total, shared) => {
       tabs.querySelector('[data-count=briefing]').textContent = String(total);
@@ -746,6 +761,9 @@ async function viewVideo(id) {
       filter,
       activeId,
       isOwnTeamComment: (c) => c.authorType === 'team' && c.userId === session.user.id,
+      renderTask: taskChip,
+      onTask: !archived && (can(level, 'upload') || comments.some((c) => c.task?.assigneeId === session.user.id))
+        ? (c) => (c.task || can(level, 'upload') ? taskDialog({ comment: c, projectId: video.project.id, level, onDone: reloadComments }) : null) : null,
       canShare: can(level, 'publish'),
       onSeek: (t, cid) => { player.seek(t); activeId = cid; drawComments(); },
       onReply: async (parentId, body, { internal } = {}) => {
@@ -803,6 +821,7 @@ async function viewVideo(id) {
   const tabs = [
     ['comments', 'Reacties', tabCount],
     ['versions', 'Versies', h('span', { class: 'tab-count' }, video.versions.length)],
+    ['rounds', 'Rondes', h('span', { class: 'tab-count' }, video.rounds.length || '')],
     ['history', 'Geschiedenis', null],
   ];
   const tabButtons = tabs.map(([key, label, extra]) => h('button', {
@@ -816,10 +835,12 @@ async function viewVideo(id) {
       }
     },
   }, label, extra));
+  const refresh = () => route();
   const panels = {
     comments: h('div', { class: 'tabpanel tabpanel-comments', role: 'tabpanel', id: 'tabpanel-comments', 'aria-labelledby': 'tab-comments' },
       h('div', { class: 'panel-toolbar' }, filterBar), commentsEl, h('div', { class: 'panel-composer' }, composer.el)),
     versions: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-versions', 'aria-labelledby': 'tab-versions' }, h('div', { class: 'panel-scroll' }, versionsList(video, version))),
+    rounds: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-rounds', 'aria-labelledby': 'tab-rounds' }, h('div', { class: 'panel-scroll' }, roundsList(video, refresh, may))),
     history: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-history', 'aria-labelledby': 'tab-history' }, h('div', { class: 'panel-scroll' }, historyList(version))),
   };
   function selectTab(key) {
@@ -834,7 +855,6 @@ async function viewVideo(id) {
   versionSelect.value = String(version.id);
   versionSelect.addEventListener('change', () => navigate(`/video/${video.id}?v=${versionSelect.value}`));
 
-  const refresh = () => route();
   const shareBtn = can(level, 'publish') ? button('Delen', { icon: 'link', onClick: () => shareDialog(video, refresh) }) : null;
   const newVersionBtn = may('upload') ? button('Nieuwe versie', { icon: 'layers', onClick: () => newVersionDialog(video) }) : null;
   if (archived) composer.setDisabled(true, 'Gearchiveerd: reageren is niet meer mogelijk.');
@@ -847,6 +867,7 @@ async function viewVideo(id) {
         deliveryMeta(video, may('upload')),
         h('span', { class: 'meta-item' }, h('span', { class: 'muted' }, 'Intern nieuwste: '), `Versie ${latest.number}`),
         h('span', { class: 'meta-item' }, icon('eye'), h('span', { class: 'muted' }, ' Klant ziet: '), clientVersion ? `Versie ${clientVersion.number}` : 'nog niets gedeeld'),
+        roundIndicator(video),
       ],
       actions: [versionSelect, newVersionBtn,
         h('a', { class: 'btn btn-secondary', href: `/voorbeeld/video/${video.id}`, target: '_blank', rel: 'noopener', title: 'Zo ziet de klant deze video (alleen gepubliceerde versies, zonder interne notities)' }, icon('eye'), h('span', { class: 'btn-label' }, 'Klantweergave')),
@@ -866,8 +887,17 @@ async function viewVideo(id) {
         Object.values(panels))));
   if (may('upload')) makeDropTarget(content, (files) => newVersionDialog(video, files[0]), `Loslaten als nieuwe versie (Versie ${latest.number + 1})`);
   mount(pageEl, content);
-  selectTab(['comments', 'versions', 'history'].includes(tab) ? tab : 'comments');
+  selectTab(['comments', 'versions', 'rounds', 'history'].includes(tab) ? tab : 'comments');
   drawComments();
+  // Vanuit een overzicht: direct naar de reactie en het juiste moment.
+  const focusId = Number(new URLSearchParams(location.search).get('c'));
+  const focus = comments.find((c) => c.id === focusId);
+  if (focus) {
+    activeId = focus.id;
+    drawComments();
+    if (focus.timecode !== null && focus.timecode !== undefined) player.seek(focus.timecode);
+    setTimeout(() => scrollToComment(focus.id), 50);
+  }
 
   const poll = setInterval(() => {
     if (document.visibilityState === 'visible' && !document.querySelector('.reply-box:not([hidden]) textarea, dialog[open]')) reloadComments().catch(() => {});
@@ -895,17 +925,20 @@ async function detailsDialog(video) {
     ASPECTS.map((a) => h('option', { value: a }, a)));
   aspect.value = video.aspectRatio || '';
   const channel = h('input', { type: 'text', maxlength: '80', value: video.channel || '', placeholder: 'Bijv. Instagram Reels, YouTube, tv-spot' });
+  const rounds = h('input', { type: 'number', min: '1', max: '50', step: '1', inputmode: 'numeric', value: video.videoRoundsIncluded ?? '', class: 'input-narrow',
+    placeholder: video.projectRoundsIncluded ? `${video.projectRoundsIncluded} (project)` : 'niet ingesteld' });
   await openDialog({
     title: 'Gegevens van deze oplevering',
     body: [
       h('p', { class: 'small muted' }, 'Elke oplevering (hoofdvideo, teaser, social…) is een eigen video. Een verbeterde montage upload je als nieuwe versie van dezelfde oplevering. De klant ziet deze gegevens alleen bij gepubliceerde video’s.'),
       h('div', { class: 'form-grid is-2' }, field('Type', kind), field('Beeldverhouding', aspect)),
       field('Bedoeld kanaal (optioneel)', channel),
+      field('Afgesproken reviewrondes voor deze video', rounds, video.projectRoundsIncluded ? `Leeg = projectstandaard (${video.projectRoundsIncluded}). Vul alleen in als deze video afwijkt.` : 'Leeg = geen afspraak. De projectstandaard stel je in bij het project.'),
     ],
     actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, 'Opslaan'))],
     onSubmit: async () => {
       try {
-        await api('PATCH', `/api/videos/${video.id}`, { kind: kind.value || null, aspectRatio: aspect.value || null, channel: channel.value });
+        await api('PATCH', `/api/videos/${video.id}`, { kind: kind.value || null, aspectRatio: aspect.value || null, channel: channel.value, roundsIncluded: rounds.value ? Number(rounds.value) : null });
         toast('Gegevens opgeslagen', 'success');
         route();
       } catch (err) { toast(err.message, 'error'); return false; }
@@ -960,16 +993,7 @@ function publishBar(video, version, latest, clientVersion, refresh, may) {
     actions = may('upload') ? [b] : [];
   } else if (version.status === 'ready_for_review') {
     text = [h('strong', {}, `Versie ${version.number} is klaar, maar nog niet gedeeld.`), ` Na publiceren zien klanten via hun bestaande link Versie ${version.number}${clientVersion ? ` in plaats van Versie ${clientVersion.number}` : ''}, en wordt de status In review.`];
-    const b = button(`Publiceren naar klant`, { icon: 'send', variant: 'primary', onClick: async () => {
-      const ok = await confirmDialog({
-        title: `Versie ${version.number} publiceren?`,
-        body: h('div', {},
-          h('p', {}, `Klanten zien via de bestaande reviewlink en akkoordlink voortaan Versie ${version.number}. De status wordt In review.`),
-          clientVersion ? h('p', { class: 'muted' }, `Versie ${clientVersion.number} en de feedback daarop blijven bewaard en zichtbaar als oudere versie.`) : h('p', { class: 'muted' }, 'Er wordt automatisch een reviewlink aangemaakt als die nog niet bestaat.')),
-        confirmLabel: 'Publiceren',
-      });
-      if (ok) act(b, () => api('POST', `/api/versions/${version.id}/share`), `Versie ${version.number} is gepubliceerd. Klanten zien deze versie nu.`);
-    } });
+    const b = button(`Publiceren naar klant`, { icon: 'send', variant: 'primary', onClick: () => publishDialog(video, version, clientVersion, refresh) });
     actions = may('publish') ? [b] : [h('span', { class: 'small muted' }, icon('lock'), ' Publiceren doet een collega met publicatierechten.')];
   } else if (version.status === 'in_review') {
     text = [h('strong', {}, 'Klanten zien deze versie.'), ' Wacht op feedback of goedkeuring van de akkoordgever', video.approverName ? ` (${video.approverName})` : '', '.'];
@@ -987,6 +1011,153 @@ function publishBar(video, version, latest, clientVersion, refresh, may) {
     h('div', { class: 'publish-status' }, h('span', { class: 'publish-version' }, `Versie ${version.number}`), statusPill(version.status)),
     h('p', { class: 'publish-text' }, text),
     h('div', { class: 'publish-actions' }, correct, actions));
+}
+
+// ---------- Reviewrondes ----------
+
+/** "Ronde 2 · 3 afgesproken (per video)" met waarschuwing bij overschrijding. */
+function roundIndicator(video) {
+  const n = video.rounds.length;
+  const inc = video.roundsIncluded?.count;
+  if (!n && !inc) return null;
+  const over = inc && n > inc;
+  return h('span', { class: `meta-item round-meta${over ? ' is-over' : ''}`, title: 'Rondes worden per video bijgehouden' },
+    icon(over ? 'alert' : 'history'),
+    n ? `Ronde ${n}` : 'Nog geen ronde',
+    inc ? h('span', { class: 'muted' }, ` · ${inc} afgesproken${video.roundsIncluded.source === 'video' ? ' voor deze video' : ' per video'}`) : null,
+    over ? h('strong', {}, ` · ${n - inc} meer dan afgesproken`) : null);
+}
+
+function roundsList(video, refresh, may) {
+  const inc = video.roundsIncluded?.count;
+  const intro = h('p', { class: 'small muted rounds-intro' },
+    'Rondes worden ', h('strong', {}, 'per video'), ' bijgehouden. Een nieuwe ronde start alleen als je dat bij het publiceren kiest.',
+    inc ? ` Afgesproken: ${plural(inc, 'ronde', 'rondes')} ${video.roundsIncluded.source === 'video' ? 'voor deze video' : 'per video (projectstandaard)'}.` : ' Er is geen aantal rondes afgesproken (instellen bij het project).');
+  const old = video.unroundedSharedVersions?.length
+    ? h('p', { class: 'small muted' }, icon('info'), ` ${video.unroundedSharedVersions.length === 1 ? 'Versie' : 'Versies'} ${video.unroundedSharedVersions.join(', ')} ${video.unroundedSharedVersions.length === 1 ? 'is' : 'zijn'} gedeeld vóórdat rondes werden bijgehouden en ${video.unroundedSharedVersions.length === 1 ? 'hoort' : 'horen'} bij geen ronde.`)
+    : null;
+  if (!video.rounds.length) return h('div', { class: 'rounds' }, intro, old, emptyState({ icon: 'history', compact: true, title: 'Nog geen reviewronde', text: 'Bij het publiceren van een versie start je ronde 1.' }));
+  return h('div', { class: 'rounds' }, intro, old, h('ol', { class: 'round-list' }, [...video.rounds].reverse().map((r) => h('li', { class: `round-item${inc && r.number > inc ? ' is-over' : ''}` },
+    h('div', { class: 'round-head' },
+      h('strong', {}, `Ronde ${r.number}`),
+      inc && r.number > inc ? h('span', { class: 'badge badge-warn' }, icon('alert'), 'Boven afspraak') : null,
+      may('publish') ? h('button', { type: 'button', class: 'link-btn', onClick: () => roundDialog(r, refresh) }, icon('edit'), 'Wijzigen') : null),
+    h('div', { class: 'small' }, r.deadline
+      ? h('span', { class: isPast(r.deadline) ? 'warn-text' : '' }, icon('clock'), ` Reactie gevraagd vóór ${formatDeadline(r.deadline)}${isPast(r.deadline) ? ' (verstreken; feedback blijft mogelijk)' : ''}`)
+      : h('span', { class: 'muted' }, 'Geen deadline')),
+    r.clientNote ? h('div', { class: 'small round-note' }, `Toelichting voor de klant: “${r.clientNote}”`) : null,
+    h('div', { class: 'small muted' }, `${r.versions.length === 1 ? 'Versie' : 'Versies'} ${r.versions.map((x) => x.number).sort((a, b) => a - b).join(', ')} · ${plural(r.clientComments, 'klantreactie', 'klantreacties')} · ${plural(r.submissions, 'keer feedback verstuurd', 'keer feedback verstuurd')}`),
+    h('div', { class: 'small muted' }, `Gestart ${formatDate(r.createdAt)}`)))));
+}
+
+/** Deadlinevelden (datum + tijd) met de tijdzone van deze computer erbij. */
+function deadlineFields(iso) {
+  const { date, time } = isoToLocal(iso);
+  const d = h('input', { type: 'date', value: date, 'aria-label': 'Datum' });
+  const t = h('input', { type: 'time', value: time || '17:00', 'aria-label': 'Tijd' });
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Uitgeschreven bevestiging, zodat er geen twijfel is over dag/maand of AM/PM.
+  const said = h('span', { class: 'small deadline-said', 'aria-live': 'polite' });
+  const show = () => { said.textContent = d.value ? `= ${formatDeadline(localToIso(d.value, t.value))}` : `Geen deadline · tijdzone ${zone}`; };
+  d.addEventListener('input', show);
+  t.addEventListener('input', show);
+  show();
+  return { el: h('div', { class: 'deadline-fields' }, d, t, said), value: () => localToIso(d.value, t.value), clear: () => { d.value = ''; show(); } };
+}
+
+async function roundDialog(round, refresh) {
+  const dl = deadlineFields(round.deadline);
+  const note = h('textarea', { rows: '2', maxlength: '1000', placeholder: 'Bijv. “Let vooral op de nieuwe eindtitel.”' });
+  note.value = round.clientNote || '';
+  await openDialog({
+    title: `Ronde ${round.number} wijzigen`,
+    body: [field('Gewenste reactie vóór (optioneel)', dl.el, 'Alleen informatief: een verstreken datum keurt niets goed en sluit niets af.'), field('Toelichting voor de klant', note)],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, 'Opslaan'))],
+    onSubmit: async () => {
+      try { await api('PATCH', `/api/rounds/${round.id}`, { deadline: dl.value(), clientNote: note.value }); toast('Ronde bijgewerkt', 'success'); refresh(); } catch (err) { toast(`${err.message} Je invoer is bewaard.`, 'error'); return false; }
+    },
+  });
+}
+
+/**
+ * Publiceren: kies de ronde (bij de huidige of een nieuwe), optioneel een deadline en toelichting,
+ * en beschrijf wat er is aangepast. Eén request-id per venster: opnieuw proberen na een
+ * verbindingsfout publiceert niet dubbel en maakt geen extra ronde.
+ */
+async function publishDialog(video, version, clientVersion, refresh) {
+  const last = video.rounds.at(-1);
+  const inc = video.roundsIncluded?.count;
+  const requestId = newRequestId();
+  const draftKey = `publish-${version.id}`;
+  const draft = (() => { try { return JSON.parse(draftStore.get(draftKey) || 'null'); } catch { return null; } })();
+  let choice = draft?.choice || (last ? 'current' : 'new');
+  const choiceBox = h('div', { class: 'round-choice', role: 'radiogroup', 'aria-label': 'Reviewronde' });
+  const warn = h('div', {});
+  const newFields = h('div', { class: 'round-new-fields' });
+  const dl = deadlineFields(draft?.deadline || null);
+  const roundNote = h('textarea', { rows: '2', maxlength: '1000', placeholder: 'Bijv. “Graag vóór vrijdag; let vooral op de muziek.”' });
+  roundNote.value = draft?.roundNote || '';
+  const changeNote = h('textarea', { rows: '3', maxlength: '2000', placeholder: clientVersion ? 'Bijv. “Logo in de eindtitel groter, muziek vanaf 0:12 zachter.”' : 'Optioneel bij een eerste versie' });
+  changeNote.value = draft?.changeNote || '';
+  const save = () => draftStore.set(draftKey, JSON.stringify({ choice, deadline: dl.value(), roundNote: roundNote.value, changeNote: changeNote.value }));
+  [roundNote, changeNote].forEach((el) => el.addEventListener('input', save));
+
+  const draw = () => {
+    const nextNumber = (last?.number || 0) + 1;
+    const opts = last
+      ? [['current', `Bij ronde ${last.number} (huidige ronde)`, 'Bijvoorbeeld een kleine correctie binnen dezelfde ronde.'], ['new', `Ronde ${nextNumber} starten`, 'Een nieuwe feedbackronde voor de klant.']]
+      : [['new', 'Ronde 1 starten', video.unroundedSharedVersions?.length ? 'Eerdere versies zijn gedeeld vóórdat rondes werden bijgehouden; die tellen hier niet mee.' : 'De eerste reviewronde van deze video.']];
+    mount(choiceBox, opts.map(([k, label, hint]) => h('label', { class: `round-option${choice === k ? ' is-selected' : ''}` },
+      h('input', { type: 'radio', name: 'round', value: k, checked: choice === k, onChange: () => { choice = k; save(); draw(); } }),
+      h('span', {}, h('strong', {}, label), h('span', { class: 'small muted' }, hint)))));
+    const willBe = choice === 'new' ? nextNumber : last?.number;
+    mount(warn, inc && willBe > inc
+      ? h('div', { class: 'notice notice-warn' }, icon('alert'), h('span', {}, h('strong', {}, `Dit wordt ronde ${willBe}; afgesproken ${inc === 1 ? 'is' : 'zijn'} ${plural(inc, 'ronde', 'rondes')} ${video.roundsIncluded.source === 'video' ? 'voor deze video' : 'per video'}. `), 'Publiceren kan gewoon; dit is alleen een signaal (bijvoorbeeld voor meerwerk).'))
+      : null);
+    mount(newFields, choice === 'new'
+      ? [field('Gewenste reactie vóór (optioneel)', dl.el, 'Alleen informatief: na deze datum blijft feedback mogelijk en wordt niets automatisch goedgekeurd.'), field('Toelichting voor de klant bij deze ronde (optioneel)', roundNote)]
+      : null);
+  };
+  draw();
+  dl.el.addEventListener('change', save);
+
+  let done = false;
+  await openDialog({
+    title: `Versie ${version.number} publiceren`,
+    wide: true,
+    body: [
+      h('p', {}, `Klanten zien via hun links en het portaal voortaan Versie ${version.number}. De status wordt In review.`),
+      h('h3', { class: 'dialog-sub' }, 'Reviewronde'),
+      choiceBox, warn, newFields,
+      field(clientVersion ? `Wat is er aangepast sinds Versie ${clientVersion.number}? (zichtbaar voor de klant)` : 'Toelichting bij deze versie (optioneel, zichtbaar voor de klant)', changeNote),
+      clientVersion ? h('p', { class: 'small muted' }, `Versie ${clientVersion.number} en de feedback daarop blijven bewaard en zichtbaar als oudere versie.`) : null,
+    ],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, icon('send'), h('span', { class: 'btn-label' }, 'Publiceren'))],
+    onSubmit: async () => {
+      try {
+        const r = await apiWithRetryTeam('POST', `/api/versions/${version.id}/share`, {
+          round: choice, requestId, changeNote: changeNote.value,
+          ...(choice === 'new' ? { deadline: dl.value(), roundNote: roundNote.value } : {}),
+        });
+        draftStore.set(draftKey, '');
+        done = r;
+      } catch (err) {
+        toast(`${err.message} Je invoer is bewaard; probeer het opnieuw.`, 'error');
+        return false;
+      }
+    },
+  });
+  if (done) { toast(`Versie ${version.number} is gepubliceerd in ronde ${done.roundNumber}. Klanten zien deze versie nu.`, 'success'); refresh(); }
+}
+
+/** Opnieuw proberen bij een verbroken verbinding, met hetzelfde verzoek (dezelfde requestId). */
+async function apiWithRetryTeam(method, url, body) {
+  for (let i = 1; ; i++) {
+    try { return await api(method, url, body); } catch (err) {
+      if (err.status !== 0 || i >= 3) throw err;
+      await new Promise((r) => setTimeout(r, 800 * i));
+    }
+  }
 }
 
 function moreMenu(video, version, { level, archived }) {
@@ -1013,15 +1184,16 @@ function versionsList(video, current) {
           v.isLatest ? h('span', { class: 'badge badge-neutral' }, 'Nieuwste') : null,
           v.isClientVersion ? h('span', { class: 'badge badge-accent' }, icon('eye'), 'Klant ziet deze') : null),
         h('span', { class: 'small muted' }, `Geüpload ${formatDate(v.createdAt)}`),
-        h('span', { class: 'small muted' }, v.sharedAt ? `Gedeeld ${formatDate(v.sharedAt)}` : 'Niet gedeeld', ' · ', plural(v.commentCount, 'reactie', 'reacties'),
-          v.openComments ? ` (${v.openComments} open)` : ''))))));
+        h('span', { class: 'small muted' }, v.sharedAt ? `Gedeeld ${formatDate(v.sharedAt)}${v.roundNumber ? ` · ronde ${v.roundNumber}` : ''}` : 'Niet gedeeld', ' · ', plural(v.commentCount, 'reactie', 'reacties'),
+          v.openComments ? ` (${v.openComments} open)` : ''),
+        v.changeNote ? h('span', { class: 'small version-change' }, `Aangepast: ${v.changeNote}`) : null)))));
 }
 
 function historyList(version) {
   const items = [...version.events].reverse();
   return h('div', { class: 'history' },
     version.approval ? h('div', { class: 'notice notice-ok' }, icon('shield'), h('div', {}, h('strong', {}, `Goedgekeurd door ${version.approval.name}`), h('div', { class: 'small' }, `${version.approval.email} · ${formatDate(version.approval.at)}`))) : null,
-    version.rounds.length ? h('div', { class: 'history-block' }, h('h3', {}, 'Feedbackrondes'), version.rounds.map((r) => h('div', { class: 'round' },
+    version.rounds.length ? h('div', { class: 'history-block' }, h('h3', {}, 'Verstuurde feedback'), version.rounds.map((r) => h('div', { class: 'round' },
       icon('send'), h('div', {}, h('div', {}, h('strong', {}, r.reviewerName), r.verified ? ' (akkoordgever)' : ' (opgegeven naam)', ` · ${plural(r.commentCount, 'reactie', 'reacties')}`),
         h('div', { class: 'small muted' }, formatDate(r.at)), r.message ? h('div', { class: 'small' }, `“${r.message}”`) : null)))) : null,
     h('div', { class: 'history-block' }, h('h3', {}, 'Statuswijzigingen'),

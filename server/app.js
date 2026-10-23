@@ -14,6 +14,7 @@ const { adminRoutes } = require('./routes/admin');
 const { portalRoutes } = require('./routes/portal');
 const { briefingRoutes } = require('./routes/briefing');
 const { brandRoutes, brandLogoRoute } = require('./routes/brands');
+const { taskRoutes, reconcileAssignees } = require('./routes/tasks');
 const { FORMATS, toolStatus } = require('./media');
 const { createLocalStorage } = require('./storage');
 const { createAccess } = require('./access');
@@ -165,6 +166,9 @@ function createApp(overrides = {}) {
   adminRoutes(team, db, config, { access, storage, uploads });
   briefingRoutes(team, db, config, { access, storage, uploads });
   brandRoutes(team, db, config, { access, storage });
+  taskRoutes(team, db, config, { access });
+  // Taken van wie inmiddels geen toegang meer heeft, losmaken (ook bij het starten).
+  reconcileAssignees(db, access);
 
   const runCleanup = () => uploads.cleanupExpired().then((r) => {
     if (r.removed || r.orphans) console.log(`Opruimen: ${r.removed} verlopen upload(s) en ${r.orphans} los(se) bestand(en) verwijderd`);
@@ -215,7 +219,7 @@ function createApp(overrides = {}) {
   // Voorbeeldweergave voor het team: dezelfde klantpagina's, gevuld via het teamaccount.
   app.get('/voorbeeld/project/:id', sendPage('review/portal.html'));
   app.get('/voorbeeld/video/:id', sendPage('review/index.html'));
-  app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief', '/merken'], sendPage('app/index.html'));
+  app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief', '/merken', '/taken'], sendPage('app/index.html'));
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {

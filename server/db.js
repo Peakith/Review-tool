@@ -191,6 +191,34 @@ CREATE TABLE IF NOT EXISTS briefing_items (
   trashed_by INTEGER
 );
 
+-- Reviewrondes per video. Een ronde ontstaat alleen bij publiceren, met een expliciete keuze van het team.
+CREATE TABLE IF NOT EXISTS review_rounds (
+  id INTEGER PRIMARY KEY,
+  video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  number INTEGER NOT NULL,
+  deadline_at TEXT,            -- ISO 8601 (UTC); alleen informatief, verandert nooit een status
+  client_note TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  UNIQUE (video_id, number)
+);
+
+-- Feedbacktaak: hooguit één per reactie (dus nooit dubbel bij opnieuw klikken of opnieuw proberen).
+CREATE TABLE IF NOT EXISTS comment_tasks (
+  id INTEGER PRIMARY KEY,
+  comment_id INTEGER NOT NULL UNIQUE REFERENCES comments(id) ON DELETE CASCADE,
+  assignee_id INTEGER REFERENCES users(id),
+  priority TEXT NOT NULL DEFAULT 'normal',   -- low | normal | high
+  due_date TEXT,                             -- JJJJ-MM-DD (een dag, geen tijdstip)
+  status TEXT NOT NULL DEFAULT 'open',       -- open | in_progress | done
+  note TEXT NOT NULL DEFAULT '',             -- interne toelichting
+  unassigned_note TEXT,                      -- bijv. "Freek heeft geen toegang meer"
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id)
+);
+
 -- Eenmalige gegevensmigraties (zie migrate()).
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
@@ -200,6 +228,8 @@ CREATE TABLE IF NOT EXISTS app_meta (
 CREATE INDEX IF NOT EXISTS idx_videos_project ON videos(project_id);
 CREATE INDEX IF NOT EXISTS idx_briefing_project ON briefing_items(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_links_project ON project_links(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON comment_tasks(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_rounds_video ON review_rounds(video_id);
 CREATE INDEX IF NOT EXISTS idx_versions_video ON versions(video_id);
 CREATE INDEX IF NOT EXISTS idx_comments_version ON comments(version_id);
 CREATE INDEX IF NOT EXISTS idx_events_version ON status_events(version_id);
@@ -239,6 +269,14 @@ const COLUMNS = [
   ['share_links', 'project_link_id', 'INTEGER'],
   // Teamreacties: intern (alleen team) of zichtbaar voor de klant.
   ['comments', 'internal', 'INTEGER NOT NULL DEFAULT 0'],
+  // Bouwronde 3: reviewrondes, tijdsbereiken en annotaties.
+  ['projects', 'rounds_included', 'INTEGER'],
+  ['videos', 'rounds_included', 'INTEGER'],
+  ['versions', 'round_id', 'INTEGER'],
+  ['versions', 'change_note', "TEXT NOT NULL DEFAULT ''"],
+  ['versions', 'share_request_id', 'TEXT'],
+  ['comments', 'timecode_end', 'REAL'],
+  ['comments', 'annotation', 'TEXT'],
 ];
 
 const DEFAULT_BRANDS = [

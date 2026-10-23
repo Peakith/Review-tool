@@ -7,6 +7,7 @@ const { LEVELS, intParam } = require('../access');
 const { diskFree } = require('../storage');
 const { createBackup, listBackups } = require('../backup');
 const { versionInfo } = require('../build');
+const { reconcileAssignees } = require('./tasks');
 
 function adminRoutes(router, db, config, { access, storage, uploads }) {
   // ---------- Teamleden en rechten ----------
@@ -74,6 +75,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     db.tx(() => {
       db.prepare('UPDATE users SET name = ?, role = ?, disabled_at = ? WHERE id = ?').run(name, role, disabled ? (u.disabled_at || now()) : null, u.id);
       if (disabled) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+      reconcileAssignees(db, access);
     });
     res.json({ ok: true });
   });
@@ -88,7 +90,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
   router.put('/users/:id/projects', (req, res) => {
     access.requireAdmin(req);
     const u = getUser(req.params.id);
-    db.tx(() => setMemberships(u.id, req.body?.projects || []));
+    db.tx(() => { setMemberships(u.id, req.body?.projects || []); reconcileAssignees(db, access); });
     res.json({ ok: true });
   });
 

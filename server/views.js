@@ -47,7 +47,7 @@ function commentDtos(db, versionId, { reviewerKey = null, includeInternal = true
       timecode: c.timecode,
       authorName: c.author_name,
       authorType: c.author_type,
-      ...(includeInternal ? { internal: !!c.internal, userId: c.user_id } : {}),
+      ...(includeInternal ? { internal: !!c.internal, userId: c.user_id, task: taskOf(db, c.id) } : {}),
       // "verified": identiteit is vastgesteld via teamaccount of persoonlijke akkoordlink.
       verified: c.author_type !== 'guest',
       pending: c.author_type !== 'team' && !c.round_id && !approved,
@@ -70,6 +70,12 @@ function commentDtos(db, versionId, { reviewerKey = null, includeInternal = true
   }
   roots.sort((a, b) => (a.timecode ?? Infinity) - (b.timecode ?? Infinity) || a.id - b.id);
   return roots;
+}
+
+/** Taak bij een reactie (alleen voor het team). */
+function taskOf(db, commentId) {
+  const t = db.prepare('SELECT * FROM comment_tasks WHERE comment_id = ?').get(commentId);
+  return t ? require('./routes/tasks').taskDto(db, t) : null;
 }
 
 function eventDtos(db, versionId) {

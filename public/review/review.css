@@ -144,3 +144,14 @@ a.brief-item:hover { border-color: var(--line-2); }
   .p-client { display: none; }
   .brief-item.is-file { flex-wrap: wrap; }
 }
+
+/* ---------- Reviewronde en wijzigingen ---------- */
+.r-round { display: grid; gap: 6px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); font-size: 13.5px; }
+.r-round-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.r-round-head .icon { --icon-size: 16px; color: var(--accent-strong); }
+.r-deadline { color: var(--text-2); }
+.r-deadline.is-past { color: var(--st-review); }
+.r-round p { margin: 0; color: var(--text-2); }
+.r-round-note { white-space: pre-line; }
+.r-change { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+.r-change p { white-space: pre-line; margin-top: 2px; }

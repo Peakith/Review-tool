@@ -68,11 +68,15 @@ function commentCard(c, opts, isReply) {
   const seekable = !isReply && c.timecode !== null && c.timecode !== undefined;
 
   if (!isReply) {
-    const state = stateLabel(c, opts);
+    // Met een taak bepaalt de taak de afhandelstatus (team); anders het gewone label.
+    const state = opts.mode === 'team' && c.task && opts.renderTask ? opts.renderTask(c.task) : stateLabel(c, opts);
     if (state) foot.append(state);
   }
   if (!isReply && opts.canWrite) {
     foot.append(h('button', { type: 'button', class: 'link-btn', onClick: () => toggleReply() }, icon('reply'), 'Beantwoorden'));
+  }
+  if (!isReply && opts.mode === 'team' && opts.onTask) {
+    foot.append(h('button', { type: 'button', class: 'link-btn', onClick: () => opts.onTask(c) }, icon('tasks'), c.task ? 'Taak' : 'Taak maken'));
   }
   if (!isReply && opts.mode === 'team') {
     foot.append(h('button', {

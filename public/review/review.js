@@ -1,6 +1,6 @@
 import {
   h, mount, icon, button, api, apiWithRetry, newRequestId, toast, openDialog, field,
-  formatDate, plural, draftStore, emptyState,
+  formatDate, plural, draftStore, emptyState, formatDeadline, isPast,
 } from '/shared/util.js';
 import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom } from '/shared/comments.js';
@@ -149,6 +149,16 @@ function render() {
     h('div', {}, h('strong', {}, status.title), h('p', {}, status.text)),
     !version.isLatest ? button(`Naar Versie ${latest.number}`, { size: 'sm', onClick: () => showVersion(latest) }) : null);
 
+  // ---- Ronde, deadline en wat er is aangepast (bij precies deze versie) ----
+  const open = version.isLatest && ['in_review', 'changes_requested'].includes(version.status) && !info.archived;
+  const r = version.round;
+  const roundCard = r || version.changeNote ? h('section', { class: 'r-round', 'aria-label': 'Reviewronde' },
+    r ? h('div', { class: 'r-round-head' }, icon('history'), h('strong', {}, `Reviewronde ${r.number}`),
+      r.deadline && open ? h('span', { class: isPast(r.deadline) ? 'r-deadline is-past' : 'r-deadline' }, `· graag je reactie vóór ${formatDeadline(r.deadline)}`) : null) : null,
+    r?.deadline && open && isPast(r.deadline) ? h('p', { class: 'small' }, 'Deze datum is verstreken. Je kunt nog steeds reageren en feedback versturen.') : null,
+    r?.note ? h('p', { class: 'r-round-note' }, r.note) : null,
+    version.changeNote ? h('div', { class: 'r-change' }, h('strong', {}, `Aangepast in versie ${version.number}`), h('p', {}, version.changeNote)) : null) : null;
+
   // ---- Identiteit ----
   let identity;
   if (isApprover()) {
@@ -207,6 +217,7 @@ function render() {
           download)),
       h('aside', { class: 'r-panel', 'aria-label': 'Reacties' },
         statusCard,
+        roundCard,
         state.justSent ? sentConfirmation() : null,
         canAct() ? howTo : null,
         canAct() ? identity : null,

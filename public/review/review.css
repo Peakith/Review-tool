@@ -155,3 +155,6 @@ a.brief-item:hover { border-color: var(--line-2); }
 .r-round-note { white-space: pre-line; }
 .r-change { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
 .r-change p { white-space: pre-line; margin-top: 2px; }
+.r-stage-actions { display: inline-flex; gap: 6px; align-items: center; }
+.r-compare { width: 100%; max-width: 1600px; margin: 0 auto; padding: 16px 24px 32px; display: grid; gap: 10px; }
+@media (max-width: 980px) { .r-compare { padding: 10px 12px 24px; } }

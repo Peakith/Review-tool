@@ -7,6 +7,7 @@ import { renderComments, markersFrom } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
 import { applyBrand, brandMark } from '/shared/brand.js';
 import { clientPill, metaLine } from '/shared/client.js';
+import { createCompare } from '/shared/compare.js';
 
 const token = location.pathname.split('/').filter(Boolean).pop();
 // /voorbeeld/video/<id>: het team bekijkt deze pagina precies zoals de klant, alleen-lezen.
@@ -105,6 +106,7 @@ function clientStatus(v) {
 }
 
 let commentsEl;
+let composerRequest = null;
 let actionsEl;
 let nameInput;
 
@@ -119,7 +121,7 @@ function render() {
     duration: version.duration,
   });
   state.player = player;
-  player.onMarkerClick((id) => selectComment(id, true));
+  player.onMarkerClick((id) => { selectComment(id, true); showDrawing(state.comments.find((c) => c.id === id)); });
 
   // ---- Kop: welke video en versie bekijk ik? ----
   const versionPicker = info.versions.length > 1
@@ -181,11 +183,14 @@ function render() {
     player,
     draftKey: `review-draft-${token}-${version.id}`,
     placeholder: 'Pauzeer op het juiste moment en typ hier je opmerking…',
-    onSubmit: async (body, timecode) => {
+    onSubmit: async (body, timecode, { timecodeEnd, annotation } = {}) => {
       const authorName = reviewerName();
       if (authorName === null) return false;
       try {
-        await apiWithRetry('POST', `${base}/versions/${version.id}/comments`, { body, timecode, authorName, requestId: newRequestId() }, keyHeader);
+        // Dezelfde request-id tot het lukt: opnieuw klikken na een fout plaatst de reactie niet dubbel.
+        composerRequest ||= newRequestId();
+        await apiWithRetry('POST', `${base}/versions/${version.id}/comments`, { body, timecode, timecodeEnd, annotation, authorName, requestId: composerRequest }, keyHeader);
+        composerRequest = null;
         await refreshComments();
         toast('Reactie geplaatst. Hij is nog niet verstuurd: klik op “Feedback versturen” als je klaar bent.', 'success');
         return true;
@@ -201,6 +206,9 @@ function render() {
   actionsEl = h('div', { class: 'r-actions', role: 'region', 'aria-label': 'Feedback versturen of goedkeuren' });
 
   const howTo = howToCard();
+  const compareBtn = info.versions.length > 1
+    ? button('Versies vergelijken', { icon: 'compare', size: 'sm', variant: 'ghost', onClick: () => showCompare(version) })
+    : null;
   const download = info.allowDownload
     ? h('a', { class: 'btn btn-sm btn-ghost', href: `${base}/versions/${version.id}/download` }, icon('download'), h('span', { class: 'btn-label' }, 'Download'))
     : null;
@@ -214,7 +222,7 @@ function render() {
       h('section', { class: 'r-stage', 'aria-label': 'Video' }, player.el,
         h('div', { class: 'r-stage-foot small muted' },
           h('span', {}, `Je bekijkt Versie ${version.number} van ${latest.number}`, version.sharedAt ? ` · gedeeld ${formatDate(version.sharedAt)}` : ''),
-          download)),
+          h('span', { class: 'r-stage-actions' }, compareBtn, download))),
       h('aside', { class: 'r-panel', 'aria-label': 'Reacties' },
         statusCard,
         roundCard,
@@ -266,7 +274,8 @@ function drawComments() {
     mode: 'client',
     canWrite: canAct(),
     activeId: state.activeId,
-    onSeek: (t, id) => { state.player.seek(t); selectComment(id, false); },
+    onSeek: (t, id, c) => { state.player.seek(t); selectComment(id, false); showDrawing(c); },
+    onPlayRange: (start, end, id) => { selectComment(id, false); state.player.showAnnotation(null); state.player.playRange(start, end); },
     onReply: async (parentId, body) => {
       const authorName = reviewerName();
       if (authorName === null) return false;
@@ -301,6 +310,32 @@ function drawActions() {
     ? h('span', { class: 'r-actions-hint is-pending' }, icon('clock'), `${plural(n, 'reactie', 'reacties')} nog niet verstuurd`)
     : h('span', { class: 'r-actions-hint' }, icon('info'), isApprover() ? 'Klaar met kijken? Verstuur feedback of keur goed.' : `Goedkeuren gebeurt door ${state.info.approver ? state.info.approver.name : 'de akkoordgever'}.`);
   mount(actionsEl, h('div', { class: 'r-actions-inner' }, hint, h('div', { class: 'r-actions-buttons' }, feedbackBtn, approveBtn)));
+}
+
+/** Twee gepubliceerde versies naast elkaar (alleen-lezen). */
+let compareView = null;
+function showCompare(current) {
+  const { info } = state;
+  state.player?.destroy();
+  state.composer?.destroy();
+  const versions = info.versions.map((v) => ({
+    id: v.id, number: v.number, label: `Versie ${v.number}`,
+    sub: `${v.isLatest ? 'nieuwste · ' : ''}${clientStatusText(v.status)}`,
+    src: urls.media(v.id), poster: v.hasPoster ? urls.poster(v.id) : undefined, duration: v.duration,
+  }));
+  const other = info.versions.find((v) => v.id !== current.id);
+  compareView = createCompare({ versions, a: other.id, b: current.id });
+  mount(root,
+    h('header', { class: 'r-header' }, h('div', { class: 'r-header-inner' },
+      h('div', { class: 'r-titles' }, h('div', { class: 'r-brand' }, brandMark(info.brand, { size: 'sm' })), h('h1', {}, `Versies vergelijken · ${info.title}`)),
+      button('Terug naar de video', { icon: 'arrowLeft', onClick: () => { compareView.destroy(); compareView = null; showVersion(current); } }))),
+    h('main', { class: 'r-compare' }, compareView.el, h('p', { class: 'small muted' }, 'Alleen-lezen. Reageren en feedback versturen doe je op de nieuwste versie.')));
+}
+const clientStatusText = (s) => ({ in_review: 'klaar voor review', changes_requested: 'feedback verstuurd', approved: 'goedgekeurd' }[s] || 'gesloten');
+
+function showDrawing(c) {
+  state.player.pause();
+  state.player.showAnnotation(c?.annotation || null);
 }
 
 function selectComment(id, scroll) {
@@ -383,7 +418,7 @@ async function approve() {
 
 // Houd reacties van andere reviewers en het team actueel.
 setInterval(() => {
-  if (document.visibilityState === 'visible' && state.version && !document.querySelector('.reply-box:not([hidden]) textarea, dialog[open]')) {
+  if (document.visibilityState === 'visible' && state.version && !compareView && !document.querySelector('.reply-box:not([hidden]) textarea, dialog[open]')) {
     refreshComments().catch(() => {});
   }
 }, 30_000);

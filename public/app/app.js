@@ -10,6 +10,7 @@ import { configureUploads, enqueue, checkFile, suggestTitle, createUploadTray, o
 import { viewTeam, viewStorage, viewTrash, viewArchive, viewBrands, can, menuButton } from './admin.js';
 import { viewBriefing } from './briefing.js';
 import { taskDialog, taskChip, viewFeedback, viewMyTasks } from './tasks.js';
+import { createCompare } from '/shared/compare.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -55,6 +56,7 @@ async function route() {
     [/^\/taken$/, () => viewMyTasks(ctx()), 'tasks'],
     [/^\/merken$/, () => (session.user.isAdmin ? viewBrands(ctx()) : viewNotFound()), 'brands'],
     [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
+    [/^\/video\/(\d+)\/vergelijk$/, (id) => viewCompare(Number(id)), 'projects'],
     [/^\/team$/, () => viewTeam(ctx()), 'team'],
     [/^\/opslag$/, () => (session.user.isAdmin ? viewStorage(ctx()) : viewNotFound()), 'storage'],
     [/^\/prullenbak$/, () => viewTrash(ctx()), 'trash'],
@@ -742,7 +744,9 @@ async function viewVideo(id) {
     poster: version.hasPoster ? `/api/versions/${version.id}/poster` : undefined,
     duration: version.duration,
   });
-  player.onMarkerClick((cid) => { activeId = cid; filter = 'all'; selectTab('comments'); drawComments(); scrollToComment(cid); });
+  // Een reactie kiezen: naar het moment, en een eventuele tekening tonen op het stilstaande beeld.
+  const focusComment = (c) => { player.pause(); player.showAnnotation(c?.annotation || null); };
+  player.onMarkerClick((cid) => { activeId = cid; filter = 'all'; selectTab('comments'); drawComments(); scrollToComment(cid); focusComment(comments.find((x) => x.id === cid)); });
 
   const commentsEl = h('div', { class: 'panel-scroll' });
   const filterBar = h('div', { class: 'segmented segmented-sm', role: 'group', 'aria-label': 'Filter reacties' });
@@ -765,7 +769,8 @@ async function viewVideo(id) {
       onTask: !archived && (can(level, 'upload') || comments.some((c) => c.task?.assigneeId === session.user.id))
         ? (c) => (c.task || can(level, 'upload') ? taskDialog({ comment: c, projectId: video.project.id, level, onDone: reloadComments }) : null) : null,
       canShare: can(level, 'publish'),
-      onSeek: (t, cid) => { player.seek(t); activeId = cid; drawComments(); },
+      onSeek: (t, cid, c) => { player.seek(t); activeId = cid; drawComments(); focusComment(c); },
+      onPlayRange: (start, end, cid) => { activeId = cid; drawComments(); player.showAnnotation(null); player.playRange(start, end); },
       onReply: async (parentId, body, { internal } = {}) => {
         try {
           await api('POST', `/api/versions/${version.id}/comments`, { parentId, body, internal });
@@ -805,9 +810,9 @@ async function viewVideo(id) {
     placeholder: 'Notitie bij dit moment…',
     draftKey: `team-draft-${version.id}`,
     before: visibilityToggle,
-    onSubmit: async (body, tc) => {
+    onSubmit: async (body, tc, { timecodeEnd, annotation } = {}) => {
       try {
-        await api('POST', `/api/versions/${version.id}/comments`, { body, timecode: tc, internal: !shareWithClient });
+        await api('POST', `/api/versions/${version.id}/comments`, { body, timecode: tc, timecodeEnd, annotation, internal: !shareWithClient });
         await reloadComments();
         toast(shareWithClient ? 'Reactie geplaatst; de klant ziet deze bij deze versie.' : 'Interne notitie geplaatst', 'success');
         shareWithClient = false;
@@ -870,6 +875,7 @@ async function viewVideo(id) {
         roundIndicator(video),
       ],
       actions: [versionSelect, newVersionBtn,
+        video.versions.length > 1 ? h('a', { class: 'btn btn-secondary', href: `/video/${video.id}/vergelijk?a=${video.versions.find((v) => v.id !== version.id)?.id}&b=${version.id}`, 'data-nav': true, title: 'Twee versies naast elkaar bekijken' }, icon('compare'), h('span', { class: 'btn-label' }, 'Vergelijken')) : null,
         h('a', { class: 'btn btn-secondary', href: `/voorbeeld/video/${video.id}`, target: '_blank', rel: 'noopener', title: 'Zo ziet de klant deze video (alleen gepubliceerde versies, zonder interne notities)' }, icon('eye'), h('span', { class: 'btn-label' }, 'Klantweergave')),
         shareBtn, moreMenu(video, version, { level, archived })],
     }),
@@ -895,7 +901,7 @@ async function viewVideo(id) {
   if (focus) {
     activeId = focus.id;
     drawComments();
-    if (focus.timecode !== null && focus.timecode !== undefined) player.seek(focus.timecode);
+    if (focus.timecode !== null && focus.timecode !== undefined) { player.seek(focus.timecode); if (focus.annotation) player.video.addEventListener('loadedmetadata', () => focusComment(focus), { once: true }); }
     setTimeout(() => scrollToComment(focus.id), 50);
   }
 
@@ -944,6 +950,34 @@ async function detailsDialog(video) {
       } catch (err) { toast(err.message, 'error'); return false; }
     },
   });
+}
+
+// ---------- Versies vergelijken (team) ----------
+
+async function viewCompare(id) {
+  const video = await api('GET', `/api/videos/${id}`);
+  document.title = `Vergelijken: ${video.title} — Studio Review`;
+  refreshSidebar(video.project.id);
+  const params = new URLSearchParams(location.search);
+  const versions = video.versions.map((v) => ({
+    id: v.id, number: v.number, label: `Versie ${v.number}`,
+    sub: `${STATUS_LABELS[v.status]} · ${v.isClientVersion ? 'klant ziet deze' : v.sharedAt ? 'gepubliceerd' : 'intern, niet gepubliceerd'}${v.roundNumber ? ` · ronde ${v.roundNumber}` : ''}`,
+    src: `/api/versions/${v.id}/media`, poster: v.hasPoster ? `/api/versions/${v.id}/poster` : undefined, duration: v.duration,
+  }));
+  if (versions.length < 2) throw Object.assign(new Error('Deze video heeft maar één versie; er valt nog niets te vergelijken.'), { status: 404 });
+  const cmp = createCompare({
+    versions, a: Number(params.get('a')), b: Number(params.get('b')),
+    onChange: ({ a, b }) => history.replaceState(null, '', `${location.pathname}?a=${a}&b=${b}`),
+  });
+  mount(pageEl, h('div', { class: 'page page-wide' },
+    pageHeader({
+      crumbs: [{ label: 'Projecten', href: '/' }, { label: video.project.name, href: `/projecten/${video.project.id}` }, { label: video.title, href: `/video/${video.id}` }],
+      title: 'Versies vergelijken',
+      meta: [h('span', {}, video.title), h('span', { class: 'muted' }, 'Alleen-lezen: reageren doe je in de werkplek')],
+      actions: [h('a', { class: 'btn btn-secondary', href: `/video/${video.id}`, 'data-nav': true }, icon('arrowLeft'), h('span', { class: 'btn-label' }, 'Terug naar de werkplek'))],
+    }),
+    cmp.el));
+  cleanup = () => cmp.destroy();
 }
 
 function titleEditor(video, editable) {

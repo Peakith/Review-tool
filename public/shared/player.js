@@ -2,6 +2,44 @@ import { h, timecode, icon } from './util.js';
 
 export { icon };
 
+const SVG = 'http://www.w3.org/2000/svg';
+const svgEl = (tag, attrs = {}) => {
+  const node = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+};
+
+/**
+ * Vormen (coördinaten 0–1 t.o.v. het beeld) als SVG. De viewBox heeft de verhouding van de video,
+ * zodat pijlpunten en lijndiktes niet vervormen; lijnen schalen mee met de beeldgrootte.
+ */
+export function renderShapes(shapes, { vw, vh }) {
+  const W = 1000;
+  const H = Math.round((W * vh) / vw);
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'pc-shapes', 'aria-hidden': 'true' });
+  const sw = Math.max(4, Math.round(W / 220));
+  for (const s of shapes) {
+    const P = ([x, y]) => [x * W, y * H];
+    const common = { stroke: s.c, 'stroke-width': sw, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
+    if (s.t === 'pen') {
+      svg.append(svgEl('polyline', { ...common, points: s.pts.map((p) => P(p).join(',')).join(' ') }));
+    } else if (s.t === 'rect') {
+      const [x1, y1] = P(s.a);
+      const [x2, y2] = P(s.b);
+      svg.append(svgEl('rect', { ...common, x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1), rx: 4 }));
+    } else if (s.t === 'arrow') {
+      const [x1, y1] = P(s.a);
+      const [x2, y2] = P(s.b);
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      const len = Math.max(sw * 4, Math.min(48, Math.hypot(x2 - x1, y2 - y1) * 0.35));
+      const head = (d) => [x2 - len * Math.cos(ang + d), y2 - len * Math.sin(ang + d)].join(',');
+      svg.append(svgEl('line', { ...common, x1, y1, x2, y2 }));
+      svg.append(svgEl('polyline', { ...common, points: `${head(0.45)} ${x2},${y2} ${head(-0.45)}` }));
+    }
+  }
+  return svg;
+}
+
 const RATES = [1, 1.5, 2, 0.5];
 
 /**
@@ -31,7 +69,10 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   const loadError = h('div', { class: 'pc-error', role: 'alert', hidden: true });
   const controls = h('div', { class: 'pc-controls' }, track,
     h('div', { class: 'pc-row' }, playBtn, timeEl, h('span', { class: 'pc-spacer' }), rateBtn, muteBtn, fsBtn));
-  const el = h('div', { class: 'player', tabindex: '-1' }, h('div', { class: 'player-stage' }, video, bigPlay, loading, loadError), controls);
+  // Laag precies boven het werkelijke videobeeld (zonder zwarte randen) voor tekeningen.
+  const overlay = h('div', { class: 'pc-overlay', hidden: true });
+  const stage = h('div', { class: 'player-stage' }, video, overlay, bigPlay, loading, loadError);
+  const el = h('div', { class: 'player', tabindex: '-1' }, stage, controls);
 
   let markers = [];
   let onMarkerClick = () => {};
@@ -59,14 +100,76 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
 
   function renderMarkers() {
     const d = duration();
-    markersEl.replaceChildren(...(d ? markers : []).map((m) => positioned(h('button', {
-      type: 'button',
-      class: `pc-marker${m.resolved ? ' is-resolved' : ''}${m.active ? ' is-active' : ''}`,
-      title: `${timecode(m.time)} · ${m.label || ''}`,
-      'aria-label': `Reactie op ${timecode(m.time)}${m.resolved ? ' (afgehandeld)' : ''}`,
-      onClick: (e) => { e.stopPropagation(); seek(m.time); onMarkerClick(m.id); },
-    }), Math.min(100, (m.time / d) * 100))));
+    const items = [];
+    for (const m of d ? markers : []) {
+      // Tijdsbereik: een balk van begin tot eind, onder de stip.
+      if (m.end !== null && m.end !== undefined && m.end > m.time) {
+        const bar = positioned(h('span', { class: `pc-range${m.active ? ' is-active' : ''}${m.resolved ? ' is-resolved' : ''}`, 'aria-hidden': 'true' }), Math.min(100, (m.time / d) * 100));
+        bar.style.width = `${Math.max(0.5, Math.min(100, ((m.end - m.time) / d) * 100))}%`;
+        items.push(bar);
+      }
+      items.push(positioned(h('button', {
+        type: 'button',
+        class: `pc-marker${m.resolved ? ' is-resolved' : ''}${m.active ? ' is-active' : ''}${m.drawing ? ' has-drawing' : ''}`,
+        title: `${timecode(m.time)}${m.end ? `–${timecode(m.end)}` : ''} · ${m.label || ''}`,
+        'aria-label': `Reactie op ${timecode(m.time)}${m.end ? ` tot ${timecode(m.end)}` : ''}${m.resolved ? ' (afgehandeld)' : ''}`,
+        onClick: (e) => { e.stopPropagation(); seek(m.time); onMarkerClick(m.id); },
+      }), Math.min(100, (m.time / d) * 100)));
+    }
+    markersEl.replaceChildren(...items);
   }
+
+  // ---- Beeldvlak: waar staat het echte beeld binnen de speler (object-fit: contain)? ----
+  function pictureRect() {
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const bw = video.clientWidth;
+    const bh = video.clientHeight;
+    if (!vw || !vh || !bw || !bh) return null;
+    const scale = Math.min(bw / vw, bh / vh);
+    const w = vw * scale;
+    const hgt = vh * scale;
+    return { left: video.offsetLeft + (bw - w) / 2, top: video.offsetTop + (bh - hgt) / 2, width: w, height: hgt, vw, vh };
+  }
+  const layoutListeners = new Set();
+  function layoutOverlay() {
+    const r = pictureRect();
+    if (!r) return;
+    Object.assign(overlay.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+    for (const fn of layoutListeners) fn(r);
+  }
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(layoutOverlay) : null;
+  ro?.observe(stage);
+  video.addEventListener('loadedmetadata', layoutOverlay);
+  window.addEventListener('resize', layoutOverlay);
+
+  // ---- Tekening tonen (alleen-lezen) ----
+  let shown = null;
+  function showAnnotation(annotation) {
+    shown = annotation && annotation.shapes?.length ? annotation : null;
+    if (!shown) { if (!overlay.dataset.editing) { overlay.hidden = true; overlay.replaceChildren(); } return; }
+    // Het stilstaande beeld onder de tekening moet echt geladen zijn (niet alleen de metadata).
+    if (video.readyState < 2) video.preload = 'auto';
+    layoutOverlay();
+    overlay.hidden = false;
+    overlay.replaceChildren(renderShapes(shown.shapes, { vw: video.videoWidth || 1600, vh: video.videoHeight || 900 }));
+  }
+  video.addEventListener('play', () => { if (!overlay.dataset.editing) { shown = null; overlay.hidden = true; overlay.replaceChildren(); } });
+
+  // ---- Fragment afspelen (van begin tot eind van een tijdsbereik) ----
+  let rangeEnd = null;
+  function playRange(start, end) {
+    seek(start);
+    rangeEnd = end;
+    video.play().catch(() => {});
+  }
+  const checkRange = () => {
+    if (rangeEnd !== null && video.currentTime >= rangeEnd - 0.03) { video.pause(); video.currentTime = rangeEnd; rangeEnd = null; render(); }
+    if (rangeEnd !== null && !video.paused) requestAnimationFrame(checkRange);
+  };
+  video.addEventListener('play', () => { if (rangeEnd !== null) requestAnimationFrame(checkRange); });
+  // Zelf pauzeren of verder spoelen tijdens een fragment: dan geen automatische stop meer.
+  video.addEventListener('pause', () => { rangeEnd = null; });
 
   function seek(t) {
     const d = duration();
@@ -132,7 +235,7 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
     if (video.webkitEnterFullscreen) return video.webkitEnterFullscreen(); // iOS Safari
   };
   fsBtn.addEventListener('click', toggleFullscreen);
-  const onFsChange = () => el.classList.toggle('is-fullscreen', document.fullscreenElement === el);
+  const onFsChange = () => { el.classList.toggle('is-fullscreen', document.fullscreenElement === el); requestAnimationFrame(layoutOverlay); };
   document.addEventListener('fullscreenchange', onFsChange);
 
   const step = 1 / fps;
@@ -169,7 +272,18 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
     onTime(fn) { timeListeners.add(fn); return () => timeListeners.delete(fn); },
     setMarkers(list) { markers = list; renderMarkers(); },
     onMarkerClick(fn) { onMarkerClick = fn; },
+    stage,
+    overlay,
+    pictureRect,
+    layoutOverlay,
+    onLayout(fn) { layoutListeners.add(fn); return () => layoutListeners.delete(fn); },
+    showAnnotation,
+    playRange,
+    play: () => video.play().catch(() => {}),
+    duration,
     destroy() {
+      ro?.disconnect();
+      window.removeEventListener('resize', layoutOverlay);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('fullscreenchange', onFsChange);
       timeListeners.clear();

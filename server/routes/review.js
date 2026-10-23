@@ -4,6 +4,7 @@ const { HttpError, changeStatus, OPEN_FOR_CLIENT } = require('../status');
 const { downloadFilename, contentDisposition } = require('../media');
 const { commentDtos } = require('../views');
 const { clientVideoInfo, sharedVersions: listShared } = require('../client');
+const { cleanAnnotation, cleanTimes } = require('../annotations');
 
 /**
  * Klant-API. Iedere aanvraag controleert opnieuw of de link bestaat en niet is
@@ -116,21 +117,25 @@ function reviewRoutes(router, db, config, { storage }) {
     const key = reviewerKey(req);
     if (!key) throw new HttpError(400, 'Ontbrekende reviewer-sleutel. Ververs de pagina.');
     const body = String(req.body?.body || '').trim();
-    if (!body) throw new HttpError(400, 'Een reactie mag niet leeg zijn');
     let parentId = null;
     let timecode = null;
+    let timecodeEnd = null;
+    let annotation = null;
     if (req.body?.parentId) {
+      if (!body) throw new HttpError(400, 'Een reactie mag niet leeg zijn');
       const parent = db.prepare('SELECT id, version_id, parent_id, internal FROM comments WHERE id = ?').get(Number(req.body.parentId));
       if (!parent || parent.version_id !== ver.id || parent.internal) throw new HttpError(400, 'Reactie om op te antwoorden bestaat niet');
       parentId = parent.parent_id || parent.id;
       if (db.prepare('SELECT internal FROM comments WHERE id = ?').get(parentId)?.internal) throw new HttpError(400, 'Reactie om op te antwoorden bestaat niet');
-    } else if (req.body?.timecode !== undefined && req.body?.timecode !== null) {
-      timecode = Math.max(0, Number(req.body.timecode) || 0);
-      if (ver.duration_seconds) timecode = Math.min(timecode, ver.duration_seconds);
+    } else {
+      ({ timecode, timecodeEnd } = cleanTimes(req.body || {}, ver.duration_seconds));
+      annotation = cleanAnnotation(req.body?.annotation);
+      if (annotation && timecode === null) throw new HttpError(400, 'Een tekening hoort bij een moment in de video.');
+      if (!body && !annotation) throw new HttpError(400, 'Een reactie mag niet leeg zijn');
     }
-    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, author_name, author_type, share_link_id, reviewer_key, request_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(ver.id, parentId, body.slice(0, 5000), timecode, who.name, who.type, req.link.id, key, reqId, now());
+    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, timecode_end, annotation, author_name, author_type, share_link_id, reviewer_key, request_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(ver.id, parentId, body.slice(0, 5000), timecode, timecodeEnd, annotation, who.name, who.type, req.link.id, key, reqId, now());
     res.status(201).json({ id: Number(info.lastInsertRowid) });
   });
 

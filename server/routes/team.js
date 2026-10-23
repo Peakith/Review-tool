@@ -6,6 +6,7 @@ const { normalizeTitle, titleFromFilename, downloadFilename, contentDisposition 
 const { versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos } = require('../views');
 const { intParam } = require('../access');
 const { syncTaskFromComment } = require('./tasks');
+const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { KINDS, ASPECTS, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions } = require('../client');
 
 // Media voor het team: wel cachen, maar bij elk gebruik opnieuw laten controleren, zodat
@@ -481,11 +482,13 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
   router.post('/versions/:id/comments', (req, res) => {
     const { version: ver } = access.version(req, req.params.id, 'view', { write: true });
     const body = String(req.body?.body || '').trim();
-    if (!body) throw new HttpError(400, 'Een reactie mag niet leeg zijn');
     let parentId = null;
     let timecode = null;
+    let timecodeEnd = null;
+    let annotation = null;
     let internal = true;
     if (req.body?.parentId) {
+      if (!body) throw new HttpError(400, 'Een reactie mag niet leeg zijn');
       const parent = db.prepare('SELECT id, version_id, parent_id FROM comments WHERE id = ?').get(Number(req.body.parentId));
       if (!parent || parent.version_id !== ver.id) throw new HttpError(400, 'Reactie om op te antwoorden bestaat niet');
       parentId = parent.parent_id || parent.id;
@@ -493,11 +496,14 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       // Onder een interne notitie blijft alles intern.
       internal = root.internal ? true : (typeof req.body.internal === 'boolean' ? req.body.internal : root.author_type === 'team');
     } else {
-      if (req.body?.timecode !== undefined && req.body?.timecode !== null) timecode = Math.max(0, Number(req.body.timecode) || 0);
+      ({ timecode, timecodeEnd } = cleanTimes(req.body || {}, ver.duration_seconds));
+      annotation = cleanAnnotation(req.body?.annotation);
+      if (annotation && timecode === null) throw new HttpError(400, 'Een tekening hoort bij een moment in de video.');
+      if (!body && !annotation) throw new HttpError(400, 'Een reactie mag niet leeg zijn');
       if (typeof req.body?.internal === 'boolean') internal = req.body.internal;
     }
-    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, author_name, author_type, user_id, internal, created_at)
-      VALUES (?, ?, ?, ?, ?, 'team', ?, ?, ?)`).run(ver.id, parentId, body.slice(0, 5000), timecode, req.user.name, req.user.id, internal ? 1 : 0, now());
+    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, timecode_end, annotation, author_name, author_type, user_id, internal, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'team', ?, ?, ?)`).run(ver.id, parentId, body.slice(0, 5000), timecode, timecodeEnd, annotation, req.user.name, req.user.id, internal ? 1 : 0, now());
     res.status(201).json({ id: Number(info.lastInsertRowid), internal });
   });
 

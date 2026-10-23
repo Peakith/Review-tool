@@ -45,6 +45,8 @@ function commentDtos(db, versionId, { reviewerKey = null, includeInternal = true
       parentId: c.parent_id,
       body: c.body,
       timecode: c.timecode,
+      timecodeEnd: c.timecode_end,
+      annotation: c.annotation ? JSON.parse(c.annotation) : null,
       authorName: c.author_name,
       authorType: c.author_type,
       ...(includeInternal ? { internal: !!c.internal, userId: c.user_id, task: taskOf(db, c.id) } : {}),

@@ -124,29 +124,40 @@ function commentCard(c, opts, isReply) {
     replyBox.querySelector('textarea')?.focus();
   }
 
+  const isRange = seekable && c.timecodeEnd !== null && c.timecodeEnd !== undefined;
   const tc = seekable
-    ? h('button', { type: 'button', class: 'timecode', onClick: () => opts.onSeek(c.timecode, c.id), title: 'Spring naar dit moment', 'aria-label': `Spring naar ${timecode(c.timecode)}` }, icon('play'), timecode(c.timecode))
+    ? h('button', { type: 'button', class: `timecode${isRange ? ' timecode-range' : ''}`, onClick: () => opts.onSeek(c.timecode, c.id, c),
+      title: isRange ? 'Spring naar het begin van dit fragment' : 'Spring naar dit moment',
+      'aria-label': isRange ? `Spring naar ${timecode(c.timecode)} (fragment tot ${timecode(c.timecodeEnd)})` : `Spring naar ${timecode(c.timecode)}` },
+    icon(isRange ? 'range' : 'play'), isRange ? `${timecode(c.timecode)}–${timecode(c.timecodeEnd)}` : timecode(c.timecode))
     : (!isReply ? h('span', { class: 'timecode timecode-general' }, 'Algemeen') : null);
+  if (isRange && opts.onPlayRange) {
+    foot.prepend(h('button', { type: 'button', class: 'link-btn is-accent', onClick: () => opts.onPlayRange(c.timecode, c.timecodeEnd, c.id) }, icon('play'), 'Fragment afspelen'));
+  }
+  const drawingChip = !isReply && c.annotation?.shapes?.length
+    ? h('button', { type: 'button', class: 'comment-drawing', title: 'Toon de tekening op het beeld', onClick: () => opts.onSeek(c.timecode, c.id, c) }, icon('pen'), 'Tekening')
+    : null;
 
   const card = h('article', {
     class: `comment${isReply ? ' comment-reply' : ''}${c.resolved ? ' is-resolved' : ''}${opts.activeId === c.id ? ' is-active' : ''}${seekable ? ' is-seekable' : ''}`,
     id: `comment-${c.id}`,
     'aria-label': `Reactie van ${c.authorName}${seekable ? ` op ${timecode(c.timecode)}` : ''}`,
     onClick: (e) => {
-      if (seekable && !e.target.closest('button, textarea, form, a')) opts.onSeek(c.timecode, c.id);
+      if (seekable && !e.target.closest('button, textarea, form, a')) opts.onSeek(c.timecode, c.id, c);
     },
   },
   h('header', { class: 'comment-head' },
     tc,
     h('span', { class: 'comment-author' }, c.authorName),
     authorBadge(c),
+    drawingChip,
     opts.mode === 'team' && c.authorType === 'team'
       ? (c.internal || (isReply && opts.parentInternal)
         ? h('span', { class: 'badge badge-internal', title: 'Alleen zichtbaar voor het team' }, icon('lock'), 'Intern')
         : h('span', { class: 'badge badge-visible', title: 'De klant ziet deze reactie (als de versie gepubliceerd is)' }, icon('eye'), 'Klant ziet dit'))
       : null,
     h('time', { class: 'comment-time', datetime: c.createdAt, title: formatDate(c.createdAt) }, relativeDate(c.createdAt))),
-  h('p', { class: 'comment-body' }, c.body),
+  c.body ? h('p', { class: 'comment-body' }, c.body) : h('p', { class: 'comment-body muted' }, 'Zie de tekening op het beeld.'),
   foot.childNodes.length ? foot : null,
   c.replies?.length ? h('div', { class: 'replies' }, c.replies.map((r) => commentCard(r, { ...opts, parentInternal: !!c.internal }, true))) : null,
   replyBox);
@@ -157,5 +168,5 @@ function commentCard(c, opts, isReply) {
 export function markersFrom(comments, activeId) {
   return comments
     .filter((c) => c.timecode !== null && c.timecode !== undefined)
-    .map((c) => ({ id: c.id, time: c.timecode, resolved: c.resolved, active: c.id === activeId, label: `${c.authorName}: ${c.body.slice(0, 60)}` }));
+    .map((c) => ({ id: c.id, time: c.timecode, end: c.timecodeEnd ?? null, drawing: !!c.annotation, resolved: c.resolved, active: c.id === activeId, label: `${c.authorName}: ${(c.body || 'tekening').slice(0, 60)}` }));
 }

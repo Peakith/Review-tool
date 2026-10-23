@@ -340,3 +340,77 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; m
 .facts .icon { color: var(--accent-strong); margin-top: 1px; --icon-size: 16px; }
 .facts strong { color: var(--text); }
 input[type=date], input[type=time] { color-scheme: dark; }
+
+/* ---------- Tekeningen en tijdsbereiken in de speler ---------- */
+.player-stage { position: relative; }
+.pc-overlay { position: absolute; z-index: 3; pointer-events: none; }
+.pc-overlay.is-editing { pointer-events: auto; cursor: crosshair; touch-action: none; outline: 2px dashed rgba(255, 255, 255, .55); outline-offset: -1px; }
+.pc-shapes { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
+.pc-range { position: absolute; top: 8px; height: 8px; border-radius: 4px; background: rgba(244, 190, 85, .45); pointer-events: none; }
+.pc-range.is-resolved { background: rgba(87, 213, 147, .35); }
+.pc-range.is-active { background: rgba(255, 255, 255, .55); }
+.pc-marker.has-drawing { border-radius: 3px; }
+
+/* ---------- Invoer: bereik en tekenen ---------- */
+.composer-tools { display: flex; gap: 4px; }
+.composer-tool { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--bg-2); color: var(--text-2); font: 500 12.5px var(--font); cursor: pointer; }
+.composer-tool .icon { --icon-size: 14px; }
+.composer-tool[aria-pressed=true] { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
+.composer-tool:disabled { opacity: .5; cursor: not-allowed; }
+.composer-range, .composer-drawing { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 9px; margin-top: 6px; border-radius: var(--r); background: var(--bg-2); border: 1px solid var(--line); }
+.composer-range > .icon, .composer-drawing > .icon { --icon-size: 15px; color: var(--accent-strong); }
+.composer-error { color: #ffb3aa; margin-top: 6px; }
+.composer-at:disabled { cursor: default; opacity: .85; }
+.ann-toolbar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 8px; margin-bottom: 8px; border-radius: var(--r); background: var(--bg-2); border: 1px solid var(--accent-line); }
+.ann-group { display: flex; gap: 3px; align-items: center; }
+.ann-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 9px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--text-2); font: 500 12.5px var(--font); cursor: pointer; }
+.ann-btn .icon { --icon-size: 17px; }
+.ann-btn[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.ann-btn:disabled { opacity: .4; cursor: not-allowed; }
+.ann-color { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line-2); background: var(--swatch); cursor: pointer; padding: 0; }
+.ann-color[aria-pressed=true] { box-shadow: 0 0 0 2px var(--bg-2), 0 0 0 4px var(--text); }
+.ann-hint { flex-basis: 100%; margin: 0; }
+@media (max-width: 640px) {
+  .ann-label { display: none; }
+  .ann-btn { min-width: 40px; min-height: 40px; justify-content: center; }
+  .ann-color { width: 32px; height: 32px; }
+  .composer-tool { height: 34px; }
+}
+
+/* ---------- Reacties: bereik en tekening ---------- */
+.timecode-range { white-space: nowrap; }
+.comment-drawing { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-strong); border: 0; cursor: pointer; }
+.comment-drawing .icon { --icon-size: 12px; }
+
+/* ---------- Versies vergelijken ---------- */
+.cmp { display: grid; gap: 12px; }
+.cmp-panes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cmp[data-view=A] .cmp-panes, .cmp[data-view=B] .cmp-panes { grid-template-columns: 1fr; }
+.cmp[data-view=A] .cmp-pane:nth-child(2), .cmp[data-view=B] .cmp-pane:nth-child(1) { display: none; }
+.cmp-pane { display: grid; gap: 6px; min-width: 0; }
+.cmp-pane-head { display: flex; align-items: center; gap: 8px; }
+.cmp-key { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; font-weight: 800; background: var(--accent); color: var(--accent-ink); flex-shrink: 0; }
+.cmp-pane:nth-child(2) .cmp-key { background: var(--st-ready); color: #0b1a33; }
+.cmp-select { flex: 1; min-width: 0; }
+.cmp-stage { position: relative; background: #000; border-radius: var(--r-lg); overflow: hidden; aspect-ratio: 16 / 9; border: 1px solid var(--line); }
+.cmp-stage video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.cmp-label { position: absolute; left: 8px; top: 8px; display: flex; gap: 6px; align-items: center; padding: 3px 8px; border-radius: 6px; background: rgba(0, 0, 0, .72); color: #fff; font-size: 12px; pointer-events: none; }
+.cmp-label span { opacity: .8; }
+.cmp-state { position: absolute; inset: auto 8px 8px auto; padding: 3px 8px; border-radius: 6px; background: rgba(0, 0, 0, .78); color: #f8d690; font-size: 12px; font-weight: 600; }
+.cmp-time { font-size: 12px; color: var(--text-3); text-align: right; }
+.cmp-controls { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.cmp-row { display: flex; align-items: center; gap: 10px; }
+.cmp-row-wrap { flex-wrap: wrap; }
+.cmp-scrub { flex: 1; accent-color: var(--accent); }
+.cmp-offset { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.cmp-offset-value { min-width: 64px; text-align: center; font-size: 13px; }
+.cmp-seg-label { font-size: 12px; color: var(--text-3); padding: 0 6px; align-self: center; }
+@media (max-width: 860px) {
+  .cmp-panes { grid-template-columns: 1fr; }
+  .cmp-controls { position: sticky; bottom: 0; z-index: 5; }
+}
+/* Tekening zichtbaar: de grote afspeelknop niet over de tekening heen. */
+.pc-overlay:not([hidden]) ~ .pc-bigplay { display: none; }
+/* Met de knoppen Bereik/Tekenen is er geen ruimte voor de sneltoetshint. */
+.composer-tools ~ .composer-hint { display: none; }
+.composer-bar .btn-primary { margin-left: auto; }

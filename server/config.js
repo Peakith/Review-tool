@@ -49,11 +49,11 @@ const hasDb = (dir) => fs.existsSync(path.join(dir, 'review.db'));
  * 3. anders een bestaande oude map <programmamap>/data (nog niet verhuisd);
  * 4. anders (nieuwe installatie) de vaste map.
  */
-function resolveDataDir(env, root) {
+function resolveDataDir(env, root, legacy = LEGACY_DATA_DIR) {
   if (env.DATA_DIR) return { dir: path.resolve(env.DATA_DIR), source: 'DATA_DIR', legacyDir: null };
   const fixed = path.join(root, 'gegevens');
-  if (hasDb(fixed)) return { dir: fixed, source: 'vast', legacyDir: hasDb(LEGACY_DATA_DIR) ? LEGACY_DATA_DIR : null };
-  if (hasDb(LEGACY_DATA_DIR)) return { dir: LEGACY_DATA_DIR, source: 'programmamap', legacyDir: LEGACY_DATA_DIR };
+  if (hasDb(fixed)) return { dir: fixed, source: 'vast', legacyDir: hasDb(legacy) ? legacy : null };
+  if (hasDb(legacy)) return { dir: legacy, source: 'programmamap', legacyDir: legacy };
   return { dir: fixed, source: 'vast', legacyDir: null };
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "review-tool",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Videoreviewplatform voor filmagency: delen, feedback, versies en goedkeuring.",
   "main": "server/index.js",
@@ -13,7 +13,13 @@
     "create-user": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/create-user.js",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
     "test:browser": "node --disable-warning=ExperimentalWarning scripts/browser-test.js",
-    "check": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/check.js"
+    "check": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/check.js",
+    "backup": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/backup.js",
+    "herstel": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/restore.js",
+    "verhuis": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/migrate-data.js",
+    "verplaats-opslag": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/move-storage.js",
+    "launch": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/launcher.js",
+    "stop": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/stop.js"
   },
   "dependencies": {
     "express": "^4.22.3"

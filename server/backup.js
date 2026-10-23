@@ -32,6 +32,13 @@ async function sha256File(file) {
   return { sha256: hash.digest('hex'), bytes };
 }
 
+/** Unieke mapnaam: bij twee back-ups in dezelfde seconde komt er een volgnummer achter. */
+function uniqueName(dir, base) {
+  let name = base;
+  for (let i = 2; fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, `${name}.bezig`)); i++) name = `${base}-${i}`;
+  return name;
+}
+
 /** Gestreamde kopie met controlesom; overschrijft nooit een bestaand bestand. */
 async function copyWithHash(src, dest) {
   const hash = crypto.createHash('sha256');
@@ -80,7 +87,7 @@ async function createBackup({ db, config, storage, label = '', onProgress = () =
   }
   storage.assertReady();
   fs.mkdirSync(config.backupDir, { recursive: true });
-  const name = `studio-review_${stamp()}${label ? `_${label.replace(/[^a-z0-9-]+/gi, '-').slice(0, 30)}` : ''}`;
+  const name = uniqueName(config.backupDir, `studio-review_${stamp()}${label ? `_${label.replace(/[^a-z0-9-]+/gi, '-').slice(0, 30)}` : ''}`);
   const work = path.join(config.backupDir, `${name}.bezig`);
   const final = path.join(config.backupDir, name);
   await fsp.mkdir(path.join(work, 'media'), { recursive: true });
@@ -134,6 +141,28 @@ async function createBackup({ db, config, storage, label = '', onProgress = () =
     await fsp.rm(work, { recursive: true, force: true });
     throw err;
   }
+}
+
+/**
+ * Alleen een databasekopie (klein en snel), bijvoorbeeld vlak voor een verhuizing waarbij de
+ * originele bestanden toch al onaangeroerd blijven. Kan niet worden teruggezet als volledige back-up.
+ */
+async function createDbBackup({ db, backupDir, label }) {
+  fs.mkdirSync(backupDir, { recursive: true });
+  const name = uniqueName(backupDir, `studio-review_${stamp()}_${label}`);
+  const dir = path.join(backupDir, name);
+  await fsp.mkdir(dir, { recursive: true });
+  const dbFile = path.join(dir, 'review.db');
+  await snapshotDb(db, dbFile);
+  const snap = inspectDb(dbFile);
+  const h = await sha256File(dbFile);
+  const manifest = {
+    format: FORMAT, app: 'studio-review', appVersion: VERSION, createdAt: new Date().toISOString(), label, databaseOnly: true,
+    database: { file: 'review.db', bytes: h.bytes, sha256: h.sha256, integrityOk: snap.integrityOk },
+    counts: snap.counts, files: [], missingFiles: [], totalBytes: h.bytes, complete: snap.integrityOk,
+  };
+  await fsp.writeFile(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  return { dir, name, manifest };
 }
 
 /** Alle back-ups in een map, nieuwste eerst, met status volledig / onvolledig / afgebroken. */
@@ -207,6 +236,7 @@ async function restoreBackup({ backupPath, dataDir, mediaDir, allowIncomplete = 
     throw new Error(`De back-up is niet in orde:\n- ${check.problems.join('\n- ')}`);
   }
   const { manifest } = check;
+  if (manifest.databaseOnly) throw new Error('Dit is een back-up van alleen de database (gemaakt vóór een verhuizing). Kies een volledige back-up om terug te zetten.');
   const ts = stamp();
   const mediaInside = path.resolve(mediaDir).startsWith(path.resolve(dataDir) + path.sep);
   const stageData = `${dataDir}.herstel-${ts}`;
@@ -251,4 +281,4 @@ async function restoreBackup({ backupPath, dataDir, mediaDir, allowIncomplete = 
   return { manifest, keptData, keptMedia };
 }
 
-module.exports = { createBackup, listBackups, verifyBackup, restoreBackup, snapshotDb, inspectDb, copyWithHash, sha256File, stamp, COUNT_TABLES };
+module.exports = { createBackup, createDbBackup, listBackups, verifyBackup, restoreBackup, snapshotDb, inspectDb, copyWithHash, sha256File, stamp, COUNT_TABLES };

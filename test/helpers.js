@@ -68,9 +68,9 @@ function client(base) {
   };
 }
 
-async function upload(c, file) {
+async function upload(c, file, target = {}) {
   const buf = fs.readFileSync(file);
-  const init = await c.post('/api/uploads', { filename: path.basename(file), size: buf.length });
+  const init = await c.post('/api/uploads', { filename: path.basename(file), size: buf.length, ...target });
   if (init.status !== 201) throw new Error(JSON.stringify(init.data));
   const { id, chunkSize } = init.data;
   for (let offset = 0; offset < buf.length; offset += chunkSize) {
@@ -80,4 +80,33 @@ async function upload(c, file) {
   return id;
 }
 
-module.exports = { makeVideo, startServer, client, upload, rid, SETUP_TOKEN };
+/** Beheerder aanmaken en ingelogde client teruggeven. */
+async function setupAdmin(srv, email = 'beheer@agency.nl') {
+  const c = client(srv.base);
+  const r = await c.post('/api/setup', { setupToken: SETUP_TOKEN, email, name: 'Beheer', password: 'een-lang-wachtwoord' });
+  if (r.status !== 201) throw new Error(JSON.stringify(r.data));
+  return c;
+}
+
+/** Teamlid aanmaken (door beheerder) en ingelogde client teruggeven. */
+async function addMember(srv, admin, { email, name = 'Freelancer', role = 'member', projects = [] }) {
+  const r = await admin.post('/api/users', { email, name, password: 'een-lang-wachtwoord', role, projects });
+  if (r.status !== 201) throw new Error(JSON.stringify(r.data));
+  const c = client(srv.base);
+  const login = await c.post('/api/login', { email, password: 'een-lang-wachtwoord' });
+  if (login.status !== 200) throw new Error(JSON.stringify(login.data));
+  return { client: c, id: r.data.id };
+}
+
+/** Project met één video (gedeeld, met reviewlink) via de beheerder. */
+async function sharedVideo(admin, file, { name = 'Project', title = 'Video' } = {}) {
+  const projectId = (await admin.post('/api/projects', { name })).data.id;
+  const created = (await admin.post(`/api/projects/${projectId}/videos`, { uploadId: await upload(admin, file, { projectId }), title })).data;
+  await admin.post(`/api/versions/${created.versionId}/ready`);
+  await admin.post(`/api/versions/${created.versionId}/share`);
+  const video = (await admin.get(`/api/videos/${created.videoId}`)).data;
+  const token = new URL(video.links.find((l) => l.role === 'reviewer').url).pathname.split('/').pop();
+  return { projectId, videoId: created.videoId, versionId: created.versionId, token };
+}
+
+module.exports = { makeVideo, startServer, client, upload, rid, SETUP_TOKEN, setupAdmin, addMember, sharedVideo };

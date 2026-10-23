@@ -87,6 +87,7 @@ function render(data) {
     header,
     h('main', { class: 'p-main' }, hero, sections,
       data.archived ? h('div', { class: 'notice notice-info' }, icon('history'), 'Dit project is afgerond en gearchiveerd. Je kunt alles nog bekijken, maar niet meer reageren of goedkeuren.') : null,
+      !preview && data.videos.length ? h('p', { class: 'p-export small' }, icon('fileDown'), 'Alle feedback downloaden:', h('a', { href: `${source}/export.pdf` }, 'PDF'), h('a', { href: `${source}/export.csv` }, 'CSV (Excel)')) : null,
       h('footer', { class: 'p-foot small muted' },
         icon('shield'), h('span', {}, 'Met deze link kun je bekijken, reageren en feedback versturen. Goedkeuren doet de aangewezen akkoordgever per video via een persoonlijke link.'))));
 }

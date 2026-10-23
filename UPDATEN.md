@@ -5,6 +5,26 @@ Vanaf versie 0.2.0 staan programma en gegevens los van elkaar:
 - **Programma**: de uitgepakte map. Bij elke update komt er een nieuwe.
 - **Gegevens**: `~/Studio Review/` met daarin `gegevens/`, `backups/` en `instellingen.env`. Deze map blijft gewoon staan.
 
+## Van 0.3.0 naar 0.4.0 (bouwronde 3: taken, rondes, tekenen, vergelijken, export)
+
+Hetzelfde als de vorige keer: alleen een nieuwe programmamap. Je gegevens in `~/Studio Review` blijven staan.
+
+1. **Maak een back-up:** **Opslag & back-ups › Nu back-up maken**.
+2. **Stop de app:** dubbelklik `Stop Studio Review.command`.
+3. **Pak de nieuwe ZIP uit** in een nieuwe map.
+4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.**
+   - De eerste start installeert de onderdelen, nu ook de PDF-bibliotheek. Daarvoor is één keer internet nodig.
+   - Er wordt niets gevraagd over je gegevens.
+5. **Ververs een openstaand tabblad.** Onderin de zijbalk staat dan **Studio Review 0.4.0**.
+6. **Optioneel:** stel bij **Project bewerken** het afgesproken aantal reviewrondes per video in.
+
+**Goed om te weten na deze update**
+- Versies die al gedeeld waren, krijgen geen verzonnen reviewronde. Bij de volgende publicatie kies je *Ronde 1 starten*.
+- Bestaande reacties, links, goedkeuringen en het klantportaal werken ongewijzigd.
+- Taken en tekeningen zijn nieuw. Er wordt niets automatisch omgezet.
+
+**Terug naar 0.3.0?** Stop de app, zet in de oude map de back-up van stap 1 terug met `npm run herstel`, en start de oude versie. Zonder herstel start 0.3.0 ook, maar die toont dan geen taken, rondes en tekeningen.
+
 ## Van 0.2.0 naar 0.3.0 (bouwronde 2: klantportaal, merken, briefing)
 
 Je gegevens staan al in `~/Studio Review`. Bijwerken is daarom alleen een nieuwe programmamap.

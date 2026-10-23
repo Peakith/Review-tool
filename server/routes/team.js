@@ -246,7 +246,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
         clientComments: db.prepare("SELECT COUNT(*) AS n FROM comments c JOIN versions x ON x.id = c.version_id WHERE x.round_id = ? AND x.trashed_at IS NULL AND c.parent_id IS NULL AND c.author_type != 'team'").get(r.id).n,
         submissions: db.prepare('SELECT COUNT(*) AS n FROM feedback_rounds f JOIN versions x ON x.id = f.version_id WHERE x.round_id = ? AND x.trashed_at IS NULL').get(r.id).n,
       })),
-      unroundedSharedVersions: versions.filter((x) => x.shared_at && !x.round_id).map((x) => x.number),
+      unroundedSharedVersions: versions.filter((x) => x.shared_at && !x.round_id).map((x) => x.number).sort((a, b) => a - b),
       // De versie die klanten via hun link zien (nieuwste gedeelde), los van de interne nieuwste.
       clientVersionId: shared?.id || null,
       versions: versions.map((ver, i) => ({

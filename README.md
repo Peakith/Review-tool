@@ -57,7 +57,7 @@ brew install node ffmpeg
 
 | Wat | Standaardlocatie | Bij een update |
 |---|---|---|
-| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.3.0` | vervangen |
+| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.4.0` | vervangen |
 | Gegevens (database met accounts, projecten, reacties, links en rechten; video's in `media/`) | `~/Studio Review/gegevens` | blijft staan |
 | Back-ups | `~/Studio Review/backups` | blijft staan |
 | Instellingen | `~/Studio Review/instellingen.env` | blijft staan |
@@ -163,6 +163,86 @@ brew install node ffmpeg
   - Antwoorden van het team op klantreacties blijven zichtbaar.
   - Wil je een oude notitie toch aan de klant tonen, kies dan *Zichtbaar maken voor klant*.
 
+## Feedback verwerken, reviewrondes, tekenen, vergelijken en exporteren
+
+**Feedbacktaken** (alleen team)
+- Van elke reactie kun je in de werkplek een **taak** maken: **Taak maken**. Een taak heeft:
+  - een verantwoordelijke;
+  - een prioriteit (hoog, normaal of laag);
+  - een optionele deadline (een dag);
+  - een status (open, bezig of afgehandeld);
+  - een interne toelichting.
+- De taak blijft gekoppeld aan de reactie, de video, de versie en de tijdcode.
+- Per reactie bestaat hooguit één taak. Opnieuw klikken of opnieuw proberen na een verbindingsfout maakt nooit een tweede.
+- **Eén afhandelstatus:** een taak op *Afgehandeld* zetten handelt de reactie af. Een reactie afvinken of heropenen zet de taak mee. Een reactie kan dus nooit tegelijk "afgehandeld" en "taak open" zijn. De status van de video verandert hierdoor niet.
+- **Overzicht:** het tabblad **Feedback & taken** op de projectpagina toont de verstuurde klantfeedback en alle reacties met een taak. Je kunt filteren op verantwoordelijke, video, prioriteit en status.
+- **Mijn taken** in de zijbalk toont jouw taken in alle projecten, met een teller.
+- **Wie kan wat:**
+  - toewijzen kan alleen aan teamleden met toegang tot het project;
+  - verliest iemand later die toegang, of wordt het account uitgeschakeld, dan wordt de taak losgekoppeld met een zichtbare toelichting;
+  - een taak maken of de details wijzigen vraagt het recht *Uploaden*;
+  - de status wijzigen kan ook de toegewezen persoon zelf.
+- **Klanten** zien nooit iets van taken.
+
+**Reviewrondes** (per video)
+- Een ronde ontstaat alleen bij **Publiceren naar klant**. Je kiest dan *Bij ronde N (huidige)* of *Ronde N+1 starten*.
+- Bij een nieuwe ronde kun je optioneel een **deadline** opgeven (datum en tijd, met tijdzone en uitgeschreven ter controle) en een **toelichting voor de klant**.
+- Bij elke publicatie beschrijf je **wat er is aangepast**. De klant ziet dat bij precies die versie.
+- **Afgesproken aantal rondes:**
+  - in te stellen per project (*Project bewerken*), met een afwijking per video (*Gegevens* bij de video);
+  - wordt per video bijgehouden;
+  - meer rondes dan afgesproken geeft een waarschuwing, maar wordt niet geblokkeerd en niet gefactureerd.
+- **Wat een ronde niet doet:**
+  - uploads, losse reacties en herhaalde verzoeken maken geen extra ronde; publiceren is idempotent per verzoek;
+  - een verstreken deadline keurt niets goed en sluit niets af;
+  - de bestaande statusregels blijven ongewijzigd.
+- **Na de update:** versies die al gedeeld waren, krijgen geen verzonnen ronde. Ze staan in het tabblad **Rondes** als "gedeeld vóórdat rondes werden bijgehouden". De volgende publicatie start ronde 1.
+
+**Tekenen en tijdsbereiken** (team en klant)
+- **Tekenen:** in het invoerveld zet de knop **Tekenen** de video stil. Je hebt een pen, pijl, rechthoek en vier kleuren, plus *ongedaan maken* en *wissen*.
+  - De tekening hoort bij de reactie, de exacte versie en het moment. Het videobestand verandert niet.
+  - Posities worden opgeslagen ten opzichte van het werkelijke beeld, zonder zwarte randen. De tekening staat daardoor goed bij andere schermgroottes, in volledig scherm en bij verticale video's.
+  - Werkt ook met aanraking. Gewone tekst blijft altijd mogelijk.
+- **Bereik:** met de knop **Bereik** maak je een reactie "van 0:12 tot 0:18".
+  1. Klik op **Bereik**.
+  2. Speel verder.
+  3. Klik op **Eind hier**.
+
+  De server controleert de grenzen. Een klik op de reactie springt naar het begin. **Fragment afspelen** speelt alleen dat stuk af. Het bereik is zichtbaar op de tijdlijn.
+- **Zichtbaarheid:** een tekening volgt de zichtbaarheid van de reactie. Interne tekeningen verschijnen nooit op klantpagina's, in voorbeelden of in klantexports.
+- **Let op:** op een iPhone opent volledig scherm de eigen speler van iOS. Daar zijn tekeningen niet zichtbaar; buiten volledig scherm wel.
+
+**Versies vergelijken**
+- In de werkplek (**Vergelijken**) en op de klantpagina (**Versies vergelijken**) zie je twee versies naast elkaar:
+  - versienummers en status bij elke versie;
+  - gekoppeld afspelen, pauzeren en spoelen, met de mogelijkheid de koppeling los te zetten;
+  - geluid van één gekozen versie;
+  - handmatige uitlijning (±1 s of ±1 beeld);
+  - bij verschillende lengtes de melding "Einde van deze versie".
+- Gekoppelde tijdcodes zijn **geen** inhoudelijke vergelijking; de pagina zegt dat ook.
+- Klanten kunnen alleen gepubliceerde versies vergelijken.
+- Vergelijken is alleen-lezen.
+- Op mobiel staan de versies onder elkaar, of je wisselt tussen A en B.
+
+**Exporteren** (PDF en CSV)
+- **Exporteren** op de projectpagina (selectie van video's) of *Feedback exporteren…* bij een video.
+- **Inhoud:**
+  - project, video, versie, ronde, auteur en datum;
+  - tijdcode of bereik;
+  - reacties met antwoorden;
+  - de afhandelstatus.
+- **PDF:**
+  - met de projectbranding;
+  - bij reacties met een tekening staat het videobeeld met de tekening erop.
+- **CSV:**
+  - UTF-8 met `;` als scheiding, zodat de tabel goed opent in Excel en Numbers met Nederlandse instellingen;
+  - een komma als scheiding kan met `?scheiding=komma`;
+  - formules uit ingevoerde tekst worden onschadelijk gemaakt.
+- **Interne gegevens:**
+  - interne notities, taken en niet-gepubliceerde versies staan standaard **uit**;
+  - zet je ze aan, dan wordt de export op elke pagina en in de bestandsnaam als **INTERN** gemarkeerd.
+- **Klanten** kunnen via hun link en het portaal ook downloaden, maar krijgen nooit interne gegevens, ook niet via aangepaste verzoeken.
+
 ## Rechten per project
 
 Er zijn twee soorten accounts:
@@ -173,9 +253,9 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 
 | Niveau | Mag |
 |---|---|
-| Bekijken en reageren | afspelen, downloaden, reageren, reacties afhandelen, briefing lezen, klantweergave bekijken |
-| Uploaden | + nieuwe video's en versies, (interne) briefingonderdelen, titels en opleveringsgegevens wijzigen, klaarzetten |
-| Publiceren en delen | + publiceren naar de klant, reviewlinks, klantportaal (projectlink), akkoordgever, briefing delen met de klant |
+| Bekijken en reageren | afspelen, downloaden, reageren (ook tekenen/bereik), reacties afhandelen, taken zien en de eigen taakstatus wijzigen, vergelijken, exporteren, briefing lezen, klantweergave bekijken |
+| Uploaden | + nieuwe video's en versies, (interne) briefingonderdelen, titels en opleveringsgegevens wijzigen, klaarzetten, feedbacktaken maken en toewijzen |
+| Publiceren en delen | + publiceren naar de klant (met keuze van de reviewronde), rondes wijzigen, reviewlinks, klantportaal (projectlink), akkoordgever, briefing delen met de klant |
 | Beheren | + project bewerken, status corrigeren, archiveren, naar de prullenbak |
 
 - De server controleert dit bij elke aanvraag, ook voor videobestanden, thumbnails, reacties en uploads.
@@ -184,7 +264,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 - Klantlinks en de akkoordgever werken los van accounts, net als voorheen.
 
 ## Versie en cache
-- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.3.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
+- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.4.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
   - de versie komt uit `package.json`;
   - de build is een vingerafdruk van de interfacebestanden.
 - Na een update is gewoon verversen genoeg. De pagina zelf wordt altijd gecontroleerd, en alle scripts en stijlen (ook geïmporteerde modules) komen van een adres per build.
@@ -261,13 +341,14 @@ Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan
 ### Tests
 Alle tests gebruiken eigen, tijdelijke mappen en raken je echte gegevens in `~/Studio Review` niet aan.
 ```bash
-npm test                                                   # 73 servertests (vereist ffmpeg)
+npm test                                                   # 95 servertests (vereist ffmpeg)
 CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (51 controles)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rechten, opslag, back-ups, prullenbak, archief (23)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal, merk, opleveringen, briefing, desktop + mobiel (51)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:feedback # taken, rondes, tekenen, bereik, vergelijken, export, desktop + mobiel (50)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:update   # update met de vorige interface in de browsercache (7)
 npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (13)
-npm run test:upgrade                                       # bijwerken vanaf bouwronde 1 met echte gegevens + oude back-up terugzetten (15)
+npm run test:upgrade                                       # bijwerken vanaf 0.3.0 met echte gegevens + oude back-up terugzetten (20)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;
@@ -279,6 +360,11 @@ npm run test:upgrade                                       # bijwerken vanaf bou
   - klantportaal: alleen gepubliceerde informatie, geen goedkeuringsrechten, intrekken en vervangen, interne reacties en interne versies ook niet via directe verzoeken;
   - briefing: zichtbaarheid, rechten, bestandscontrole (geen HTML/SVG/vermomde bestanden), veilige headers, prullenbak, opslag, back-up en herstel van bijlagen;
   - merken: kleur, logo (geen SVG), alleen beheerders;
+  - feedbacktaken: geen dubbele taken, één afhandelstatus, rechten, toegang intrekken, filters;
+  - reviewrondes: expliciete keuze, idempotent publiceren, geen extra rondes door uploads/reacties, verstreken deadlines, statusregels;
+  - tekeningen en tijdsbereiken: grenzen en vormen op de server, afscherming van interne tekeningen;
+  - export: CSV (bijzondere tekens, meerdere regels, formules), PDF-inhoud, interne markering, klantafscherming, rechten;
+  - back-up en herstel van taken, rondes, bereiken en tekeningen;
   - de start- en stopknop: overnemen van een vorige installatie, een tweede klik, een vreemd programma op de poort en een andere installatie op de poort.
 - De browsertests maken zelf H.264/AAC-MP4's. Ze hebben een Chrome **met H.264** nodig, zoals Google Chrome of [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/). De Chromium van Playwright speelt geen H.264 af.
 - `test:browser:update`, `test:update-zip` en `test:upgrade` vragen een Git-checkout, omdat ze de vorige versie uit de geschiedenis halen.
@@ -306,6 +392,9 @@ Zet instellingen in **`~/Studio Review/instellingen.env`**. Die blijft bij updat
 | `ALLOW_UNVERIFIED_UPLOADS` | `false` | Alleen voor ontwikkeling: uploads accepteren zonder ffprobe. **Nooit in productie.** |
 | `UPLOAD_EXPIRY_HOURS` | `24` | Afgebroken uploads zonder activiteit worden na deze tijd verwijderd |
 | `UPLOAD_CLEANUP_INTERVAL_MINUTES` | `60` | Hoe vaak de opruiming draait (ook direct bij het starten) |
+
+### Lettertype in PDF-exports
+PDF's gebruiken het meegeleverde lettertype DejaVu Sans (`server/fonts/`, vrije licentie in `LICENSE-DejaVu.txt`), zodat €, ë, — en andere tekens overal goed staan. De PDF-bibliotheek `pdfkit` (MIT) wordt bij de eerste start automatisch geïnstalleerd.
 
 ### Afhankelijkheden zichtbaar
 - `GET /api/health` geeft `database`, `ffprobe`, `ffmpeg` en `uploads` (`ok`, `uitgeschakeld` of `zonder controle`).

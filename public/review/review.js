@@ -209,6 +209,8 @@ function render() {
   const compareBtn = info.versions.length > 1
     ? button('Versies vergelijken', { icon: 'compare', size: 'sm', variant: 'ghost', onClick: () => showCompare(version) })
     : null;
+  const exportLinks = !preview ? h('span', { class: 'r-export small' }, icon('fileDown'), 'Feedback downloaden:',
+    h('a', { href: `${base}/export.pdf` }, 'PDF'), h('a', { href: `${base}/export.csv` }, 'CSV')) : null;
   const download = info.allowDownload
     ? h('a', { class: 'btn btn-sm btn-ghost', href: `${base}/versions/${version.id}/download` }, icon('download'), h('span', { class: 'btn-label' }, 'Download'))
     : null;
@@ -222,7 +224,7 @@ function render() {
       h('section', { class: 'r-stage', 'aria-label': 'Video' }, player.el,
         h('div', { class: 'r-stage-foot small muted' },
           h('span', {}, `Je bekijkt Versie ${version.number} van ${latest.number}`, version.sharedAt ? ` · gedeeld ${formatDate(version.sharedAt)}` : ''),
-          h('span', { class: 'r-stage-actions' }, compareBtn, download))),
+          h('span', { class: 'r-stage-actions' }, compareBtn, exportLinks, download))),
       h('aside', { class: 'r-panel', 'aria-label': 'Reacties' },
         statusCard,
         roundCard,

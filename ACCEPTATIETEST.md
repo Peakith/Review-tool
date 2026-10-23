@@ -61,7 +61,7 @@ Deze punten zijn **niet op een echte Mac getest**: de start- en stopknop zijn al
 | # | Doe | Verwacht | ✓ |
 |---|---|---|---|
 | 25 | Dubbelklik `Start Studio Review.command` in de nieuwe map. | macOS vraagt eenmalig om toestemming (zie de README). Daarna opent Terminal, de controles staan op ✓, de vraag om gegevens over te nemen verschijnt, en de browser opent vanzelf. | ☐ |
-| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.3.0 (build …)". | ☐ |
+| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.4.0 (build …)". | ☐ |
 | 27 | Dubbelklik nog eens op de startknop. | Er start niets nieuws; de bestaande sessie opent in de browser. | ☐ |
 | 28 | **Opslag & back-ups › Nu back-up maken.** | De back-up krijgt "compleet en gecontroleerd", met de juiste aantallen en in een map onder `~/Studio Review/backups`. | ☐ |
 | 29 | **Team & rechten** → voeg een freelancer toe met toegang "Bekijken en reageren" tot één project. Log in als freelancer (privévenster). | De freelancer ziet alleen dat project, kan reageren, maar ziet geen upload-, deel- of publiceerknoppen. | ☐ |
@@ -84,6 +84,25 @@ Doe dit eerst zelf op je Mac. Wil je het portaal op een tweede apparaat of telef
 | 40 | **Klantweergave** op de projectpagina. | Exact dezelfde video’s en briefing als in het privévenster, met een paarse voorbeeldbalk. | ☐ |
 | 41 | **Klantportaal → Intrekken**. Ververs het privévenster. | “Deze link werkt niet meer”. Een afzonderlijke reviewlink van een video werkt nog wel. | ☐ |
 | 42 | Herhaal 37–38 op je iPhone of Android-telefoon (alleen mogelijk met een bereikbaar adres; lokaal kan dat nog niet). | Kaarten onder elkaar, verticale video’s passen in beeld, knoppen zijn goed te raken. | ☐ |
+
+## H. Feedback verwerken, rondes, tekenen, vergelijken en export (bouwronde 3, ± 20 min)
+Gebruik een testproject, of een aparte gegevensmap (zie boven). Doe de klantstappen in een privévenster, liefst in Safari én Chrome.
+
+| # | Doe | Verwacht | ✓ |
+|---|---|---|---|
+| 43 | **Project bewerken** → afgesproken rondes: 2. | Opgeslagen. In de werkplek staat bij een video “2 afgesproken per video”. | ☐ |
+| 44 | Publiceer een video: kies **Ronde 1 starten**, vul een deadline in (datum + tijd) en een toelichting. | Onder het tijdveld staat de datum uitgeschreven, met tijdzone. In het tabblad **Rondes** staat ronde 1 met die deadline. | ☐ |
+| 45 | Klant: open de link. | Je ziet “Reviewronde 1 · graag je reactie vóór …” en de toelichting. | ☐ |
+| 46 | Klant: pauzeer, klik **Tekenen**, zet een rechthoek en een pijl, typ een tekst en plaats de reactie. | De reactie heeft het label “Tekening”. Een klik toont de tekening op het stilstaande beeld. | ☐ |
+| 47 | Klant: klik **Bereik**, speel een paar seconden verder, klik **Eind hier**, typ en plaats de reactie. Klik daarna op **Fragment afspelen**. | Het tijdcodelabel toont bijvoorbeeld “0:04–0:07”. Op de tijdlijn staat een balk. Het fragment stopt aan het einde. | ☐ |
+| 48 | Klant: verstuur de feedback. Team: open de tekening in de werkplek, ook in volledig scherm en in een kleiner venster. | De tekening staat steeds op dezelfde plek in het beeld. | ☐ |
+| 49 | Team: **Taak maken** op een klantreactie: kies een collega, prioriteit hoog en een deadline. | Op de reactie staat een taaklabel. Het project toont het onder **Feedback & taken**. | ☐ |
+| 50 | Log in als die collega → **Mijn taken** → **Bezig** → **Afgehandeld**. | De reactie is afgehandeld. De status van de video blijft “Aanpassingen nodig”. | ☐ |
+| 51 | Upload v2 en publiceer: kies **Ronde 2 starten** en vul in wat er is aangepast. Doe hetzelfde nog eens met v3 (ronde 3). | Bij ronde 3 waarschuwt het venster dat dit boven de afspraak is. Publiceren lukt gewoon. De klant ziet “Aangepast in versie 3”. | ☐ |
+| 52 | Werkplek → **Vergelijken**. Speel af, zet het geluid op A, schuif B +1 s, en zet de koppeling los. | A en B lopen gelijk. De verschuiving werkt. De kortere versie meldt “Einde van deze versie”. Los heeft elke versie zijn eigen bediening. | ☐ |
+| 53 | Project → **Exporteren** → PDF, zonder interne gegevens. Open het bestand. | Je ziet het merk, versie, ronde, tijdcodes, antwoorden en de tekening op het videobeeld. Er staat niets interns in. | ☐ |
+| 54 | **Exporteren** → CSV, met “Interne notities en taakgegevens” aan. Open het bestand in Numbers of Excel. | De bestandsnaam eindigt op “INTERN”. €, ë en meerregelige tekst staan goed. Een reactie die met “=” begint, wordt niet uitgerekend. | ☐ |
+| 55 | Geef een collega geen toegang meer tot het project (**Team & rechten**). | Zijn taak staat op “niet toegewezen”, met de uitleg waarom. | ☐ |
 
 ## Handmatige browsertestlijst
 Automatisch getest (`npm run test:browser`, zie de PR): **Chrome 141 desktop (Linux, headless)** en **Chrome 141 met Pixel 7-emulatie**. Al het andere moet nog met de hand. Voer per browser minstens stappen 8–11, 13, 19–20 en 7 uit.

@@ -432,6 +432,60 @@ function mp4(name, { size = '1920x1080', seconds = 12, freq = 440, pattern = 'te
     void latestId;
   }
 
+  if (ONLY.includes('C')) {
+    const pdfText = (file) => execFileSync('pdftotext', ['-layout', file, '-']).toString();
+    // Zorg voor gepubliceerde feedback (ook als A/B niet zijn gedraaid).
+    let mv = await apiT('GET', `/api/videos/${main.videoId}`);
+    if (!mv.versions.some((v) => v.sharedAt)) {
+      await apiT('POST', `/api/versions/${main.versionId}/ready`);
+      await apiT('POST', `/api/versions/${main.versionId}/share`, { round: 'new' });
+      mv = await apiT('GET', `/api/videos/${main.videoId}`);
+    }
+    const reviewUrl = mv.links.find((l) => l.role === 'reviewer').url.replace(/^https?:\/\/[^/]+/, BASE);
+    const latest = mv.versions.find((v) => v.isClientVersion);
+    const tokenC = reviewUrl.split('/').pop();
+    await page.request.post(`${BASE}/api/review/${tokenC}/versions/${latest.id}/comments`, { headers: { ...H, 'x-reviewer-key': 'browser-c-key-000000001' }, data: { body: 'Klantreactie voor export: "aanhalingstekens", komma\'s; en €', timecode: 1, authorName: 'Eva Jansen', requestId: `req${Date.now()}` } });
+    await apiT('POST', `/api/versions/${latest.id}/comments`, { body: 'INTERN-GEHEIM: budget', timecode: 2 });
+
+    // Team: exportvenster
+    await page.goto(`${BASE}/projecten/${projectId}`);
+    await page.click('button:has-text("Exporteren")');
+    await page.waitForSelector('dialog .export-videos');
+    await shot(page, '73-export-venster');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('dialog button:has-text("Downloaden")')]);
+    const pdfFile = path.join(S, 'downloads', dl.suggestedFilename());
+    await dl.saveAs(pdfFile);
+    const t = pdfText(pdfFile);
+    check('export PDF (team, standaard): bestandsnaam en inhoud', /^Feedback - Voorjaarscampagne 2026 - 2 video's\.pdf$/.test(dl.suggestedFilename()) && t.includes('Campagnefilm — Hoofdvideo') && t.includes('"aanhalingstekens"'), dl.suggestedFilename());
+    check('export PDF (team, standaard): geen interne gegevens', !t.includes('INTERN') && !t.includes('GEHEIM'));
+    execFileSync('pdftoppm', ['-r', '80', '-png', '-f', '1', '-l', '2', pdfFile, path.join(SHOTS, '74-export-pdf-pagina')]);
+
+    await page.click('button:has-text("Exporteren")');
+    await page.check('dialog .round-option:has-text("CSV") input');
+    await page.check('dialog label.check:has-text("Interne notities") input');
+    check('export: waarschuwing bij interne export', await page.isVisible('dialog .notice-warn:has-text("Interne export")'));
+    const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('dialog button:has-text("Downloaden")')]);
+    const csvFile = path.join(S, 'downloads', dl2.suggestedFilename());
+    await dl2.saveAs(csvFile);
+    const csv = fs.readFileSync(csvFile, 'utf8');
+    check('export CSV intern: als INTERN gemarkeerd, met interne notitie', /INTERN\.csv$/.test(dl2.suggestedFilename()) && csv.includes('INTERN-GEHEIM') && csv.charCodeAt(0) === 0xfeff, dl2.suggestedFilename());
+
+    // Klant: downloadlinks op de reviewpagina
+    const c3 = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+    const cp = await c3.newPage();
+    watch(cp, 'klant-C');
+    await cp.goto(reviewUrl);
+    await cp.waitForSelector('.r-export');
+    const [dl3] = await Promise.all([cp.waitForEvent('download'), cp.click('.r-export a:has-text("PDF")')]);
+    const clientPdf = path.join(S, 'downloads', `klant-${dl3.suggestedFilename()}`);
+    await dl3.saveAs(clientPdf);
+    const ct = pdfText(clientPdf);
+    check('klant: PDF-download zonder interne gegevens', ct.includes('Klantreactie voor export') && !ct.includes('GEHEIM') && !ct.includes('INTERN'));
+    const direct = await cp.request.get(`${BASE}/api/review/${tokenC}/export.csv?intern=1`);
+    check('klant: ?intern=1 in een direct verzoek geeft geen interne gegevens', !(await direct.text()).includes('GEHEIM'));
+    await c3.close();
+  }
+
   check('geen JavaScript-fouten', errors.length === 0, errors.slice(0, 5).join(' | '));
   await browser.close();
   listener.close();

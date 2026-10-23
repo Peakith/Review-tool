@@ -15,6 +15,7 @@ const { portalRoutes } = require('./routes/portal');
 const { briefingRoutes } = require('./routes/briefing');
 const { brandRoutes, brandLogoRoute } = require('./routes/brands');
 const { taskRoutes, reconcileAssignees } = require('./routes/tasks');
+const { exportRoutes } = require('./routes/exports');
 const { FORMATS, toolStatus } = require('./media');
 const { createLocalStorage } = require('./storage');
 const { createAccess } = require('./access');
@@ -157,6 +158,7 @@ function createApp(overrides = {}) {
   reviewRoutes(api, db, config, { storage });
   portalRoutes(api, db, config, { storage });
   brandLogoRoute(api, db, config, { storage });
+  exportRoutes(api, db, config, { storage, mode: 'client' });
 
   // ---------- Team (inloggen verplicht) ----------
   const team = asyncRouter();
@@ -167,6 +169,7 @@ function createApp(overrides = {}) {
   briefingRoutes(team, db, config, { access, storage, uploads });
   brandRoutes(team, db, config, { access, storage });
   taskRoutes(team, db, config, { access });
+  exportRoutes(team, db, config, { access, storage, mode: 'team' });
   // Taken van wie inmiddels geen toegang meer heeft, losmaken (ook bij het starten).
   reconcileAssignees(db, access);
 

@@ -158,3 +158,6 @@ a.brief-item:hover { border-color: var(--line-2); }
 .r-stage-actions { display: inline-flex; gap: 6px; align-items: center; }
 .r-compare { width: 100%; max-width: 1600px; margin: 0 auto; padding: 16px 24px 32px; display: grid; gap: 10px; }
 @media (max-width: 980px) { .r-compare { padding: 10px 12px 24px; } }
+.r-export, .p-export { display: inline-flex; gap: 8px; align-items: center; color: var(--text-3); flex-wrap: wrap; }
+.r-export .icon, .p-export .icon { --icon-size: 15px; }
+.p-export { margin: 0; }

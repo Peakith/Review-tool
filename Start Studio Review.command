@@ -19,8 +19,8 @@ if ! node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.e
   echo "Werk bij met:  brew upgrade node"
   wacht; exit 1
 fi
-if [ ! -d node_modules/express ]; then
-  echo "Eerste start in deze map: onderdelen installeren (npm install)…"
+if [ ! -d node_modules/express ] || [ ! -d node_modules/pdfkit ]; then
+  echo "Onderdelen installeren of bijwerken (npm install)…"
   if ! npm install --omit=dev --no-audit --no-fund; then
     echo "Installeren is mislukt. Voor deze eerste stap is internet nodig."
     wacht; exit 1

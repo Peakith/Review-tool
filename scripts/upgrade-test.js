@@ -1,4 +1,4 @@
-// Ontwikkeltest: bijwerken vanaf de vorige bouwronde (standaard 3740e2b, bouwronde 1) met echte gegevens.
+// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard 347b857 = 0.3.0, bouwronde 2) met echte gegevens.
 //  1. vorige versie (zonder .git) maakt account, project, video met twee versies, reviewlink, klantreactie,
 //     feedback, teamnotitie en -antwoord, akkoordlink en goedkeuring, en een back-up;
 //  2. de nieuwe code start op dezelfde gegevens: alles werkt nog, teamnotities zijn intern, antwoorden aan
@@ -12,7 +12,7 @@ const path = require('path');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
 const REPO = path.resolve(__dirname, '..');
-const OLD_REV = process.argv[2] || '3740e2b';
+const OLD_REV = process.argv[2] || '347b857';
 const { client, upload, makeVideo, rid } = require(path.join(REPO, 'test/helpers'));
 const { restoreBackup, listBackups } = require(path.join(REPO, 'server/backup'));
 
@@ -88,6 +88,17 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   const link = (await t2.post(`/api/projects/${projectId}/portal-link`)).data.link;
   const portal = (await client(base).get(new URL(link.url).pathname.replace('/p/', '/api/portal/'))).data;
   ok('klantportaal voor bestaand project', portal.videos.length === 1 && portal.videos[0].version.status === 'approved' && portal.videos[0].version.number === 2);
+  // Bouwronde 3 op bestaande gegevens: geen verzonnen rondes, taken en export werken.
+  ok('geen verzonnen reviewrondes voor eerder gedeelde versies', video.rounds?.length === 0 && JSON.stringify(video.unroundedSharedVersions) === '[1,2]');
+  const fb = (await t2.get(`/api/projects/${projectId}/feedback?status=all`)).data.items;
+  ok('bestaande klantreactie staat in het feedbackoverzicht', fb.some((i) => i.body === 'Klantreactie: logo groter'));
+  const cc2 = fb.find((i) => i.body === 'Klantreactie: logo groter').commentId;
+  ok('van een bestaande reactie een taak maken', (await t2.post(`/api/comments/${cc2}/task`, { priority: 'high' })).status === 201);
+  const v3 = (await t2.post(`/api/videos/${created.videoId}/versions`, { uploadId: await upload(t2, file, { videoId: created.videoId }) })).data;
+  await t2.post(`/api/versions/${v3.versionId}/ready`);
+  ok('volgende publicatie start ronde 1 (eerste vastgelegde ronde)', (await t2.post(`/api/versions/${v3.versionId}/share`, { round: 'new', changeNote: 'Logo groter', requestId: rid() })).data.roundNumber === 1);
+  const pdf = await fetch(`${base}/api/projects/${projectId}/export.pdf`, { headers: { cookie: t2.cookie() } });
+  ok('feedback exporteren (PDF) op bestaande gegevens', pdf.status === 200 && (await pdf.arrayBuffer()).byteLength > 1000);
   const backups = await listBackups(env.BACKUP_DIR);
   ok('back-up van de vorige versie staat in de lijst als volledig', backups.some((b) => b.name === oldBackup.name && b.status === 'volledig'));
   await stop(srv);

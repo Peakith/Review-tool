@@ -247,3 +247,54 @@ describe('reviewrondes', () => {
     assert.equal(info.versions[0].round, null);
   });
 });
+
+test('back-up en herstel: taken, rondes, bereiken en tekeningen komen mee terug', async () => {
+  const { createBackup, restoreBackup, verifyBackup } = require('../server/backup');
+  const { createApp } = require('../server/app');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const s2 = await startServer();
+  let restored;
+  try {
+    const a = await setupAdmin(s2);
+    const pid = (await a.post('/api/projects', { name: 'Back-up rondes', roundsIncluded: 3 })).data.id;
+    const f = makeVideo(s2.dataDir, 'b.mp4', 4);
+    const c = (await a.post(`/api/projects/${pid}/videos`, { uploadId: await upload(a, f, { projectId: pid }), title: 'Video' })).data;
+    await a.post(`/api/versions/${c.versionId}/ready`);
+    await a.post(`/api/versions/${c.versionId}/share`, { round: 'new', deadline: '2026-12-01T10:00:00.000Z', roundNote: 'Graag voor december', changeNote: 'Eerste versie', requestId: rid() });
+    const cm = (await a.post(`/api/versions/${c.versionId}/comments`, { body: 'Bereik met tekening', timecode: 1, timecodeEnd: 2.5, annotation: { v: 1, shapes: [{ t: 'rect', c: '#ffd60a', a: [0.1, 0.1], b: [0.5, 0.5] }] } })).data;
+    await a.post(`/api/comments/${cm.id}/task`, { priority: 'high', dueDate: '2026-11-20', note: 'Interne toelichting', status: 'in_progress' });
+    const b = await createBackup({ db: s2.db, config: s2.config, storage: s2.created.storage });
+    assert.equal(b.manifest.counts.review_rounds, 1);
+    assert.equal(b.manifest.counts.comment_tasks, 1);
+    assert.ok((await verifyBackup(b.dir)).ok);
+    const dataDir = `${s2.dataDir}-hersteld`;
+    await restoreBackup({ backupPath: b.dir, dataDir, mediaDir: path.join(dataDir, 'media') });
+    restored = createApp({ dataDir, backupDir: `${dataDir}-b`, minFreeBytes: 0, env: { ...process.env, STUDIO_REVIEW_HOME: `${dataDir}-h`, DATA_DIR: '' } });
+    const listener = await new Promise((r) => { const l = restored.app.listen(0, () => r(l)); });
+    restored.close = () => new Promise((r) => listener.close(r));
+    const r = client(`http://127.0.0.1:${listener.address().port}`);
+    await r.post('/api/login', { email: 'beheer@agency.nl', password: 'een-lang-wachtwoord' });
+    const v = (await r.get(`/api/videos/${c.videoId}`)).data;
+    assert.deepEqual([v.rounds[0].number, v.rounds[0].deadline, v.rounds[0].clientNote, v.versions[0].changeNote, v.roundsIncluded.count], [1, '2026-12-01T10:00:00.000Z', 'Graag voor december', 'Eerste versie', 3]);
+    const com = (await r.get(`/api/versions/${c.versionId}/comments`)).data[0];
+    assert.deepEqual([com.timecode, com.timecodeEnd, com.annotation.shapes[0].t, com.task.status, com.task.note, com.resolved], [1, 2.5, 'rect', 'in_progress', 'Interne toelichting', false]);
+  } finally {
+    if (restored) { restored.stop(); await restored.close(); restored.db.close(); }
+    for (const d of ['-hersteld', '-hersteld-b', '-hersteld-h']) fs.rmSync(`${s2.dataDir}${d}`, { recursive: true, force: true });
+    await s2.close();
+  }
+});
+
+test('definitief verwijderen ruimt taken en rondes mee op', async () => {
+  const c = (await admin.post(`/api/projects/${projectId}/videos`, { uploadId: await upload(admin, file, { projectId }), title: 'Weg ermee' })).data;
+  await admin.post(`/api/versions/${c.versionId}/ready`);
+  await admin.post(`/api/versions/${c.versionId}/share`, { round: 'new', requestId: rid() });
+  const cm = (await admin.post(`/api/versions/${c.versionId}/comments`, { body: 'x', timecode: 1 })).data;
+  await admin.post(`/api/comments/${cm.id}/task`, {});
+  await admin.del(`/api/videos/${c.videoId}`);
+  const prev = (await admin.get(`/api/trash/video/${c.videoId}/purge-preview`)).data;
+  assert.equal((await admin.post(`/api/trash/video/${c.videoId}/purge`, { confirm: true, expectedFiles: prev.fileCount })).status, 200);
+  assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM comment_tasks WHERE comment_id = ?').get(cm.id).n, 0);
+  assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM review_rounds WHERE video_id = ?').get(c.videoId).n, 0);
+});

@@ -11,6 +11,7 @@ import { viewTeam, viewStorage, viewTrash, viewArchive, viewBrands, can, menuBut
 import { viewBriefing } from './briefing.js';
 import { taskDialog, taskChip, viewFeedback, viewMyTasks } from './tasks.js';
 import { createCompare } from '/shared/compare.js';
+import { exportDialog } from './export.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -619,6 +620,7 @@ async function viewProject(id, tab = 'videos') {
             : ['Archiveren', () => setArchived('project', project.id, project.name, true), { icon: 'history' }],
           ['Naar prullenbak…', () => moveToTrash('project', project.id, project.name, () => navigate('/')), { icon: 'trash', danger: true }],
         ], 'Projectacties') : null,
+        project.videos.length ? button('Exporteren', { icon: 'fileDown', onClick: () => exportDialog({ projectId: project.id, videos: project.videos }), title: 'Feedback als PDF of CSV' }) : null,
         h('a', { class: 'btn btn-secondary', href: `/voorbeeld/project/${project.id}`, target: '_blank', rel: 'noopener', title: 'Bekijk het portaal precies zoals de klant het ziet' }, icon('eye'), h('span', { class: 'btn-label' }, 'Klantweergave')),
         can(project.myLevel, 'publish') ? button('Klantportaal', { icon: 'globe', onClick: () => portalDialog(project), 'aria-label': 'Klantportaal: projectlink delen of beheren' }) : null,
         mayUpload && isVideos ? button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }) : null,
@@ -1196,7 +1198,8 @@ async function apiWithRetryTeam(method, url, body) {
 
 function moreMenu(video, version, { level, archived }) {
   const back = () => navigate(`/projecten/${video.project.id}`);
-  const items = [[`Download Versie ${version.number}`, () => { location.href = `/api/versions/${version.id}/download`; }, { icon: 'download' }]];
+  const items = [[`Download Versie ${version.number}`, () => { location.href = `/api/versions/${version.id}/download`; }, { icon: 'download' }],
+    ['Feedback exporteren…', () => exportDialog({ projectId: video.project.id, videos: [{ id: video.id, title: video.title }] }), { icon: 'fileDown' }]];
   if (can(level, 'manage')) {
     if (video.versions.length > 1) {
       items.push([`Versie ${version.number} naar prullenbak…`, () => moveToTrash('version', version.id, `${video.title} · versie ${version.number}`, () => navigate(`/video/${video.id}`)), { icon: 'layers', danger: true }]);

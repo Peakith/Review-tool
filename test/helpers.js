@@ -17,7 +17,12 @@ const rid = () => require('node:crypto').randomBytes(12).toString('hex');
 
 async function startServer(overrides = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
-  const created = createApp({ dataDir, chunkBytes: 4096, setupToken: SETUP_TOKEN, ...overrides });
+  // Alles in tijdelijke mappen, ook back-ups en instellingen (nooit de echte ~/Studio Review).
+  const created = createApp({
+    dataDir, backupDir: `${dataDir}-backups`, minFreeBytes: 0, chunkBytes: 4096, setupToken: SETUP_TOKEN,
+    env: { ...process.env, STUDIO_REVIEW_HOME: `${dataDir}-home`, DATA_DIR: '', MEDIA_DIR: '', BACKUP_DIR: '' },
+    ...overrides,
+  });
   const { app, db, config } = created;
   const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -27,7 +32,7 @@ async function startServer(overrides = {}) {
       created.stop();
       await new Promise((r) => server.close(r));
       db.close();
-      fs.rmSync(dataDir, { recursive: true, force: true });
+      for (const d of [dataDir, `${dataDir}-backups`, `${dataDir}-home`]) fs.rmSync(d, { recursive: true, force: true });
     },
   };
 }

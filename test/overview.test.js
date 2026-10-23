@@ -94,7 +94,7 @@ test('ontbrekende thumbnails worden achteraf aangemaakt', async () => {
   srv.db.prepare('UPDATE versions SET has_poster = 0 WHERE id = ?').run(versionId);
   assert.equal((await team.get(`/api/versions/${versionId}/poster`)).status, 404);
 
-  const result = await backfillPosters(srv.db, srv.config);
+  const result = await backfillPosters(srv.db, srv.config, srv.created.storage);
   assert.ok(result.created >= 1);
   assert.equal((await team.get(`/api/versions/${versionId}/poster`)).status, 200);
 });

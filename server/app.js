@@ -1,5 +1,7 @@
 'use strict';
+const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const express = require('express');
 const { loadConfig } = require('./config');
 const { openDb } = require('./db');
@@ -8,7 +10,14 @@ const { HttpError } = require('./status');
 const { uploadRoutes } = require('./uploads');
 const { teamRoutes } = require('./routes/team');
 const { reviewRoutes } = require('./routes/review');
+const { adminRoutes } = require('./routes/admin');
 const { FORMATS, toolStatus } = require('./media');
+const { createLocalStorage } = require('./storage');
+const { createAccess } = require('./access');
+const { build, versionInfo } = require('./build');
+
+const CSP = "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+const isLoopback = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 
 /** Express 4 vangt geen fouten uit async handlers; deze router doet dat wel. */
 function asyncRouter() {
@@ -24,6 +33,8 @@ function asyncRouter() {
 function createApp(overrides = {}) {
   const config = loadConfig(overrides);
   const db = openDb(config);
+  const storage = createLocalStorage(config);
+  const access = createAccess(db);
   const app = express();
   const publicDir = path.join(__dirname, '..', 'public');
   const limiter = auth.loginLimiter();
@@ -39,7 +50,7 @@ function createApp(overrides = {}) {
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    res.setHeader('Content-Security-Policy', CSP);
     next();
   });
 
@@ -71,12 +82,19 @@ function createApp(overrides = {}) {
     db.prepare('SELECT 1').get();
     const media = await mediaCheck();
     const ok = media.ffprobe && media.ffmpeg && !media.unverifiedAllowed;
+    const st = storage.status();
     res.json({
-      status: ok ? 'ok' : 'degraded',
+      app: 'studio-review',
+      ...versionInfo(),
+      instanceId: config.instanceId,
+      status: ok && st.ok ? 'ok' : 'degraded',
       database: 'ok',
+      storage: st.ok ? 'ok' : 'niet bereikbaar',
       ffprobe: media.ffprobe ? 'ok' : 'ontbreekt',
       ffmpeg: media.ffmpeg ? 'ok' : 'ontbreekt',
       uploads: media.uploadsEnabled ? (media.unverifiedAllowed && !media.ffprobe ? 'zonder controle (ALLOW_UNVERIFIED_UPLOADS)' : 'ok') : 'uitgeschakeld',
+      // Alleen voor de startknop op dezelfde computer: welk proces is dit en welke installatie.
+      ...(isLoopback(req) ? { pid: process.pid, appDir: config.appDir, dataDir: config.dataDir, port: config.port } : {}),
     });
   });
 
@@ -85,7 +103,15 @@ function createApp(overrides = {}) {
     const needsSetup = db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
     res.json({
       user, needsSetup, formats: Object.keys(FORMATS), maxUploadBytes: config.maxUploadBytes,
+      version: versionInfo(),
       media: user ? await mediaCheck() : undefined,
+      system: user ? {
+        storage: storage.status(),
+        dataSource: config.dataSource,
+        // Gegevens staan nog in de programmamap: bij een update zouden ze achterblijven.
+        dataInAppDir: config.dataSource === 'programmamap',
+        legacyDataLeft: user.isAdmin && config.dataSource === 'vast' ? config.legacyDataDir : null,
+      } : undefined,
     });
   });
 
@@ -97,7 +123,8 @@ function createApp(overrides = {}) {
     }
     const userId = db.tx(() => {
       if (db.prepare('SELECT COUNT(*) AS n FROM users').get().n > 0) throw new HttpError(409, 'Er is al een account aangemaakt');
-      return auth.createUser(db, req.body || {});
+      // Het eerste account is altijd beheerder.
+      return auth.createUser(db, { ...(req.body || {}), role: 'admin' });
     });
     auth.createSession(db, config, res, userId);
     res.status(201).json({ ok: true });
@@ -111,6 +138,7 @@ function createApp(overrides = {}) {
       limiter.fail(req.ip);
       throw new HttpError(401, 'E-mailadres of wachtwoord klopt niet');
     }
+    if (user.disabled_at) throw new HttpError(403, 'Dit account is uitgeschakeld. Neem contact op met een beheerder.');
     limiter.reset(req.ip);
     auth.createSession(db, config, res, user.id);
     res.json({ ok: true });
@@ -122,13 +150,14 @@ function createApp(overrides = {}) {
   });
 
   // ---------- Klant (deel-link) ----------
-  reviewRoutes(api, db, config);
+  reviewRoutes(api, db, config, { storage });
 
   // ---------- Team (inloggen verplicht) ----------
   const team = asyncRouter();
   team.use(auth.requireTeam(db));
-  const uploads = uploadRoutes(team, db, config);
-  teamRoutes(team, db, config, uploads);
+  const uploads = uploadRoutes(team, db, config, { access, storage });
+  teamRoutes(team, db, config, { ...uploads, access, storage });
+  adminRoutes(team, db, config, { access, storage, uploads });
 
   const runCleanup = () => uploads.cleanupExpired().then((r) => {
     if (r.removed || r.orphans) console.log(`Opruimen: ${r.removed} verlopen upload(s) en ${r.orphans} los(se) bestand(en) verwijderd`);
@@ -141,10 +170,41 @@ function createApp(overrides = {}) {
   app.use('/api', (req, res) => res.status(404).json({ error: 'Niet gevonden' }));
 
   // ---------- Frontend ----------
-  app.use(express.static(publicDir, { index: false, maxAge: '1h' }));
+  // Cache-aanpak: de HTML wordt altijd opnieuw gecontroleerd en verwijst naar bestanden onder
+  // /assets/<build>/…. De build-code verandert zodra een interfacebestand verandert, dus na een
+  // update laadt de browser met gewoon verversen alle nieuwe bestanden, ook geïmporteerde
+  // JavaScript-modules (via de import map, die /shared/, /app/ en /review/ omzet naar dezelfde build).
+  function renderPage(file) {
+    const b = build();
+    const prefix = `/assets/${b}`;
+    const importMap = JSON.stringify({ imports: { '/shared/': `${prefix}/shared/`, '/app/': `${prefix}/app/`, '/review/': `${prefix}/review/` } });
+    const html = fs.readFileSync(path.join(publicDir, file), 'utf8')
+      .replace(/(href|src)="\/(shared|app|review)\//g, `$1="${prefix}/$2/`)
+      .replace('<meta charset="utf-8">', `<meta charset="utf-8">\n  <meta name="app-version" content="${versionInfo().label}">\n  <script type="importmap">${importMap}</script>`);
+    const hash = crypto.createHash('sha256').update(importMap).digest('base64');
+    return { html, csp: CSP.replace("script-src 'self'", `script-src 'self' 'sha256-${hash}'`) };
+  }
+  const sendPage = (file) => (req, res) => {
+    const { html, csp } = renderPage(file);
+    res.setHeader('Content-Security-Policy', csp);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(html);
+  };
+
+  app.use('/assets/:build', (req, res, next) => {
+    // Alleen de huidige build mag "voor altijd" gecachet worden; een oude pagina die nog een
+    // oude build-URL vraagt, krijgt de actuele bestanden zonder ze onder die oude URL vast te leggen.
+    res.locals.immutable = req.params.build === build();
+    next();
+  }, express.static(publicDir, {
+    index: false,
+    setHeaders: (res) => res.setHeader('Cache-Control', res.locals.immutable ? 'public, max-age=31536000, immutable' : 'no-store'),
+  }));
+  // Oude, niet-geversioneerde paden blijven werken, maar worden altijd opnieuw gecontroleerd.
+  app.use(express.static(publicDir, { index: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
   app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
-  app.get('/r/:token', (req, res) => res.sendFile(path.join(publicDir, 'review', 'index.html')));
-  app.get(['/', '/login', '/projecten*', '/video*', '/team'], (req, res) => res.sendFile(path.join(publicDir, 'app', 'index.html')));
+  app.get('/r/:token', sendPage('review/index.html'));
+  app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief'], sendPage('app/index.html'));
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
@@ -159,7 +219,7 @@ function createApp(overrides = {}) {
 
   const needsSetup = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
   return {
-    app, db, config, uploads, setupToken, needsSetup, runCleanup, mediaCheck,
+    app, db, config, uploads, storage, access, setupToken, needsSetup, runCleanup, mediaCheck,
     stop() { clearInterval(cleanupTimer); },
   };
 }

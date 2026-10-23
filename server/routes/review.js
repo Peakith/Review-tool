@@ -1,5 +1,4 @@
 'use strict';
-const path = require('node:path');
 const { now } = require('../db');
 const { HttpError, changeStatus, OPEN_FOR_CLIENT } = require('../status');
 const { downloadFilename, contentDisposition } = require('../media');
@@ -9,7 +8,7 @@ const { versionDto, commentDtos, approvalDto } = require('../views');
  * Klant-API. Iedere aanvraag controleert opnieuw of de link bestaat en niet is
  * ingetrokken, en of de gevraagde versie bij deze video hoort en gedeeld is.
  */
-function reviewRoutes(router, db, config) {
+function reviewRoutes(router, db, config, { storage }) {
   router.use('/review/:token', (req, res, next) => {
     const token = String(req.params.token || '');
     const link = /^[A-Za-z0-9_-]{20,64}$/.test(token)
@@ -20,6 +19,12 @@ function reviewRoutes(router, db, config) {
     req.link = link;
     req.video = db.prepare('SELECT * FROM videos WHERE id = ?').get(link.video_id);
     if (!req.video) return next(new HttpError(404, 'Deze video bestaat niet meer.'));
+    req.project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.video.project_id);
+    // In de prullenbak: niet meer bereikbaar via klantlinks (ook niet de bestanden).
+    // De link zelf blijft ongewijzigd, zodat herstellen de toegang terugbrengt.
+    if (req.video.trashed_at || req.project.trashed_at) return next(new HttpError(410, 'Deze video is niet meer beschikbaar. Neem contact op met het productieteam.'));
+    // Gearchiveerd: nog te bekijken, maar niet meer open voor reacties of goedkeuring.
+    req.archived = !!(req.video.archived_at || req.project.archived_at);
     if (!link.last_used_at || Date.now() - Date.parse(link.last_used_at) > 60_000) {
       db.prepare('UPDATE share_links SET last_used_at = ? WHERE id = ?').run(now(), link.id);
     }
@@ -27,12 +32,12 @@ function reviewRoutes(router, db, config) {
   });
 
   const sharedVersions = (videoId) =>
-    db.prepare('SELECT * FROM versions WHERE video_id = ? AND shared_at IS NOT NULL ORDER BY number DESC').all(videoId);
+    db.prepare('SELECT * FROM versions WHERE video_id = ? AND shared_at IS NOT NULL AND trashed_at IS NULL ORDER BY number DESC').all(videoId);
 
   const getSharedVersion = (req) => {
     const id = Number(req.params.versionId);
     const ver = Number.isSafeInteger(id)
-      ? db.prepare('SELECT * FROM versions WHERE id = ? AND video_id = ? AND shared_at IS NOT NULL').get(id, req.video.id)
+      ? db.prepare('SELECT * FROM versions WHERE id = ? AND video_id = ? AND shared_at IS NOT NULL AND trashed_at IS NULL').get(id, req.video.id)
       : null;
     if (!ver) throw new HttpError(404, 'Deze versie is niet beschikbaar.');
     return ver;
@@ -40,6 +45,7 @@ function reviewRoutes(router, db, config) {
 
   /** Feedback en goedkeuring kunnen alleen op de nieuwste gedeelde versie, als die open staat. */
   const assertActionable = (req, ver) => {
+    if (req.archived) throw new HttpError(409, 'Dit project is gearchiveerd. Je kunt de video nog bekijken, maar niet meer reageren of goedkeuren.');
     const latest = sharedVersions(req.video.id)[0];
     if (!latest || latest.id !== ver.id) throw new HttpError(409, 'Er is inmiddels een nieuwere versie. Ververs de pagina om die te bekijken.');
     if (!OPEN_FOR_CLIENT.has(ver.status)) {
@@ -75,9 +81,10 @@ function reviewRoutes(router, db, config) {
   };
 
   router.get('/review/:token', (req, res) => {
-    const project = db.prepare('SELECT name, client_name FROM projects WHERE id = ?').get(req.video.project_id);
+    const project = req.project;
     const versions = sharedVersions(req.video.id);
     res.json({
+      archived: req.archived,
       title: req.video.title,
       project: { name: project.name, clientName: project.client_name },
       role: req.link.role,
@@ -203,24 +210,23 @@ function reviewRoutes(router, db, config) {
     res.json({ ok: true, replayed, status: currentStatus(ver.id) });
   });
 
-  router.get('/review/:token/versions/:versionId/media', (req, res) => {
+  // Klantmedia nooit in de browsercache bewaren: ingetrokken of weggegooid betekent direct geen toegang.
+  router.get('/review/:token/versions/:versionId/media', async (req, res) => {
     const ver = getSharedVersion(req);
-    res.sendFile(path.join(config.mediaDir, ver.stored_name), { headers: { 'Content-Type': ver.mime_type, 'Cache-Control': 'private, no-store' } });
+    await storage.send(res, ver.stored_name, { 'Content-Type': ver.mime_type, 'Cache-Control': 'private, no-store' });
   });
 
-  router.get('/review/:token/versions/:versionId/poster', (req, res) => {
+  router.get('/review/:token/versions/:versionId/poster', async (req, res) => {
     const ver = getSharedVersion(req);
     if (!ver.has_poster) throw new HttpError(404, 'Geen voorvertoning');
-    res.sendFile(path.join(config.mediaDir, `${ver.stored_name}.jpg`), { headers: { 'Cache-Control': 'private, no-store' } });
+    await storage.send(res, `${ver.stored_name}.jpg`, { 'Cache-Control': 'private, no-store' });
   });
 
-  router.get('/review/:token/versions/:versionId/download', (req, res) => {
+  router.get('/review/:token/versions/:versionId/download', async (req, res) => {
     if (!req.link.allow_download) throw new HttpError(403, 'Downloaden is voor deze link niet ingeschakeld.');
     const ver = getSharedVersion(req);
     const name = downloadFilename(`${req.video.title} - v${ver.number}`, ver.extension);
-    res.sendFile(path.join(config.mediaDir, ver.stored_name), {
-      headers: { 'Content-Type': ver.mime_type, 'Content-Disposition': contentDisposition(name) },
-    });
+    await storage.send(res, ver.stored_name, { 'Content-Type': ver.mime_type, 'Content-Disposition': contentDisposition(name), 'Cache-Control': 'private, no-store' });
   });
 }
 

@@ -10,8 +10,10 @@ if (!email || !name || !password) {
   process.exit(1);
 }
 try {
-  const id = createUser(openDb(loadConfig()), { email, name, password });
-  console.log(`Account aangemaakt (id ${id}) voor ${email}`);
+  // Via de commandoregel aangemaakte accounts zijn beheerder (noodroute als niemand meer kan beheren).
+  const config = loadConfig();
+  const id = createUser(openDb(config), { email, name, password, role: 'admin' });
+  console.log(`Beheerdersaccount aangemaakt (id ${id}) voor ${email} in ${config.dataDir}`);
 } catch (err) {
   console.error(err.message);
   process.exit(1);

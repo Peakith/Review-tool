@@ -6,14 +6,17 @@ const crypto = require('node:crypto');
 const { now } = require('./db');
 const { HttpError } = require('./status');
 const { extensionOf, FORMATS, probe, makePoster, resolveTools } = require('./media');
+const { diskFree } = require('./storage');
 
 /**
  * Hervatbare uploads in blokken. De browser stuurt blokken van ~8 MB met een
  * offset; een afgebroken blok wordt bij een nieuwe poging overschreven, zodat
  * grote bestanden niet in één keer hoeven te slagen.
  */
-function uploadRoutes(router, db, config) {
-  fs.mkdirSync(config.uploadTmpDir, { recursive: true });
+function uploadRoutes(router, db, config, { access, storage }) {
+  // De map voor tijdelijke uploads pas aanmaken als de opslag bereikbaar is (een ontbrekende
+  // externe schijf mag niet vervangen worden door een map op de interne schijf).
+  const ensureTmpDir = () => { storage.assertReady(); fs.mkdirSync(config.uploadTmpDir, { recursive: true }); };
   const tmpPath = (id) => path.join(config.uploadTmpDir, `${id}.part`);
   // Uploads waarvoor nu een blok binnenkomt of die worden afgerond; de opruiming slaat deze over.
   const busy = new Set();
@@ -33,7 +36,40 @@ function uploadRoutes(router, db, config) {
     return up;
   };
 
+  /**
+   * Is er genoeg ruimte voor `bytes` extra? Houdt rekening met de ingestelde vrije reserve
+   * en met wat lopende uploads nog gaan innemen. Gooit 507 met een concrete melding.
+   */
+  async function assertSpace(bytes) {
+    const disk = await diskFree(config.uploadTmpDir);
+    const pending = db.prepare('SELECT COALESCE(SUM(size_bytes - received_bytes), 0) AS n FROM uploads').get().n;
+    const needed = bytes + pending + config.minFreeBytes;
+    if (disk.free < needed) {
+      const gb = (n) => `${(n / 1024 ** 3).toFixed(1)} GB`;
+      throw Object.assign(new HttpError(507,
+        `Onvoldoende schijfruimte voor dit bestand. Nodig: ${gb(bytes)}${pending ? ` (plus ${gb(pending)} voor lopende uploads)` : ''} en een vrije reserve van ${gb(config.minFreeBytes)}; beschikbaar: ${gb(disk.free)}. Maak ruimte vrij (bijv. via Opslag › Prullenbak) of kies een andere opslaglocatie.`),
+      { data: { free: disk.free, needed } });
+    }
+  }
+
+  /** Waarvoor is de upload? Controleert het recht "uploaden" al vóór er data binnenkomt. */
+  function uploadTarget(req) {
+    const { projectId, videoId } = req.body || {};
+    if (videoId) {
+      const { video } = access.video(req, videoId, 'upload', { write: true });
+      return { projectId: video.project_id, videoId: video.id };
+    }
+    if (projectId) {
+      const { project } = access.project(req, projectId, 'upload', { write: true });
+      return { projectId: project.id, videoId: null };
+    }
+    // Zonder doel alleen voor beheerders (scripts en oudere clients).
+    if (!req.user.isAdmin) throw new HttpError(400, 'Geef aan voor welk project of welke video deze upload is.');
+    return { projectId: null, videoId: null };
+  }
+
   router.post('/uploads', async (req, res) => {
+    const target = uploadTarget(req);
     await assertMediaCheck();
     const { filename, size } = req.body || {};
     const ext = extensionOf(filename);
@@ -41,11 +77,13 @@ function uploadRoutes(router, db, config) {
     const bytes = Number(size);
     if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new HttpError(400, 'Ongeldige bestandsgrootte');
     if (bytes > config.maxUploadBytes) throw new HttpError(413, `Bestand is te groot (maximaal ${Math.round(config.maxUploadBytes / 1024 ** 3)} GB)`);
+    ensureTmpDir();
+    await assertSpace(bytes);
     const id = crypto.randomBytes(16).toString('hex');
     fs.writeFileSync(tmpPath(id), '');
     const at = now();
-    db.prepare('INSERT INTO uploads (id, user_id, original_filename, size_bytes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, req.user.id, path.basename(String(filename)), bytes, at, at);
+    db.prepare('INSERT INTO uploads (id, user_id, original_filename, size_bytes, project_id, video_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, req.user.id, path.basename(String(filename)), bytes, target.projectId, target.videoId, at, at);
     res.status(201).json({ id, chunkSize: config.chunkBytes, receivedBytes: 0 });
   });
 
@@ -101,17 +139,20 @@ function uploadRoutes(router, db, config) {
    * Zet een voltooide upload om naar een opgeslagen mediabestand. Het bestand
    * krijgt een willekeurige, permanente naam die los staat van de videotitel.
    */
-  async function finalize(uploadId, user) {
+  async function finalize(uploadId, user, target = {}) {
     const up = db.prepare('SELECT * FROM uploads WHERE id = ? AND user_id = ?').get(String(uploadId || ''), user.id);
     if (!up) throw new HttpError(400, 'Upload niet gevonden of verlopen. Start de upload opnieuw.');
     if (up.received_bytes !== up.size_bytes) throw new HttpError(400, 'De upload is nog niet compleet');
+    // Een upload mag alleen worden gebruikt voor het project/de video waarvoor hij is gestart.
+    if ((up.project_id && target.projectId && up.project_id !== target.projectId) || (up.video_id && up.video_id !== target.videoId)) {
+      throw new HttpError(400, 'Deze upload hoort bij een ander project of een andere video.');
+    }
     await assertMediaCheck();
+    storage.assertReady();
     busy.add(up.id);
     try {
       const ext = extensionOf(up.original_filename);
       const storedName = `${crypto.randomBytes(12).toString('hex')}.${ext}`;
-      fs.mkdirSync(config.mediaDir, { recursive: true });
-      const target = path.join(config.mediaDir, storedName);
       const source = tmpPath(up.id);
       const stat = await fsp.stat(source);
       if (stat.size !== up.size_bytes) throw new HttpError(400, 'De upload is onvolledig, probeer het opnieuw');
@@ -127,9 +168,12 @@ function uploadRoutes(router, db, config) {
           throw new HttpError(422, err.message);
         }
       }
-      await fsp.rename(source, target);
+      // Thumbnail maken vanuit het tijdelijke bestand, daarna beide in de opslag zetten.
+      const posterTmp = `${source}.jpg`;
+      const hasPoster = await makePoster(source, posterTmp, info?.duration, tools);
+      await storage.importFile(source, storedName);
+      if (hasPoster) await storage.importFile(posterTmp, `${storedName}.jpg`);
       db.prepare('DELETE FROM uploads WHERE id = ?').run(up.id);
-      const hasPoster = await makePoster(target, path.join(config.mediaDir, `${storedName}.jpg`), info?.duration, tools);
       return {
         originalFilename: up.original_filename,
         storedName,
@@ -159,8 +203,9 @@ function uploadRoutes(router, db, config) {
     }
     let orphans = 0;
     const known = new Set(db.prepare('SELECT id FROM uploads').all().map((u) => u.id));
-    for (const name of await fsp.readdir(config.uploadTmpDir)) {
-      const id = name.replace(/\.part$/, '');
+    const names = await fsp.readdir(config.uploadTmpDir).catch(() => []);
+    for (const name of names) {
+      const id = name.replace(/\.part(\.jpg)?$/, '');
       if (known.has(id) || busy.has(id)) continue;
       const file = path.join(config.uploadTmpDir, name);
       const stat = await fsp.stat(file).catch(() => null);
@@ -172,7 +217,18 @@ function uploadRoutes(router, db, config) {
     return { removed: expired.length, orphans };
   }
 
-  return { finalize, cleanupExpired };
+  /** Grootte van tijdelijke uploads (voor het opslagoverzicht). */
+  async function tmpUsage() {
+    let bytes = 0;
+    let files = 0;
+    for (const name of await fsp.readdir(config.uploadTmpDir).catch(() => [])) {
+      const st = await fsp.stat(path.join(config.uploadTmpDir, name)).catch(() => null);
+      if (st?.isFile()) { bytes += st.size; files++; }
+    }
+    return { bytes, files, active: db.prepare('SELECT COUNT(*) AS n FROM uploads').get().n };
+  }
+
+  return { finalize, cleanupExpired, assertSpace, tmpUsage };
 }
 
 module.exports = { uploadRoutes };

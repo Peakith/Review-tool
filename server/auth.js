@@ -40,13 +40,21 @@ function validateNewUser({ email, name, password }) {
   if (!password || String(password).length < 10) throw new HttpError(400, 'Kies een wachtwoord van minimaal 10 tekens');
 }
 
-function createUser(db, { email, name, password }) {
+/** role: 'admin' (beheerder, alle projecten en instellingen) of 'member' (alleen toegewezen projecten). */
+function createUser(db, { email, name, password, role = 'member' }) {
   validateNewUser({ email, name, password });
+  if (!['admin', 'member'].includes(role)) throw new HttpError(400, 'Onbekende rol');
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (exists) throw new HttpError(409, 'Er bestaat al een account met dit e-mailadres');
-  const info = db.prepare('INSERT INTO users (email, name, password_hash, created_at) VALUES (?, ?, ?, ?)')
-    .run(String(email).trim(), String(name).trim(), hashPassword(password), now());
+  const info = db.prepare('INSERT INTO users (email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(String(email).trim(), String(name).trim(), hashPassword(password), role, now());
   return Number(info.lastInsertRowid);
+}
+
+function setPassword(db, userId, password) {
+  if (!password || String(password).length < 10) throw new HttpError(400, 'Kies een wachtwoord van minimaal 10 tekens');
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), userId);
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
 }
 
 function createSession(db, config, res, userId) {
@@ -65,14 +73,14 @@ function destroySession(db, config, req, res) {
 function sessionUser(db, req) {
   const token = parseCookies(req.headers.cookie)[COOKIE];
   if (!token) return null;
-  const row = db.prepare(`SELECT u.id, u.email, u.name, s.expires_at FROM sessions s
+  const row = db.prepare(`SELECT u.id, u.email, u.name, u.role, u.disabled_at, s.expires_at FROM sessions s
     JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`).get(sha256(token));
   if (!row) return null;
-  if (row.expires_at < now()) {
+  if (row.expires_at < now() || row.disabled_at) {
     db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha256(token));
     return null;
   }
-  return { id: row.id, email: row.email, name: row.name };
+  return { id: row.id, email: row.email, name: row.name, role: row.role, isAdmin: row.role === 'admin' };
 }
 
 function requireTeam(db) {
@@ -104,6 +112,6 @@ function loginLimiter() {
 }
 
 module.exports = {
-  hashPassword, verifyPassword, sha256, randomToken, safeEqual, createUser, createSession,
+  hashPassword, verifyPassword, sha256, randomToken, safeEqual, createUser, setPassword, createSession,
   destroySession, sessionUser, requireTeam, loginLimiter,
 };

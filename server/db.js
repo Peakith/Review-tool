@@ -137,6 +137,16 @@ CREATE TABLE IF NOT EXISTS uploads (
   created_at TEXT NOT NULL
 );
 
+-- Toegang per project voor teamleden zonder beheerdersrol.
+-- level: view (bekijken/reageren) < upload < publish (publiceren/delen) < manage (beheren)
+CREATE TABLE IF NOT EXISTS project_members (
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  level TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (project_id, user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_videos_project ON videos(project_id);
 CREATE INDEX IF NOT EXISTS idx_versions_video ON versions(video_id);
 CREATE INDEX IF NOT EXISTS idx_comments_version ON comments(version_id);
@@ -149,6 +159,23 @@ const COLUMNS = [
   ['approvals', 'request_id', 'TEXT'],
   ['comments', 'request_id', 'TEXT'],
   ['uploads', 'updated_at', 'TEXT'],
+  // Rollen: bestaande accounts worden beheerder, zodat ze na de update alles blijven kunnen.
+  ['users', 'role', "TEXT NOT NULL DEFAULT 'admin'"],
+  ['users', 'disabled_at', 'TEXT'],
+  // Archief en prullenbak (zacht verwijderen; bestanden blijven tot definitief verwijderen).
+  ['projects', 'archived_at', 'TEXT'],
+  ['projects', 'archived_by', 'INTEGER'],
+  ['projects', 'trashed_at', 'TEXT'],
+  ['projects', 'trashed_by', 'INTEGER'],
+  ['videos', 'archived_at', 'TEXT'],
+  ['videos', 'archived_by', 'INTEGER'],
+  ['videos', 'trashed_at', 'TEXT'],
+  ['videos', 'trashed_by', 'INTEGER'],
+  ['versions', 'trashed_at', 'TEXT'],
+  ['versions', 'trashed_by', 'INTEGER'],
+  // Waarvoor een upload bedoeld is, zodat rechten al bij het begin gecontroleerd worden.
+  ['uploads', 'project_id', 'INTEGER'],
+  ['uploads', 'video_id', 'INTEGER'],
 ];
 
 function migrate(db) {

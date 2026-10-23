@@ -15,11 +15,11 @@ Eigen reviewplatform voor de filmagency: video's delen met klanten, feedback op 
 | Beveiliging | Accounts (scrypt-wachtwoorden, httpOnly-sessiecookie), CSRF-header, strikte CSP, `Referrer-Policy: no-referrer` | Elke klant-aanvraag (ook voor videobestanden) controleert op de server of de link geldig en niet ingetrokken is. |
 
 ### Datamodel (kort)
-- **project** → meerdere **video's**
-- **video**: *zichtbare titel*, akkoordgever (naam + e-mail), deel-links
+- **project** → meerdere **video's** (opleveringen), een **merk**, een **projectlink** (klantportaal) en **briefingonderdelen**
+- **video**: *zichtbare titel*, optioneel type / beeldverhouding / kanaal, akkoordgever (naam + e-mail), deel-links
 - **versie**: technische bestandsnaam, opgeslagen bestand, status, gedeeld-op
 - **status_events**: elke statuswijziging met oud → nieuw, gebeurtenis, wie (team, klant met opgegeven naam of geverifieerde akkoordgever) en tijdstip
-- **reacties** (met tijdstip en antwoorden), **feedbackrondes** en **goedkeuringen**: altijd gekoppeld aan één specifieke versie
+- **reacties** (met tijdstip en antwoorden; teamreacties intern of zichtbaar voor de klant), **feedbackrondes** en **goedkeuringen**: altijd gekoppeld aan één specifieke versie
 
 ## Snel starten op een Mac
 
@@ -57,7 +57,7 @@ brew install node ffmpeg
 
 | Wat | Standaardlocatie | Bij een update |
 |---|---|---|
-| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.2.0` | vervangen |
+| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.3.0` | vervangen |
 | Gegevens (database met accounts, projecten, reacties, links en rechten; video's in `media/`) | `~/Studio Review/gegevens` | blijft staan |
 | Back-ups | `~/Studio Review/backups` | blijft staan |
 | Instellingen | `~/Studio Review/instellingen.env` | blijft staan |
@@ -98,6 +98,71 @@ brew install node ffmpeg
   - Je ziet eerst hoeveel bestanden en hoeveel ruimte er vrijkomt, en je moet dat bevestigen.
   - Automatisch definitief verwijderen bestaat niet: dat staat bewust uit.
 
+## Klantportaal, merken, opleveringen en briefing
+
+**Klantportaal (projectlink)**
+- Eén vaste link per project (`/p/…`) geeft de klant een overzicht van alle video’s waarvan een versie is **gepubliceerd**. Je maakt de link via **Klantportaal** op de projectpagina.
+- Het portaal toont:
+  - de projectnaam en een korte introductie;
+  - per video een kaart met thumbnail, titel, type, de gepubliceerde versie en de status in gewone taal;
+  - de video’s gegroepeerd: *Wacht op jouw review*, *Feedback verstuurd*, *Goedgekeurd*;
+  - de briefingonderdelen die je met de klant deelt.
+- Bekijken, reageren en feedback versturen werkt precies zoals bij een reviewlink. Op de videopagina staat een link terug naar het overzicht.
+- **De klant ziet nooit:**
+  - concepten en nieuwe interne versies; een nieuwe versie verandert de klantweergave pas als je publiceert;
+  - interne notities;
+  - interne briefingonderdelen.
+
+  De server controleert dit ook bij directe verzoeken.
+- **Geen goedkeuringsrechten:** een projectlink kan nooit goedkeuren. Goedkeuren blijft per video, per exacte versie, via de persoonlijke akkoordlink (**Delen** bij de video).
+- **Intrekken:** het portaal én alle video’s die via het portaal zijn geopend, zijn direct niet meer bereikbaar. Afzonderlijke review- en akkoordlinks per video blijven werken; die trek je apart in via **Delen**. Het venster toont hoeveel er nog actief zijn.
+- **Vervangen:** dit maakt een nieuwe link; de oude werkt daarna niet meer.
+- **Let op, lokaal:** zolang de app op je Mac draait, begint de link met `http://localhost:3000`. Zo’n link werkt alleen op die Mac en is **niet bereikbaar voor klanten buiten je computer**. Het venster waarschuwt hiervoor. Voor echte klanttoegang is hosting nodig (zie *Nog nodig voor livegebruik*).
+
+**Klantweergave (voorbeeld voor het team)**
+- **Klantweergave** op de projectpagina en bij elke video opent dezelfde klantpagina’s, met dezelfde filters op de server, maar alleen-lezen en met een voorbeeldbalk. Zo controleer je precies wat de klant ziet, ook zonder actieve projectlink.
+
+**Merken**
+- **Merken** (beheerders) beheert Studio Brutaal en Moviemates: de merknaam, de accentkleur en het logo (PNG, JPG of WebP tot 2 MB; SVG is bewust niet toegestaan).
+  - De pagina toont een live voorbeeld.
+  - Zonder logo ziet de klant de naam met initialen.
+- Per project kies je het merk bij **Project bewerken**. Het merk verschijnt in het portaal en op alle reviewpagina’s van dat project.
+- Een kleur die op de donkere achtergrond slecht leesbaar is, wordt automatisch lichter getoond.
+- Een project zonder merk krijgt de standaard Studio Review-weergave.
+
+**Opleveringen**
+- Elke oplevering (hoofdvideo, teaser, cutdown, social, overig) is een eigen video. Een verbeterde montage is een nieuwe **versie** van dezelfde oplevering.
+- Per video kun je optioneel het type, de beeldverhouding en het bedoelde kanaal invullen. De beeldverhouding wordt automatisch herkend, bijvoorbeeld 9:16.
+- De projectpagina groepeert de opleveringen per type, met per oplevering de status, de nieuwste interne versie en de versie die de klant ziet.
+- Bestaande video’s blijven gewoon werken; type en kanaal zijn optioneel.
+
+**Briefing en referenties** (tabblad op de projectpagina)
+- Je kunt hier kwijt:
+  - een briefing als tekst;
+  - referentielinks (alleen `http`/`https`);
+  - bijlagen: PDF (tot 100 MB), afbeelding (PNG, JPG, WebP, GIF, tot 30 MB) of referentievideo (MP4, MOV, WebM).
+- Elk onderdeel is **intern** (standaard) of **zichtbaar voor de klant**. Dat zie je overal met een icoon én tekst.
+- Rechten:
+  - delen met de klant vraagt het recht *Publiceren en delen*;
+  - toevoegen vraagt *Uploaden*;
+  - lezen vraagt *Bekijken*.
+- Bestanden:
+  - worden op hun echte inhoud gecontroleerd; een HTML-bestand dat `.pdf` heet, wordt geweigerd;
+  - worden geserveerd met hun eigen type en een afgeschermde (sandbox-)beveiliging, zodat ze nooit als webpagina met scripts kunnen draaien;
+  - tellen mee in **Opslag**;
+  - gaan mee in back-up en herstel;
+  - komen bij weggooien in de **Prullenbak**.
+- Lukt opslaan niet, dan blijft je ingevulde tekst staan, ook na verversen.
+
+**Interne en zichtbare teamreacties**
+- Notities van het team zijn standaard **intern**. In het invoerveld kies je *Intern* of *Zichtbaar voor klant*.
+- Een antwoord op een klantreactie is standaard zichtbaar, met een vinkje *Alleen intern*. Onder een interne notitie blijft alles intern.
+- Je kunt per reactie wisselen: **Zichtbaar maken voor klant** of **Intern maken**.
+- **Wijziging bij deze update:** vóór deze versie zag de klant álle teamreacties op een gepubliceerde versie.
+  - Losse teamnotities van vóór de update zijn nu intern.
+  - Antwoorden van het team op klantreacties blijven zichtbaar.
+  - Wil je een oude notitie toch aan de klant tonen, kies dan *Zichtbaar maken voor klant*.
+
 ## Rechten per project
 
 Er zijn twee soorten accounts:
@@ -108,9 +173,9 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 
 | Niveau | Mag |
 |---|---|
-| Bekijken en reageren | afspelen, downloaden, reageren en reacties afhandelen |
-| Uploaden | + nieuwe video's en versies, titels wijzigen, klaarzetten |
-| Publiceren en delen | + publiceren naar de klant, reviewlinks en akkoordgever |
+| Bekijken en reageren | afspelen, downloaden, reageren, reacties afhandelen, briefing lezen, klantweergave bekijken |
+| Uploaden | + nieuwe video's en versies, (interne) briefingonderdelen, titels en opleveringsgegevens wijzigen, klaarzetten |
+| Publiceren en delen | + publiceren naar de klant, reviewlinks, klantportaal (projectlink), akkoordgever, briefing delen met de klant |
 | Beheren | + project bewerken, status corrigeren, archiveren, naar de prullenbak |
 
 - De server controleert dit bij elke aanvraag, ook voor videobestanden, thumbnails, reacties en uploads.
@@ -119,7 +184,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 - Klantlinks en de akkoordgever werken los van accounts, net als voorheen.
 
 ## Versie en cache
-- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.2.0 (build 325929cd)`. Het werkt ook zonder Git:
+- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.3.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
   - de versie komt uit `package.json`;
   - de build is een vingerafdruk van de interfacebestanden.
 - Na een update is gewoon verversen genoeg. De pagina zelf wordt altijd gecontroleerd, en alle scripts en stijlen (ook geïmporteerde modules) komen van een adres per build.
@@ -196,11 +261,13 @@ Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan
 ### Tests
 Alle tests gebruiken eigen, tijdelijke mappen en raken je echte gegevens in `~/Studio Review` niet aan.
 ```bash
-npm test                                                  # 56 servertests (vereist ffmpeg)
-CHROME_PATH=/pad/naar/chrome npm run test:browser         # klant- en teamflow in een echte browser (51 controles)
-CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer  # rechten, opslag, back-ups, prullenbak, archief (23)
-CHROME_PATH=/pad/naar/chrome npm run test:browser:update  # update met de vorige interface in de browsercache (7)
-npm run test:update-zip                                   # ZIP-update: vorige versie → nieuwe map → gegevens overgenomen (13)
+npm test                                                   # 73 servertests (vereist ffmpeg)
+CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (51 controles)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rechten, opslag, back-ups, prullenbak, archief (23)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal, merk, opleveringen, briefing, desktop + mobiel (51)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:update   # update met de vorige interface in de browsercache (7)
+npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (13)
+npm run test:upgrade                                       # bijwerken vanaf bouwronde 1 met echte gegevens + oude back-up terugzetten (15)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;
@@ -209,9 +276,12 @@ npm run test:update-zip                                   # ZIP-update: vorige v
   - geheugengebruik bij een bestand van 400 MB;
   - verhuizen van gegevens, te weinig schijfruimte en een ontbrekende externe schijf;
   - cacheheaders;
+  - klantportaal: alleen gepubliceerde informatie, geen goedkeuringsrechten, intrekken en vervangen, interne reacties en interne versies ook niet via directe verzoeken;
+  - briefing: zichtbaarheid, rechten, bestandscontrole (geen HTML/SVG/vermomde bestanden), veilige headers, prullenbak, opslag, back-up en herstel van bijlagen;
+  - merken: kleur, logo (geen SVG), alleen beheerders;
   - de start- en stopknop: overnemen van een vorige installatie, een tweede klik, een vreemd programma op de poort en een andere installatie op de poort.
 - De browsertests maken zelf H.264/AAC-MP4's. Ze hebben een Chrome **met H.264** nodig, zoals Google Chrome of [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/). De Chromium van Playwright speelt geen H.264 af.
-- `test:browser:update` en `test:update-zip` vragen een Git-checkout, omdat ze de vorige versie uit de geschiedenis halen.
+- `test:browser:update`, `test:update-zip` en `test:upgrade` vragen een Git-checkout, omdat ze de vorige versie uit de geschiedenis halen.
 
 ### Instellingen
 Zet instellingen in **`~/Studio Review/instellingen.env`**. Die blijft bij updates bewaard.
@@ -248,7 +318,7 @@ Zet instellingen in **`~/Studio Review/instellingen.env`**. Die blijft bij updat
 Zie **[DEPLOY.md](DEPLOY.md)** voor een afgeschermde testomgeving met Docker en Caddy (HTTPS en een wachtwoord). Zie **[ACCEPTATIETEST.md](ACCEPTATIETEST.md)** om de klantflow zelf te doorlopen en voor de handmatige browsertestlijst.
 
 ### Nog nodig voor livegebruik
-1. **Hosting**: een server of VPS met Docker, een domein (DNS A-record) en een persistente schijf (zie DEPLOY.md).
+1. **Hosting**: een server of VPS met Docker, een domein (DNS A-record) en een persistente schijf (zie DEPLOY.md). Pas dan zijn project-, review- en akkoordlinks bereikbaar voor klanten; lokaal beginnen ze met `localhost` en werken ze alleen op je eigen Mac. Zet dan ook `PUBLIC_URL`.
 2. **Back-ups**: lokaal ingebouwd (zie *Gegevens, back-ups en opslag*). Zet de back-upmap bij voorkeur op een andere schijf, of kopieer hem regelmatig naar een externe schijf. Voor objectopslag (S3, R2) is nog een opslagadapter nodig.
 3. **E-mail (niet gebouwd)**: links worden nu gekopieerd en zelf verstuurd. Voor uitnodigingen en meldingen is een SMTP-dienst nodig.
 4. **Verificatie van de akkoordgever**: nu via het bezit van een persoonlijke, intrekbare link. Een sterkere controle (eenmalige code per e-mail) vraagt om punt 3.

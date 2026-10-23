@@ -11,6 +11,9 @@ const { uploadRoutes } = require('./uploads');
 const { teamRoutes } = require('./routes/team');
 const { reviewRoutes } = require('./routes/review');
 const { adminRoutes } = require('./routes/admin');
+const { portalRoutes } = require('./routes/portal');
+const { briefingRoutes } = require('./routes/briefing');
+const { brandRoutes, brandLogoRoute } = require('./routes/brands');
 const { FORMATS, toolStatus } = require('./media');
 const { createLocalStorage } = require('./storage');
 const { createAccess } = require('./access');
@@ -151,6 +154,8 @@ function createApp(overrides = {}) {
 
   // ---------- Klant (deel-link) ----------
   reviewRoutes(api, db, config, { storage });
+  portalRoutes(api, db, config, { storage });
+  brandLogoRoute(api, db, config, { storage });
 
   // ---------- Team (inloggen verplicht) ----------
   const team = asyncRouter();
@@ -158,6 +163,8 @@ function createApp(overrides = {}) {
   const uploads = uploadRoutes(team, db, config, { access, storage });
   teamRoutes(team, db, config, { ...uploads, access, storage });
   adminRoutes(team, db, config, { access, storage, uploads });
+  briefingRoutes(team, db, config, { access, storage, uploads });
+  brandRoutes(team, db, config, { access, storage });
 
   const runCleanup = () => uploads.cleanupExpired().then((r) => {
     if (r.removed || r.orphans) console.log(`Opruimen: ${r.removed} verlopen upload(s) en ${r.orphans} los(se) bestand(en) verwijderd`);
@@ -204,7 +211,11 @@ function createApp(overrides = {}) {
   app.use(express.static(publicDir, { index: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
   app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
   app.get('/r/:token', sendPage('review/index.html'));
-  app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief'], sendPage('app/index.html'));
+  app.get('/p/:token', sendPage('review/portal.html'));
+  // Voorbeeldweergave voor het team: dezelfde klantpagina's, gevuld via het teamaccount.
+  app.get('/voorbeeld/project/:id', sendPage('review/portal.html'));
+  app.get('/voorbeeld/video/:id', sendPage('review/index.html'));
+  app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief', '/merken'], sendPage('app/index.html'));
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
@@ -212,7 +223,8 @@ function createApp(overrides = {}) {
     const expected = err instanceof HttpError;
     if (status >= 500 && !expected) console.error(err);
     if (res.headersSent) return res.end();
-    const message = status >= 500 && !expected ? 'Er ging iets mis op de server' : err.message;
+    const message = err.type === 'entity.too.large' ? 'Het bestand is te groot.'
+      : status >= 500 && !expected ? 'Er ging iets mis op de server' : err.message;
     if (req.path.startsWith('/api')) res.status(status).json({ error: message });
     else res.status(status).send(message);
   });

@@ -1,6 +1,6 @@
 {
   "name": "review-tool",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Videoreviewplatform voor filmagency: delen, feedback, versies en goedkeuring.",
   "main": "server/index.js",
@@ -15,7 +15,9 @@
     "test:browser": "node --disable-warning=ExperimentalWarning scripts/browser-test.js",
     "test:browser:beheer": "node --disable-warning=ExperimentalWarning scripts/browser-admin-test.js",
     "test:browser:update": "node --disable-warning=ExperimentalWarning scripts/browser-update-test.js",
+    "test:browser:portaal": "node --disable-warning=ExperimentalWarning scripts/browser-portal-test.js",
     "test:update-zip": "WORKTREE=1 node --disable-warning=ExperimentalWarning scripts/zip-update-test.js",
+    "test:upgrade": "node --disable-warning=ExperimentalWarning scripts/upgrade-test.js",
     "check": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/check.js",
     "backup": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/backup.js",
     "herstel": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/restore.js",

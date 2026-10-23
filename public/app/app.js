@@ -6,7 +6,8 @@ import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom, commentCounts } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
 import { configureUploads, enqueue, checkFile, suggestTitle, createUploadTray, onUploadsChange } from './uploads.js';
-import { viewTeam, viewStorage, viewTrash, viewArchive, can, menuButton } from './admin.js';
+import { viewTeam, viewStorage, viewTrash, viewArchive, viewBrands, can, menuButton } from './admin.js';
+import { viewBriefing } from './briefing.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -47,6 +48,8 @@ async function route() {
   let m;
   const views = [
     [/^\/projecten\/(\d+)$/, (id) => viewProject(Number(id)), 'projects'],
+    [/^\/projecten\/(\d+)\/briefing$/, (id) => viewProject(Number(id), 'briefing'), 'projects'],
+    [/^\/merken$/, () => (session.user.isAdmin ? viewBrands(ctx()) : viewNotFound()), 'brands'],
     [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
     [/^\/team$/, () => viewTeam(ctx()), 'team'],
     [/^\/opslag$/, () => (session.user.isAdmin ? viewStorage(ctx()) : viewNotFound()), 'storage'],
@@ -100,6 +103,7 @@ function ensureShell() {
         session.user.isAdmin
           ? h('a', { href: '/team', 'data-nav': true, dataset: { section: 'team' } }, icon('users'), 'Team & rechten')
           : h('a', { href: '/team', 'data-nav': true, dataset: { section: 'team' } }, icon('users'), 'Mijn account'),
+        session.user.isAdmin ? h('a', { href: '/merken', 'data-nav': true, dataset: { section: 'brands' } }, icon('palette'), 'Merken') : null,
         session.user.isAdmin ? h('a', { href: '/opslag', 'data-nav': true, dataset: { section: 'storage' } }, icon('server'), 'Opslag & back-ups') : null),
       h('div', { class: 'side-label' }, 'Recent'),
       sidebarProjects),
@@ -127,7 +131,7 @@ function setActiveNav(section) {
   shellEl.querySelectorAll('.side-nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.section === section && (section !== 'projects' || location.pathname === '/')));
   shellEl.querySelectorAll('.side-projects a').forEach((a) => {
     const id = a.dataset.project;
-    a.classList.toggle('is-active', location.pathname === `/projecten/${id}` || a.dataset.current === 'true');
+    a.classList.toggle('is-active', location.pathname.startsWith(`/projecten/${id}`) || a.dataset.current === 'true');
   });
 }
 
@@ -385,19 +389,35 @@ function projectCard(p) {
 async function projectDialog({ title, project, submitLabel }) {
   const name = h('input', { name: 'name', required: true, maxlength: '200', placeholder: 'Bijv. Voorjaarscampagne 2026', value: project?.name || '', autofocus: true });
   const client = h('input', { name: 'clientName', maxlength: '200', placeholder: 'Bijv. Bakkerij Jansen', value: project?.clientName || '' });
+  const brands = await api('GET', '/api/brands').catch(() => []);
+  const brand = h('select', { name: 'brandId', 'aria-label': 'Merk' },
+    h('option', { value: '' }, 'Geen merk (standaard Studio Review)'),
+    brands.map((b) => h('option', { value: b.id }, b.name)));
+  brand.value = project?.brandId ? String(project.brandId) : '';
+  const intro = h('textarea', { name: 'portalIntro', rows: '3', maxlength: '2000', placeholder: 'Bijv. “Hoi! Hier vind je alle video’s voor de voorjaarscampagne. Laat per video je feedback achter.”' });
+  intro.value = project?.portalIntro || '';
+  const draftKey = `project-dialog-${project?.id || 'nieuw'}`;
+  if (!project && draftStore.get(draftKey)) intro.value = draftStore.get(draftKey);
+  intro.addEventListener('input', () => draftStore.set(draftKey, intro.value));
   let result = null;
   await openDialog({
     title,
-    body: [field('Projectnaam', name), field('Klant', client, 'Zichtbaar voor de klant boven de video.')],
+    body: [
+      field('Projectnaam', name),
+      field('Klant', client, 'Zichtbaar voor de klant boven de video’s.'),
+      field('Merk', brand, 'Bepaalt logo, naam en accentkleur van de klantweergave (portaal en reviewlinks). Merken beheer je onder “Merken”.'),
+      field('Introductie in het klantportaal (optioneel)', intro, 'Korte tekst bovenaan het portaal. Alleen zichtbaar via de projectlink.'),
+    ],
     actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'),
       h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, submitLabel))],
     onSubmit: async () => {
       try {
-        result = { name: name.value, clientName: client.value };
+        result = { name: name.value, clientName: client.value, brandId: brand.value ? Number(brand.value) : null, portalIntro: intro.value };
         result.response = project
           ? await api('PATCH', `/api/projects/${project.id}`, result)
           : await api('POST', '/api/projects', result);
-      } catch (err) { toast(err.message, 'error'); result = null; return false; }
+        draftStore.set(draftKey, '');
+      } catch (err) { toast(`${err.message} Je invoer is bewaard.`, 'error'); result = null; return false; }
     },
   });
   return result;
@@ -496,7 +516,9 @@ async function setArchived(type, id, name, archived) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-async function viewProject(id) {
+const KIND_ORDER = [['main', 'Hoofdvideo'], ['teaser', 'Teasers'], ['cutdown', 'Cutdowns'], ['social', 'Social'], ['other', 'Overig'], [null, 'Zonder type']];
+
+async function viewProject(id, tab = 'videos') {
   const params = new URLSearchParams(location.search);
   const showArchived = params.get('archief') === '1';
   const project = await api('GET', `/api/projects/${id}${showArchived ? '?archived=1' : ''}`);
@@ -544,15 +566,37 @@ async function viewProject(id) {
         action: button('Filters wissen', { onClick: () => { state.q = ''; search.value = ''; state.filter = 'all'; draw(); } }) }));
       return;
     }
+    // Opleveringen gegroepeerd per type, zodra er types zijn ingevuld.
+    if (project.videos.some((v) => v.meta?.kind)) {
+      mount(listEl, KIND_ORDER.map(([kind, label]) => {
+        const rows = shown.filter((v) => (v.meta?.kind || null) === kind);
+        return rows.length ? h('div', { class: 'kind-group', role: 'group', 'aria-label': label },
+          h('h2', { class: 'kind-head' }, label, h('span', { class: 'seg-count' }, rows.length)),
+          rows.map((v) => videoRow(v, reload, { mayUpload, mayManage }))) : null;
+      }));
+      return;
+    }
     mount(listEl, shown.map((v) => videoRow(v, reload, { mayUpload, mayManage })));
   }
   search.addEventListener('input', () => { state.q = search.value; draw(); });
+
+  const isVideos = tab === 'videos';
+  const tabs = h('nav', { class: 'page-tabs', 'aria-label': 'Projectonderdelen' },
+    h('a', { href: `/projecten/${project.id}`, 'data-nav': true, class: isVideos ? 'is-active' : '', 'aria-current': isVideos ? 'page' : null }, icon('film'), 'Video’s', h('span', { class: 'seg-count' }, project.videos.length)),
+    h('a', { href: `/projecten/${project.id}/briefing`, 'data-nav': true, class: isVideos ? '' : 'is-active', 'aria-current': isVideos ? null : 'page' }, icon('clipboard'), 'Briefing & referenties',
+      h('span', { class: 'seg-count', dataset: { count: 'briefing' } }, project.briefingCount),
+      h('span', { class: 'badge badge-visible', title: 'Onderdelen die de klant kan bekijken', dataset: { count: 'shared' }, hidden: !project.sharedBriefingCount }, icon('eye'), h('span', {}, project.sharedBriefingCount))));
+  const briefingHost = h('div', {});
 
   const content = h('div', { class: 'page page-drop' },
     pageHeader({
       crumbs: [{ label: 'Projecten', href: '/' }],
       title: h('h1', { class: 'page-title', title: project.name }, project.name),
-      meta: [project.clientName ? h('span', {}, project.clientName) : null, h('span', {}, plural(project.videos.length, 'video', 'video’s'))],
+      meta: [
+        project.clientName ? h('span', {}, project.clientName) : null,
+        h('span', {}, plural(project.videos.length, 'video', 'video’s')),
+        brandChip(project.brand),
+      ],
       actions: [
         mayManage ? menuButton([
           ['Project bewerken…', () => editProject(project), { icon: 'edit' }],
@@ -560,21 +604,44 @@ async function viewProject(id) {
             : ['Archiveren', () => setArchived('project', project.id, project.name, true), { icon: 'history' }],
           ['Naar prullenbak…', () => moveToTrash('project', project.id, project.name, () => navigate('/')), { icon: 'trash', danger: true }],
         ], 'Projectacties') : null,
-        mayUpload ? button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }) : null,
+        h('a', { class: 'btn btn-secondary', href: `/voorbeeld/project/${project.id}`, target: '_blank', rel: 'noopener', title: 'Bekijk het portaal precies zoals de klant het ziet' }, icon('eye'), h('span', { class: 'btn-label' }, 'Klantweergave')),
+        can(project.myLevel, 'publish') ? button('Klantportaal', { icon: 'globe', onClick: () => portalDialog(project), 'aria-label': 'Klantportaal: projectlink delen of beheren' }) : null,
+        mayUpload && isVideos ? button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }) : null,
       ],
     }),
     archived ? h('div', { class: 'notice notice-info page-notice' }, icon('history'),
       h('span', {}, h('strong', {}, 'Dit project is gearchiveerd. '), 'Alles blijft bewaard en is te bekijken, maar uploaden, publiceren en reageren kan niet. Klanten kunnen hun links nog openen.'),
       mayManage ? button('Uit archief halen', { size: 'sm', onClick: () => setArchived('project', project.id, project.name, false) }) : null) : null,
     !can(project.myLevel, 'upload') && !archived ? h('p', { class: 'small muted page-notice' }, icon('lock'), `Je rechten in dit project: ${({ view: 'bekijken en reageren', publish: 'publiceren en delen' })[project.myLevel] || project.myLevel}.`) : null,
-    project.videos.length ? h('div', { class: 'toolbar' }, h('div', { class: 'search toolbar-search' }, icon('search'), search), filterBar) : null,
-    listEl,
-    project.archivedVideoCount || showArchived ? h('p', { class: 'small' }, h('a', { href: showArchived ? location.pathname : `${location.pathname}?archief=1`, 'data-nav': true },
-      showArchived ? 'Gearchiveerde video’s verbergen' : `${plural(project.archivedVideoCount, 'gearchiveerde video', 'gearchiveerde video’s')} tonen`)) : null,
-    project.videos.length && mayUpload ? h('p', { class: 'drop-hint small muted' }, icon('upload'), 'Tip: sleep bestanden op deze pagina om nieuwe video’s toe te voegen. Een nieuwe versie van een bestaande video upload je vanaf die video.') : null);
-  if (mayUpload) makeDropTarget(content, (files) => addVideos(project, files, onDone), 'Loslaten om als nieuwe video’s toe te voegen');
+    tabs,
+    isVideos ? [
+      project.videos.length ? h('div', { class: 'toolbar' }, h('div', { class: 'search toolbar-search' }, icon('search'), search), filterBar) : null,
+      listEl,
+      project.archivedVideoCount || showArchived ? h('p', { class: 'small' }, h('a', { href: showArchived ? location.pathname : `${location.pathname}?archief=1`, 'data-nav': true },
+        showArchived ? 'Gearchiveerde video’s verbergen' : `${plural(project.archivedVideoCount, 'gearchiveerde video', 'gearchiveerde video’s')} tonen`)) : null,
+      project.videos.length && mayUpload ? h('p', { class: 'drop-hint small muted' }, icon('upload'), 'Tip: sleep bestanden op deze pagina om nieuwe video’s toe te voegen. Een nieuwe versie van een bestaande video upload je vanaf die video.') : null,
+    ] : briefingHost);
+  if (mayUpload && isVideos) makeDropTarget(content, (files) => addVideos(project, files, onDone), 'Loslaten om als nieuwe video’s toe te voegen');
   mount(pageEl, content);
-  draw();
+  if (isVideos) draw();
+  else {
+    // Aantallen in het tabblad actueel houden na toevoegen, delen of weggooien.
+    const onCounts = (total, shared) => {
+      tabs.querySelector('[data-count=briefing]').textContent = String(total);
+      const badge = tabs.querySelector('[data-count=shared]');
+      badge.hidden = !shared;
+      badge.lastChild.textContent = String(shared);
+    };
+    cleanup = await viewBriefing({ project, host: briefingHost, session, onCounts }) || (() => {});
+  }
+}
+
+/** Merk van een project als klein label (kleurstip + naam). */
+function brandChip(brand) {
+  if (!brand) return null;
+  const dot = h('span', { class: 'brand-dot', 'aria-hidden': 'true' });
+  if (brand.accent) dot.style.setProperty('background', brand.accent);
+  return h('span', { class: 'brand-chip', title: 'Merk van de klantweergave' }, dot, brand.name);
 }
 
 function videoRow(v, reload, { mayUpload, mayManage }) {
@@ -611,12 +678,14 @@ function videoRow(v, reload, { mayUpload, mayManage }) {
     input.select();
   }
 
+  const meta = [v.meta?.kindLabel, v.meta?.aspect, v.meta?.channel].filter(Boolean).join(' · ');
   return h('div', { class: 'video-row', role: 'listitem', onClick: (e) => { if (!e.target.closest('button, input, a, .menu-wrap')) navigate(`/video/${v.id}`); } },
-    h('a', { href: `/video/${v.id}`, 'data-nav': true, class: 'thumb', tabindex: '-1', 'aria-hidden': 'true' },
+    h('a', { href: `/video/${v.id}`, 'data-nav': true, class: `thumb${v.meta?.orientation === 'staand' ? ' is-portrait' : ''}`, tabindex: '-1', 'aria-hidden': 'true' },
       posterImg(v.posterVersionId),
       lv?.duration ? h('span', { class: 'thumb-duration' }, timecode(lv.duration)) : null),
     h('div', { class: 'video-row-main' },
       titleWrap,
+      meta ? h('div', { class: 'video-row-meta small muted' }, meta) : null,
       h('div', { class: 'video-versions' },
         h('span', { class: 'ver-chip', title: 'Nieuwste versie intern' }, h('span', { class: 'muted' }, 'Intern'), ` v${lv?.number ?? '–'}`, lv ? statusPill(lv.status, { small: true }) : null),
         h('span', { class: `ver-chip${sv ? '' : ' is-none'}`, title: 'Versie die de klant via de link ziet' }, icon('eye'),
@@ -676,10 +745,19 @@ async function viewVideo(id) {
       canWrite: true,
       filter,
       activeId,
-      isOwnTeamComment: (c) => c.authorType === 'team' && c.authorName === session.user.name,
+      isOwnTeamComment: (c) => c.authorType === 'team' && c.userId === session.user.id,
+      canShare: can(level, 'publish'),
       onSeek: (t, cid) => { player.seek(t); activeId = cid; drawComments(); },
-      onReply: async (parentId, body) => {
-        try { await api('POST', `/api/versions/${version.id}/comments`, { parentId, body }); await reloadComments(); toast('Antwoord geplaatst', 'success'); return true; } catch (err) { toast(err.message, 'error'); return false; }
+      onReply: async (parentId, body, { internal } = {}) => {
+        try {
+          await api('POST', `/api/versions/${version.id}/comments`, { parentId, body, internal });
+          await reloadComments();
+          toast(internal ? 'Intern antwoord geplaatst (de klant ziet dit niet)' : 'Antwoord geplaatst. De klant ziet dit bij deze versie.', 'success');
+          return true;
+        } catch (err) { toast(`${err.message} Je tekst is bewaard.`, 'error'); return false; }
+      },
+      onVisibility: async (cid, internal) => {
+        try { await api('PATCH', `/api/comments/${cid}`, { internal }); await reloadComments(); toast(internal ? 'Reactie is nu intern' : 'De klant ziet deze reactie nu', 'success'); } catch (err) { toast(err.message, 'error'); drawComments(); }
       },
       onResolve: async (cid, resolved) => {
         try { await api('POST', `/api/comments/${cid}/resolve`, { resolved }); await reloadComments(); toast(resolved ? 'Reactie afgehandeld. De status van de versie blijft ongewijzigd.' : 'Reactie heropend', 'success'); } catch (err) { toast(err.message, 'error'); drawComments(); }
@@ -697,12 +775,27 @@ async function viewVideo(id) {
   // Wat mag deze gebruiker hier? (de server controleert dit ook; dit bepaalt alleen welke knoppen er staan)
   const may = (need) => can(level, need) && !archived;
 
+  // Nieuwe teamnotities zijn standaard intern; expliciet kiezen om iets met de klant te delen.
+  let shareWithClient = false;
+  const visibilityToggle = h('div', { class: 'segmented segmented-sm composer-visibility', role: 'group', 'aria-label': 'Zichtbaarheid van je reactie' });
+  const drawVisibility = () => mount(visibilityToggle,
+    h('button', { type: 'button', 'aria-pressed': String(!shareWithClient), onClick: () => { shareWithClient = false; drawVisibility(); } }, icon('lock'), 'Intern'),
+    h('button', { type: 'button', 'aria-pressed': String(shareWithClient), onClick: () => { shareWithClient = true; drawVisibility(); }, title: 'De klant ziet deze reactie bij deze versie (zodra die gepubliceerd is)' }, icon('eye'), 'Zichtbaar voor klant'));
+  drawVisibility();
   const composer = createComposer({
     player,
-    placeholder: 'Interne notitie of antwoord bij dit moment…',
+    placeholder: 'Notitie bij dit moment…',
     draftKey: `team-draft-${version.id}`,
+    before: visibilityToggle,
     onSubmit: async (body, tc) => {
-      try { await api('POST', `/api/versions/${version.id}/comments`, { body, timecode: tc }); await reloadComments(); toast('Reactie geplaatst', 'success'); return true; } catch (err) { toast(`${err.message} Je tekst is bewaard.`, 'error'); return false; }
+      try {
+        await api('POST', `/api/versions/${version.id}/comments`, { body, timecode: tc, internal: !shareWithClient });
+        await reloadComments();
+        toast(shareWithClient ? 'Reactie geplaatst; de klant ziet deze bij deze versie.' : 'Interne notitie geplaatst', 'success');
+        shareWithClient = false;
+        drawVisibility();
+        return true;
+      } catch (err) { toast(`${err.message} Je tekst is bewaard.`, 'error'); return false; }
     },
   });
 
@@ -751,10 +844,13 @@ async function viewVideo(id) {
       crumbs: [{ label: 'Projecten', href: '/' }, { label: video.project.name, href: `/projecten/${video.project.id}` }],
       title: titleEditor(video, may('upload')),
       meta: [
+        deliveryMeta(video, may('upload')),
         h('span', { class: 'meta-item' }, h('span', { class: 'muted' }, 'Intern nieuwste: '), `Versie ${latest.number}`),
         h('span', { class: 'meta-item' }, icon('eye'), h('span', { class: 'muted' }, ' Klant ziet: '), clientVersion ? `Versie ${clientVersion.number}` : 'nog niets gedeeld'),
       ],
-      actions: [versionSelect, newVersionBtn, shareBtn, moreMenu(video, version, { level, archived })],
+      actions: [versionSelect, newVersionBtn,
+        h('a', { class: 'btn btn-secondary', href: `/voorbeeld/video/${video.id}`, target: '_blank', rel: 'noopener', title: 'Zo ziet de klant deze video (alleen gepubliceerde versies, zonder interne notities)' }, icon('eye'), h('span', { class: 'btn-label' }, 'Klantweergave')),
+        shareBtn, moreMenu(video, version, { level, archived })],
     }),
     archived ? h('div', { class: 'notice notice-info page-notice' }, icon('history'), h('span', {}, h('strong', {}, 'Gearchiveerd. '), 'Deze video is alleen te bekijken. Klanten kunnen hun link nog openen, maar niet meer reageren of goedkeuren.')) : null,
     publishBar(video, version, latest, clientVersion, refresh, may),
@@ -777,6 +873,44 @@ async function viewVideo(id) {
     if (document.visibilityState === 'visible' && !document.querySelector('.reply-box:not([hidden]) textarea, dialog[open]')) reloadComments().catch(() => {});
   }, 30_000);
   cleanup = () => { clearInterval(poll); player.destroy(); composer.destroy(); };
+}
+
+const KIND_LABELS = { main: 'Hoofdvideo', teaser: 'Teaser', cutdown: 'Cutdown', social: 'Social', other: 'Overig' };
+const ASPECTS = ['16:9', '9:16', '1:1', '4:5', '4:3', '21:9'];
+
+/** Type · verhouding · kanaal van de oplevering, met een knop om ze aan te passen. */
+function deliveryMeta(video, editable) {
+  const m = video.meta || {};
+  const parts = [m.kindLabel, m.aspect ? `${m.aspect}${m.aspectDetected ? ' (herkend)' : ''}` : null, m.channel].filter(Boolean);
+  return h('span', { class: 'meta-item delivery-meta' },
+    parts.length ? parts.join(' · ') : h('span', { class: 'muted' }, 'Type nog niet ingevuld'),
+    editable ? h('button', { type: 'button', class: 'link-btn', onClick: () => detailsDialog(video) }, icon('edit'), parts.length ? 'Wijzigen' : 'Invullen') : null);
+}
+
+async function detailsDialog(video) {
+  const kind = h('select', { 'aria-label': 'Type video' }, h('option', { value: '' }, 'Geen type'), Object.entries(KIND_LABELS).map(([k, l]) => h('option', { value: k }, l)));
+  kind.value = video.kind || '';
+  const aspect = h('select', { 'aria-label': 'Beeldverhouding' },
+    h('option', { value: '' }, video.meta?.aspectDetected ? `Automatisch (${video.meta.aspect})` : 'Automatisch uit het bestand'),
+    ASPECTS.map((a) => h('option', { value: a }, a)));
+  aspect.value = video.aspectRatio || '';
+  const channel = h('input', { type: 'text', maxlength: '80', value: video.channel || '', placeholder: 'Bijv. Instagram Reels, YouTube, tv-spot' });
+  await openDialog({
+    title: 'Gegevens van deze oplevering',
+    body: [
+      h('p', { class: 'small muted' }, 'Elke oplevering (hoofdvideo, teaser, social…) is een eigen video. Een verbeterde montage upload je als nieuwe versie van dezelfde oplevering. De klant ziet deze gegevens alleen bij gepubliceerde video’s.'),
+      h('div', { class: 'form-grid is-2' }, field('Type', kind), field('Beeldverhouding', aspect)),
+      field('Bedoeld kanaal (optioneel)', channel),
+    ],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, 'Opslaan'))],
+    onSubmit: async () => {
+      try {
+        await api('PATCH', `/api/videos/${video.id}`, { kind: kind.value || null, aspectRatio: aspect.value || null, channel: channel.value });
+        toast('Gegevens opgeslagen', 'success');
+        route();
+      } catch (err) { toast(err.message, 'error'); return false; }
+    },
+  });
 }
 
 function titleEditor(video, editable) {
@@ -999,12 +1133,13 @@ async function shareDialog(video, refresh) {
   const approverName = h('input', { type: 'text', value: video.approverName, placeholder: 'Naam', 'aria-label': 'Naam akkoordgever', maxlength: '200' });
   const approverEmail = h('input', { type: 'email', value: video.approverEmail, placeholder: 'E-mailadres', 'aria-label': 'E-mail akkoordgever', maxlength: '200' });
   const saveApprover = button(video.approverName ? 'Akkoordgever wijzigen' : 'Akkoordgever opslaan', { size: 'sm', onClick: async (e) => {
+    const btn = e.currentTarget; // na de bevestigingsvraag (await) is currentTarget leeg
     if (!approverName.value.trim()) { approverName.classList.add('input-error'); approverName.focus(); return; }
     if (approverLink && (approverName.value !== video.approverName || approverEmail.value !== video.approverEmail)) {
       const ok = await confirmDialog({ title: 'Akkoordgever wijzigen?', body: 'De huidige persoonlijke akkoordlink wordt ingetrokken. Maak daarna een nieuwe akkoordlink voor de nieuwe akkoordgever.', confirmLabel: 'Wijzigen' });
       if (!ok) return;
     }
-    const restore = busy(e.currentTarget);
+    const restore = busy(btn);
     try { await api('PATCH', `/api/videos/${video.id}`, { approverName: approverName.value, approverEmail: approverEmail.value }); toast('Akkoordgever opgeslagen', 'success'); dialogDone(); } catch (err) { toast(err.message, 'error'); restore(); }
   } });
   const createApprover = video.approverName && !approverLink ? button('Persoonlijke akkoordlink maken', { icon: 'shield', size: 'sm', variant: 'primary', onClick: async (e) => {
@@ -1013,6 +1148,8 @@ async function shareDialog(video, refresh) {
   } }) : null;
 
   const body = [
+    video.portalLinkActive ? h('div', { class: 'notice notice-info' }, icon('globe'),
+      h('span', {}, 'Deze video staat ook in het ', h('strong', {}, 'klantportaal'), ' van het project (zodra een versie gepubliceerd is). Die toegang beheer je via “Klantportaal” op de projectpagina; de links hieronder staan daar los van.')) : null,
     h('div', { class: `notice ${client ? 'notice-info' : 'notice-warn'}` }, icon(client ? 'eye' : 'lock'),
       h('span', {}, client ? [`Via deze links zien klanten `, h('strong', {}, `Versie ${client.number}`), ' (de nieuwste gedeelde versie). De links blijven gelijk bij nieuwe versies.']
         : 'Er is nog geen versie gepubliceerd. Wie een link opent, ziet een wachtmelding tot je een versie publiceert.')),
@@ -1041,6 +1178,73 @@ async function shareDialogReopen(videoId) {
   if (location.pathname !== `/video/${videoId}`) return;
   try { const fresh = await api('GET', `/api/videos/${videoId}`); shareDialog(fresh, () => route()); } catch { /* pagina toont al de fout */ }
 }
+
+// ---------- Klantportaal (projectlink) ----------
+
+async function portalDialog(project) {
+  const box = h('div', { class: 'portal-dialog' }, h('div', { class: 'loading-page', style: null }, h('div', { class: 'spinner', role: 'status', 'aria-label': 'Laden' })));
+  const done = openDialog({ title: `Klantportaal: ${project.name}`, body: box, wide: true, actions: [h('button', { class: 'btn btn-primary', value: 'cancel' }, 'Klaar')] });
+
+  async function draw() {
+    let st;
+    try { st = await api('GET', `/api/projects/${project.id}/portal-link`); } catch (err) { mount(box, errorState(err, draw)); return; }
+    const act = async (btn, fn, msg) => {
+      const restore = busy(btn);
+      try { const r = await fn(); if (msg) toast(msg, 'success'); await draw(); return r; } catch (err) { toast(err.message, 'error'); restore(); return null; }
+    };
+    const facts = h('ul', { class: 'facts' },
+      h('li', {}, icon('eye'), h('span', {}, 'De klant ziet ', h('strong', {}, plural(st.publishedVideos, 'gepubliceerde video', 'gepubliceerde video’s')), ' met de status van de gepubliceerde versie, plus de briefingonderdelen die je deelt. Concepten, nieuwe interne versies en interne notities blijven verborgen.')),
+      h('li', {}, icon('chat'), h('span', {}, 'Bekijken, reageren en feedback versturen kan zonder account.')),
+      h('li', {}, icon('shield'), h('span', {}, h('strong', {}, 'Goedkeuren kan niet via de projectlink. '), 'Dat blijft per video via de persoonlijke akkoordlink (Delen bij de video).')));
+    const localNote = st.localOnly ? h('div', { class: 'notice notice-warn' }, icon('alert'),
+      h('span', {}, h('strong', {}, 'Werkt nu alleen op deze computer. '), 'De link begint met localhost: klanten buiten deze Mac kunnen hem nog niet openen. Daarvoor moet de app op een bereikbaar adres draaien (zie README, “Nog nodig voor livegebruik”). Je kunt het portaal wel zelf bekijken en testen.')) : null;
+
+    if (!st.link) {
+      const create = button('Projectlink maken', { icon: 'link', variant: 'primary', onClick: (e) => act(e.currentTarget, async () => {
+        const r = await api('POST', `/api/projects/${project.id}/portal-link`);
+        await copyText(r.link.url);
+      }, 'Projectlink gemaakt en gekopieerd') });
+      mount(box,
+        h('p', {}, 'Eén vaste link waarmee de klant alle video’s van dit project op één overzichtspagina ziet.'),
+        facts, localNote,
+        st.revokedCount ? h('p', { class: 'small muted' }, `${plural(st.revokedCount, 'eerdere projectlink is', 'eerdere projectlinks zijn')} ingetrokken en werken niet meer.`) : null,
+        h('div', { class: 'portal-actions' }, create, previewLink(project)));
+      return;
+    }
+    const l = st.link;
+    const replace = button('Vervangen…', { icon: 'refresh', size: 'sm', onClick: async (e) => {
+      const btn = e.currentTarget; // na een await is currentTarget leeg
+      const ok = await confirmDialog({ title: 'Projectlink vervangen?', body: h('div', {},
+        h('p', {}, 'Er komt een nieuwe link. De huidige link en alle video’s die daarmee geopend zijn, werken direct niet meer.'),
+        h('p', { class: 'muted' }, 'Gebruik dit als de link bij de verkeerde persoon terecht is gekomen. Reacties en feedback blijven bewaard. Deel daarna de nieuwe link.')), confirmLabel: 'Vervangen', danger: true });
+      if (ok) act(btn, async () => { const r = await api('POST', `/api/projects/${project.id}/portal-link`, { replace: true }); await copyText(r.link.url); }, 'Nieuwe projectlink gemaakt en gekopieerd. De oude werkt niet meer.');
+    } });
+    const revoke = button('Intrekken…', { icon: 'trash', size: 'sm', variant: 'ghost', onClick: async (e) => {
+      const btn = e.currentTarget;
+      const ok = await confirmDialog({ title: 'Projectlink intrekken?', body: h('div', {},
+        h('p', {}, 'Wie deze link heeft, ziet direct het portaal niet meer en kan de video’s die hij via het portaal opende niet meer bekijken of becommentariëren.'),
+        h('p', {}, st.separateVideoLinks
+          ? [h('strong', {}, `${plural(st.separateVideoLinks, 'afzonderlijke videolink blijft', 'afzonderlijke videolinks blijven')} werken`), ' (review- en akkoordlinks per video). Trek die zo nodig apart in via Delen bij de video.']
+          : 'Er zijn geen afzonderlijke videolinks actief.'),
+        h('p', { class: 'muted' }, 'Reacties, feedback en goedkeuringen blijven bewaard. Je kunt later een nieuwe projectlink maken.')), confirmLabel: 'Intrekken', danger: true });
+      if (ok) act(btn, () => api('POST', `/api/projects/${project.id}/portal-link/revoke`), 'Projectlink ingetrokken');
+    } });
+    mount(box,
+      h('div', { class: 'link-row' },
+        h('div', { class: 'link-row-head' }, h('strong', {}, 'Projectlink'), h('span', { class: 'small muted link-used' }, l.lastUsedAt ? `geopend ${relativeDate(l.lastUsedAt)}` : 'nog niet geopend')),
+        h('div', { class: 'link-copy' },
+          h('input', { type: 'text', readonly: true, value: l.url, class: 'link-url', 'aria-label': 'Projectlink', onFocus: (e) => e.target.select() }),
+          button('Kopiëren', { icon: 'copy', size: 'sm', onClick: async () => { await copyText(l.url); toast('Projectlink gekopieerd', 'success'); } }),
+          h('a', { class: 'btn btn-sm btn-ghost', href: l.url, target: '_blank', rel: 'noopener', title: 'Openen als klant (nieuw tabblad)' }, icon('external'), h('span', { class: 'visually-hidden' }, 'Openen')))),
+      localNote, facts,
+      h('div', { class: 'portal-actions' }, previewLink(project), h('span', { class: 'spacer' }), replace, revoke),
+      h('p', { class: 'small muted' }, `Gemaakt ${formatDate(l.createdAt)}. Intrekken of vervangen raakt de afzonderlijke review- en akkoordlinks per video niet${st.separateVideoLinks ? ` (nu ${st.separateVideoLinks} actief)` : ''}.`));
+  }
+  draw();
+  await done;
+}
+
+const previewLink = (project) => h('a', { class: 'btn btn-sm btn-secondary', href: `/voorbeeld/project/${project.id}`, target: '_blank', rel: 'noopener' }, icon('eye'), h('span', { class: 'btn-label' }, 'Bekijk als klant'));
 
 // Uploads die klaar zijn, verversen het zijbalkoverzicht.
 onUploadsChange((all) => { if (all.some((i) => i.state === 'done' && !i.counted)) { all.forEach((i) => { if (i.state === 'done') i.counted = true; }); refreshSidebar(); } });

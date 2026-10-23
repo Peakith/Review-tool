@@ -74,7 +74,7 @@ const stopServer = (child) => new Promise((r) => { child.once('exit', r); child.
     await page.reload(); // gewoon verversen
     await page.waitForSelector('.side-version', { timeout: 15000 });
     const label = await page.textContent('.side-version');
-    check('na gewoon verversen: nieuwe interface met versienummer', /0\.2\.\d+ \(build/.test(label), label);
+    check('na gewoon verversen: nieuwe interface met versienummer', /\d+\.\d+\.\d+ \(build/.test(label), label);
     check('nieuwe beheeronderdelen zichtbaar (bestaand account is beheerder)', await page.isVisible('.side-nav a:has-text("Prullenbak")') && await page.isVisible('.side-nav a:has-text("Opslag & back-ups")'));
     check('ook geïmporteerde modules komen van de nieuwe build', fresh.some((u) => u.includes('/shared/util.js')) && fresh.some((u) => u.includes('/shared/icons.js')), `${fresh.length} bestanden via /assets/<build>/`);
     check('bestaand project en sessie behouden', await page.isVisible('.project-card:has-text("Project uit de vorige versie")'));

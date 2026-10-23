@@ -5,9 +5,9 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { createApp } = require('../server/app');
 
-function makeVideo(dir, name, seconds = 2) {
+function makeVideo(dir, name, seconds = 2, size = '320x180') {
   const file = path.join(dir, name);
-  execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `testsrc=size=320x180:rate=25:duration=${seconds}`,
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `testsrc=size=${size}:rate=25:duration=${seconds}`,
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', file]);
   return file;
 }

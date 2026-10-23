@@ -61,13 +61,29 @@ Deze punten zijn **niet op een echte Mac getest**: de start- en stopknop zijn al
 | # | Doe | Verwacht | ✓ |
 |---|---|---|---|
 | 25 | Dubbelklik `Start Studio Review.command` in de nieuwe map. | macOS vraagt eenmalig om toestemming (zie de README). Daarna opent Terminal, de controles staan op ✓, de vraag om gegevens over te nemen verschijnt, en de browser opent vanzelf. | ☐ |
-| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.2.0 (build …)". | ☐ |
+| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.3.0 (build …)". | ☐ |
 | 27 | Dubbelklik nog eens op de startknop. | Er start niets nieuws; de bestaande sessie opent in de browser. | ☐ |
 | 28 | **Opslag & back-ups › Nu back-up maken.** | De back-up krijgt "compleet en gecontroleerd", met de juiste aantallen en in een map onder `~/Studio Review/backups`. | ☐ |
 | 29 | **Team & rechten** → voeg een freelancer toe met toegang "Bekijken en reageren" tot één project. Log in als freelancer (privévenster). | De freelancer ziet alleen dat project, kan reageren, maar ziet geen upload-, deel- of publiceerknoppen. | ☐ |
 | 30 | Gooi als beheerder een testvideo in de prullenbak en open de klantlink ervan. | De klant krijgt "niet meer beschikbaar". Na **Prullenbak › Terugzetten** werkt de link weer. | ☐ |
 | 31 | Dubbelklik `Stop Studio Review.command`. | De melding "Studio Review is gestopt. Je gegevens zijn bewaard." verschijnt, en het startvenster stopt. | ☐ |
 | 32 | Start opnieuw en ververs een tabblad dat nog openstond. | De pagina werkt direct, zonder harde verversing of het legen van de cache. | ☐ |
+
+## G. Klantportaal, merk en briefing (bouwronde 2)
+Doe dit eerst zelf op je Mac. Wil je het portaal op een tweede apparaat of telefoon testen, dan werkt de localhost-link daar niet (zie README).
+
+| # | Doe | Verwacht | ✓ |
+|---|---|---|---|
+| 33 | **Merken** → upload een logo voor Moviemates en pas eventueel de kleur aan. | Het voorbeeld rechts toont direct logo, kleur en knop. | ☐ |
+| 34 | **Project bewerken** → kies het merk Moviemates en schrijf een korte introductie. | Bij het project staat een kleurstip met “Moviemates”. | ☐ |
+| 35 | Geef bij een video **Gegevens → Invullen**: type “Social”, kanaal “Instagram Reels”. | De projectpagina groepeert per type; bij de video staat “Social · 9:16 · Instagram Reels”. | ☐ |
+| 36 | Tabblad **Briefing & referenties**: voeg een tekst toe, een link en een PDF. Deel alleen de link. | Alles staat eerst onder “Alleen intern”; de link verhuist naar “Zichtbaar voor de klant”. | ☐ |
+| 37 | **Klantportaal → Projectlink maken** en open de link in een privévenster (Safari én Chrome). | Je ziet logo, introductie, alleen gepubliceerde video’s met de gepubliceerde versie, en alleen de gedeelde link. Geen interne PDF, geen concepten, geen goedkeurknop. | ☐ |
+| 38 | Open in het portaal een video, plaats een reactie en verstuur feedback. Ga terug naar het overzicht. | De video staat onder “Feedback verstuurd”. Interne teamnotities zijn niet zichtbaar. | ☐ |
+| 39 | Upload een nieuwe versie (niet publiceren) en ververs het portaal. | Het portaal toont nog de vorige versie en status. Pas na **Publiceren naar klant** verschijnt de nieuwe versie. | ☐ |
+| 40 | **Klantweergave** op de projectpagina. | Exact dezelfde video’s en briefing als in het privévenster, met een paarse voorbeeldbalk. | ☐ |
+| 41 | **Klantportaal → Intrekken**. Ververs het privévenster. | “Deze link werkt niet meer”. Een afzonderlijke reviewlink van een video werkt nog wel. | ☐ |
+| 42 | Herhaal 37–38 op je iPhone of Android-telefoon (alleen mogelijk met een bereikbaar adres; lokaal kan dat nog niet). | Kaarten onder elkaar, verticale video’s passen in beeld, knoppen zijn goed te raken. | ☐ |
 
 ## Handmatige browsertestlijst
 Automatisch getest (`npm run test:browser`, zie de PR): **Chrome 141 desktop (Linux, headless)** en **Chrome 141 met Pixel 7-emulatie**. Al het andere moet nog met de hand. Voer per browser minstens stappen 8–11, 13, 19–20 en 7 uit.

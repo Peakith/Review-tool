@@ -15,7 +15,8 @@ export function commentCounts(comments) {
 /**
  * Reactielijst.
  * opts: { mode: 'team'|'client', canWrite, filter: 'all'|'open'|'resolved', activeId,
- *   onSeek(t, id), onReply(parentId, body) → bool, onResolve(id, resolved), onDelete(id), isOwnTeamComment(c) }
+ *   onSeek(t, id), onReply(parentId, body, { internal }) → bool, onResolve(id, resolved), onDelete(id),
+ *   isOwnTeamComment(c), onVisibility(id, internal) (alleen team) }
  */
 export function renderComments(container, comments, opts) {
   const filter = opts.filter || 'all';
@@ -84,21 +85,34 @@ function commentCard(c, opts, isReply) {
   if (canDelete) {
     foot.append(h('button', { type: 'button', class: 'link-btn is-danger', onClick: (e) => { busy(e.currentTarget); opts.onDelete(c.id); } }, icon('trash'), 'Verwijderen'));
   }
+  // Team: zichtbaarheid van teamreacties. Een antwoord onder een interne notitie blijft intern.
+  const visibilityLocked = isReply && opts.parentInternal;
+  if (opts.mode === 'team' && c.authorType === 'team' && opts.onVisibility && opts.canWrite && !visibilityLocked && (opts.isOwnTeamComment?.(c) || opts.canShare)) {
+    foot.append(h('button', { type: 'button', class: 'link-btn', onClick: (e) => { busy(e.currentTarget); opts.onVisibility(c.id, !c.internal); } },
+      icon(c.internal ? 'eye' : 'lock'), c.internal ? 'Zichtbaar maken voor klant' : 'Intern maken'));
+  }
 
   function toggleReply() {
     replyBox.hidden = !replyBox.hidden;
     if (!replyBox.hidden && !replyBox.firstChild) {
       const ta = h('textarea', { rows: '2', placeholder: `Antwoord aan ${c.authorName}…`, 'aria-label': `Antwoord aan ${c.authorName}`, maxlength: '5000' });
       const send = h('button', { type: 'submit', class: 'btn btn-sm btn-primary' }, h('span', { class: 'btn-label' }, 'Antwoorden'));
+      // Team: antwoord op een klantreactie is standaard zichtbaar voor de klant; onder een interne notitie altijd intern.
+      const teamInternal = opts.mode === 'team' && (c.internal || c.authorType === 'team');
+      const internalBox = opts.mode === 'team' && !c.internal ? h('input', { type: 'checkbox', checked: teamInternal }) : null;
+      const visibilityRow = opts.mode === 'team'
+        ? (internalBox ? h('label', { class: 'check small' }, internalBox, 'Alleen intern (klant ziet dit antwoord niet)')
+          : h('span', { class: 'small muted' }, icon('lock'), ' Blijft intern, net als de notitie'))
+        : null;
       const form = h('form', { class: 'reply-form', onSubmit: async (e) => {
         e.preventDefault();
         if (!ta.value.trim()) { ta.focus(); return; }
         const restore = busy(send);
         // Bij een fout blijft de tekst staan, zodat je het opnieuw kunt proberen.
-        const ok = await opts.onReply(c.id, ta.value.trim()).catch(() => false);
+        const ok = await opts.onReply(c.id, ta.value.trim(), { internal: internalBox ? internalBox.checked : true }).catch(() => false);
         restore();
         if (ok !== false) ta.value = '';
-      } }, ta, h('div', { class: 'reply-form-actions' },
+      } }, ta, visibilityRow, h('div', { class: 'reply-form-actions' },
         h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => { replyBox.hidden = true; } }, 'Annuleren'), send));
       ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); form.requestSubmit(); } });
       replyBox.append(form);
@@ -122,10 +136,15 @@ function commentCard(c, opts, isReply) {
     tc,
     h('span', { class: 'comment-author' }, c.authorName),
     authorBadge(c),
+    opts.mode === 'team' && c.authorType === 'team'
+      ? (c.internal || (isReply && opts.parentInternal)
+        ? h('span', { class: 'badge badge-internal', title: 'Alleen zichtbaar voor het team' }, icon('lock'), 'Intern')
+        : h('span', { class: 'badge badge-visible', title: 'De klant ziet deze reactie (als de versie gepubliceerd is)' }, icon('eye'), 'Klant ziet dit'))
+      : null,
     h('time', { class: 'comment-time', datetime: c.createdAt, title: formatDate(c.createdAt) }, relativeDate(c.createdAt))),
   h('p', { class: 'comment-body' }, c.body),
   foot.childNodes.length ? foot : null,
-  c.replies?.length ? h('div', { class: 'replies' }, c.replies.map((r) => commentCard(r, opts, true))) : null,
+  c.replies?.length ? h('div', { class: 'replies' }, c.replies.map((r) => commentCard(r, { ...opts, parentInternal: !!c.internal }, true))) : null,
   replyBox);
   return card;
 }

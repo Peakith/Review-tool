@@ -94,8 +94,12 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
 
   // ---------- Prullenbak ----------
 
-  /** Alle bestanden (video + thumbnail) van de versies binnen een item, met werkelijke grootte. */
+  /** Alle bestanden (video + thumbnail, en bijlagen) binnen een item, met werkelijke grootte. */
   async function filesOf(type, id) {
+    if (type === 'briefing') {
+      const b = db.prepare("SELECT * FROM briefing_items WHERE id = ? AND kind = 'file'").get(id);
+      return b ? [{ key: b.file_key, label: b.title, kind: 'bijlage', originalFilename: b.file_name, bytes: await storage.size(b.file_key) }] : [];
+    }
     const sql = {
       project: 'SELECT ver.*, v.title FROM versions ver JOIN videos v ON v.id = ver.video_id WHERE v.project_id = ?',
       video: 'SELECT ver.*, v.title FROM versions ver JOIN videos v ON v.id = ver.video_id WHERE v.id = ?',
@@ -107,9 +111,16 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
       files.push({ key: ver.stored_name, label, kind: 'video', originalFilename: ver.original_filename, bytes: await storage.size(ver.stored_name) });
       if (ver.has_poster) files.push({ key: `${ver.stored_name}.jpg`, label, kind: 'thumbnail', bytes: await storage.size(`${ver.stored_name}.jpg`) });
     }
+    if (type === 'project') {
+      for (const b of db.prepare("SELECT * FROM briefing_items WHERE project_id = ? AND kind = 'file'").all(id)) {
+        files.push({ key: b.file_key, label: b.title, kind: 'bijlage', originalFilename: b.file_name, bytes: await storage.size(b.file_key) });
+      }
+    }
     return files;
   }
   const sumBytes = (files) => files.reduce((n, f) => n + (f.bytes || 0), 0);
+
+  const TABLES = { project: 'projects', video: 'videos', version: 'versions', briefing: 'briefing_items' };
 
   /** Zoekt een item in de prullenbak en controleert of de gebruiker het mag beheren. */
   function trashItem(req, type, id) {
@@ -127,6 +138,13 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
       const { version, video, project } = access.version(req, id, 'manage', { allowTrashed: true });
       if (!version.trashed_at) throw new HttpError(409, 'Deze versie staat niet in de prullenbak.');
       return { row: version, projectId: project.id, parentTrashed: !!(video.trashed_at || project.trashed_at) };
+    }
+    if (type === 'briefing') {
+      const item = db.prepare('SELECT * FROM briefing_items WHERE id = ?').get(intParam(id));
+      if (!item) throw new HttpError(404, 'Onderdeel niet gevonden');
+      const { project } = access.project(req, item.project_id, 'manage', { allowTrashed: true });
+      if (!item.trashed_at) throw new HttpError(409, 'Dit onderdeel staat niet in de prullenbak.');
+      return { row: item, projectId: project.id, parentTrashed: !!project.trashed_at };
     }
     throw new HttpError(400, 'Onbekend type');
   }
@@ -154,6 +172,13 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
       const files = await filesOf('version', ver.id);
       items.push({ type: 'version', id: ver.id, title: `${ver.title} · versie ${ver.number}`, context: ver.project_name, trashedAt: ver.trashed_at, trashedBy: name(ver.trashed_by), bytes: sumBytes(files), fileCount: files.length, detail: ver.original_filename });
     }
+    for (const b of db.prepare(`SELECT b.*, p.name AS project_name FROM briefing_items b JOIN projects p ON p.id = b.project_id
+      WHERE b.trashed_at IS NOT NULL AND p.trashed_at IS NULL`).all()) {
+      if (!mayManage(b.project_id)) continue;
+      const files = await filesOf('briefing', b.id);
+      items.push({ type: 'briefing', id: b.id, title: b.title, context: b.project_name, trashedAt: b.trashed_at, trashedBy: name(b.trashed_by), bytes: sumBytes(files), fileCount: files.length,
+        detail: { text: 'Briefingtekst', link: 'Referentielink', file: `Bijlage · ${b.file_name}` }[b.kind] });
+    }
     items.sort((a, b) => b.trashedAt.localeCompare(a.trashedAt));
     res.json({ items, totalBytes: sumBytes(items), canPurge: req.user.isAdmin, autoPurge: false });
   });
@@ -164,7 +189,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     const { type, id } = req.body || {};
     const item = trashItem(req, type, id);
     if (item.parentTrashed) throw new HttpError(409, 'Het bovenliggende project of de video staat ook in de prullenbak. Zet dat eerst terug.');
-    const table = { project: 'projects', video: 'videos', version: 'versions' }[type];
+    const table = TABLES[type];
     db.prepare(`UPDATE ${table} SET trashed_at = NULL, trashed_by = NULL WHERE id = ?`).run(item.row.id);
     res.json({ ok: true });
   });
@@ -180,12 +205,14 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
   });
 
   function relatedCounts(type, id) {
+    if (type === 'briefing') return { versions: 0, comments: 0, links: 0, briefing: 1 };
     const where = { project: 'v.project_id = ?', video: 'v.id = ?', version: 'ver.id = ?' }[type];
     const base = `FROM versions ver JOIN videos v ON v.id = ver.video_id WHERE ${where}`;
     return {
       versions: db.prepare(`SELECT COUNT(*) AS n ${base}`).get(id).n,
       comments: db.prepare(`SELECT COUNT(*) AS n FROM comments WHERE version_id IN (SELECT ver.id ${base})`).get(id).n,
       links: type === 'version' ? 0 : db.prepare(`SELECT COUNT(*) AS n FROM share_links WHERE video_id IN (SELECT v.id FROM videos v WHERE ${where.replace('ver.id', 'v.id')})`).get(id).n,
+      briefing: type === 'project' ? db.prepare('SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ?').get(id).n : 0,
     };
   }
 
@@ -199,7 +226,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     if (req.body?.confirm !== true || Number(req.body?.expectedFiles) !== files.length) {
       throw new HttpError(409, 'Bevestig het definitief verwijderen na het bekijken van het overzicht. De inhoud is intussen gewijzigd; open het overzicht opnieuw.');
     }
-    const table = { project: 'projects', video: 'videos', version: 'versions' }[type];
+    const table = TABLES[type];
     db.tx(() => {
       if (type === 'project') db.prepare('DELETE FROM uploads WHERE project_id = ?').run(id);
       db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
@@ -222,7 +249,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
       FROM versions ver JOIN videos v ON v.id = ver.video_id JOIN projects p ON p.id = v.project_id`).all();
     const latest = new Map(db.prepare('SELECT video_id, MAX(number) AS n FROM versions WHERE trashed_at IS NULL GROUP BY video_id').all().map((r) => [r.video_id, r.n]));
     const projects = new Map();
-    const totals = { active: 0, oldVersions: 0, archived: 0, trash: 0 };
+    const totals = { active: 0, oldVersions: 0, archived: 0, trash: 0, attachments: 0, brands: 0 };
     let missingFiles = 0;
     for (const r of rows) {
       let bytes = 0;
@@ -237,7 +264,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
           : latest.get(r.video_id) === r.number ? 'active' : 'oldVersions';
       totals[category] += bytes;
       if (!projects.has(r.project_id)) {
-        projects.set(r.project_id, { id: r.project_id, name: r.project_name, archived: !!r.project_archived, trashed: !!r.project_trashed, active: 0, oldVersions: 0, archived_: 0, trash: 0, total: 0, versions: 0 });
+        projects.set(r.project_id, { id: r.project_id, name: r.project_name, archived: !!r.project_archived, trashed: !!r.project_trashed, active: 0, oldVersions: 0, archived_: 0, trash: 0, attachments: 0, total: 0, versions: 0 });
       }
       const p = projects.get(r.project_id);
       p[category === 'archived' ? 'archived_' : category] += bytes;
@@ -245,8 +272,23 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
       p.versions++;
     }
     for (const p of db.prepare('SELECT id, name, archived_at, trashed_at FROM projects').all()) {
-      if (!projects.has(p.id)) projects.set(p.id, { id: p.id, name: p.name, archived: !!p.archived_at, trashed: !!p.trashed_at, active: 0, oldVersions: 0, archived_: 0, trash: 0, total: 0, versions: 0 });
+      if (!projects.has(p.id)) projects.set(p.id, { id: p.id, name: p.name, archived: !!p.archived_at, trashed: !!p.trashed_at, active: 0, oldVersions: 0, archived_: 0, trash: 0, attachments: 0, total: 0, versions: 0 });
     }
+    // Bijlagen (briefing en referenties) per project.
+    for (const b of db.prepare(`SELECT b.file_key, b.trashed_at, b.project_id, p.trashed_at AS project_trashed, p.archived_at AS project_archived
+      FROM briefing_items b JOIN projects p ON p.id = b.project_id WHERE b.kind = 'file'`).all()) {
+      const bytes = st.ok ? (await storage.size(b.file_key)) || 0 : 0;
+      const category = b.trashed_at || b.project_trashed ? 'trash' : b.project_archived ? 'archived' : 'attachments';
+      totals[category] += bytes;
+      const pr = projects.get(b.project_id);
+      if (pr) {
+        pr[category === 'archived' ? 'archived_' : category] += bytes;
+        pr.total += bytes;
+      }
+    }
+    let brandBytes = 0;
+    for (const b of db.prepare('SELECT logo_key FROM brands WHERE logo_key IS NOT NULL').all()) brandBytes += st.ok ? (await storage.size(b.logo_key)) || 0 : 0;
+    totals.brands = brandBytes;
     const tmp = await uploads.tmpUsage();
     const media = st.ok ? await storage.usage() : null;
     const disk = st.ok ? await storage.freeBytes() : null;
@@ -256,7 +298,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
       storage: { ...st, configured: config.mediaConfigured },
       reserveBytes: config.minFreeBytes,
       disk,
-      totals: { ...totals, tmp: tmp.bytes, all: totals.active + totals.oldVersions + totals.archived + totals.trash + tmp.bytes },
+      totals: { ...totals, tmp: tmp.bytes, all: totals.active + totals.oldVersions + totals.archived + totals.trash + totals.attachments + totals.brands + tmp.bytes },
       mediaDirBytes: media?.bytes ?? null,
       missingFiles,
       tmp,

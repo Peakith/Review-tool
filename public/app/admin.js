@@ -3,11 +3,13 @@ import {
   h, mount, icon, button, busy, api, toast, confirmDialog, openDialog, field, formatDate, relativeDate,
   formatBytes, emptyState, plural,
 } from '/shared/util.js';
+import { applyBrand, brandMark, palette } from '/shared/brand.js';
+import { clientPill } from '/shared/client.js';
 
 export const LEVELS = [
-  ['view', 'Bekijken en reageren', 'Afspelen, downloaden, reageren en reacties afhandelen'],
-  ['upload', 'Uploaden', '+ video’s en nieuwe versies uploaden, titels wijzigen, klaarzetten'],
-  ['publish', 'Publiceren en delen', '+ publiceren naar de klant, reviewlinks en akkoordgever'],
+  ['view', 'Bekijken en reageren', 'Afspelen, downloaden, reageren, reacties afhandelen en de briefing lezen'],
+  ['upload', 'Uploaden', '+ video’s, nieuwe versies en (interne) briefingonderdelen toevoegen, titels en gegevens wijzigen, klaarzetten'],
+  ['publish', 'Publiceren en delen', '+ publiceren naar de klant, reviewlinks, klantportaal, akkoordgever en briefing delen'],
   ['manage', 'Beheren', '+ project bewerken, status corrigeren, archiveren, prullenbak'],
 ];
 const LEVEL_LABEL = Object.fromEntries(LEVELS.map(([k, l]) => [k, l]));
@@ -241,16 +243,18 @@ export async function viewStorage(ctx) {
         tile('Oudere versies', t.oldVersions, 'eerdere versies, nog beschikbaar'),
         tile('Gearchiveerd', t.archived, 'archiveren maakt geen ruimte vrij'),
         tile('Prullenbak', t.trash, 'vrij te maken door definitief te verwijderen', t.trash ? 'is-warn' : ''),
+        tile('Bijlagen', t.attachments, 'briefing en referenties (PDF, afbeeldingen, video)'),
+        t.brands ? tile('Merklogo’s', t.brands, 'logo’s voor de klantweergave') : null,
         tile('Tijdelijke uploads', t.tmp, `${plural(report.tmp.active, 'lopende upload', 'lopende uploads')}; afgebroken uploads worden na 24 uur opgeruimd`),
         tile('Totaal', t.all, 'alles hierboven samen', 'is-total')),
       report.missingFiles ? h('div', { class: 'notice notice-error' }, icon('alert'), `${plural(report.missingFiles, 'videobestand ontbreekt', 'videobestanden ontbreken')} in de opslag. Controleer de opslaglocatie of zet een back-up terug.`) : null,
       h('div', { class: 'table-wrap' }, h('table', { class: 'data-table' },
-        h('thead', {}, h('tr', {}, ['Project', 'Versies', 'Actief', 'Oudere versies', 'Archief', 'Prullenbak', 'Totaal'].map((x, i) => h('th', { scope: 'col', class: i ? 'num' : '' }, x)))),
+        h('thead', {}, h('tr', {}, ['Project', 'Versies', 'Actief', 'Oudere versies', 'Bijlagen', 'Archief', 'Prullenbak', 'Totaal'].map((x, i) => h('th', { scope: 'col', class: i ? 'num' : '' }, x)))),
         h('tbody', {}, report.projects.map((p) => h('tr', {},
           h('th', { scope: 'row' }, h('span', { class: 'truncate cell-name', title: p.name }, p.trashed ? p.name : h('a', { href: `/projecten/${p.id}`, 'data-nav': true }, p.name)),
             p.archived ? h('span', { class: 'badge badge-neutral' }, 'Archief') : null, p.trashed ? h('span', { class: 'badge badge-warn' }, 'Prullenbak') : null),
           h('td', { class: 'num' }, p.versions),
-          ...[p.active, p.oldVersions, p.archivedBytes, p.trash, p.total].map((b, i) => h('td', { class: `num${i === 4 ? ' strong' : ''}` }, b ? formatBytes(b) : '–')))))))),
+          ...[p.active, p.oldVersions, p.attachments, p.archivedBytes, p.trash, p.total].map((b, i) => h('td', { class: `num${i === 5 ? ' strong' : ''}` }, b ? formatBytes(b) : '–')))))))),
     backupCard));
 }
 
@@ -314,8 +318,8 @@ function backupsCard(ctx, data) {
 
 // ---------- Prullenbak ----------
 
-const TYPE_LABEL = { project: 'Project', video: 'Video', version: 'Versie' };
-const TYPE_ICON = { project: 'folder', video: 'film', version: 'layers' };
+const TYPE_LABEL = { project: 'Project', video: 'Video', version: 'Versie', briefing: 'Briefing' };
+const TYPE_ICON = { project: 'folder', video: 'film', version: 'layers', briefing: 'clipboard' };
 
 export async function viewTrash(ctx) {
   document.title = 'Prullenbak — Studio Review';
@@ -339,7 +343,7 @@ export async function viewTrash(ctx) {
           h('div', { class: 'trash-actions' }, restoreBtn,
             data.canPurge ? button('Definitief verwijderen…', { icon: 'trash', size: 'sm', variant: 'danger', onClick: () => purgeDialog(ctx, item) }) : null));
       }))
-      : h('div', { class: 'card' }, emptyState({ icon: 'trash', compact: true, title: 'De prullenbak is leeg', text: 'Projecten, video’s en versies die je naar de prullenbak verplaatst, verschijnen hier.' }))));
+      : h('div', { class: 'card' }, emptyState({ icon: 'trash', compact: true, title: 'De prullenbak is leeg', text: 'Projecten, video’s, versies en briefingonderdelen die je naar de prullenbak verplaatst, verschijnen hier.' }))));
 }
 
 async function purgeDialog(ctx, item) {
@@ -356,11 +360,12 @@ async function purgeDialog(ctx, item) {
         h('div', {}, h('strong', {}, preview.fileCount), h('span', { class: 'small muted' }, 'bestanden')),
         h('div', {}, h('strong', {}, preview.versions), h('span', { class: 'small muted' }, 'versies')),
         h('div', {}, h('strong', {}, preview.comments), h('span', { class: 'small muted' }, 'reacties')),
-        h('div', {}, h('strong', {}, preview.links), h('span', { class: 'small muted' }, 'links'))),
+        h('div', {}, h('strong', {}, preview.links), h('span', { class: 'small muted' }, 'links')),
+        preview.briefing ? h('div', {}, h('strong', {}, preview.briefing), h('span', { class: 'small muted' }, 'briefingonderdelen')) : null),
       h('h3', { class: 'purge-files-title' }, 'Bestanden die verdwijnen'),
       h('ul', { class: 'purge-files' }, preview.files.map((f) => h('li', {},
-        icon(f.kind === 'video' ? 'film' : 'grid'),
-        h('span', { class: 'truncate' }, f.label, f.kind === 'video' && f.originalFilename ? h('span', { class: 'muted' }, ` · ${f.originalFilename}`) : h('span', { class: 'muted' }, ' · thumbnail')),
+        icon(f.kind === 'video' ? 'film' : f.kind === 'bijlage' ? 'doc' : 'grid'),
+        h('span', { class: 'truncate' }, f.label, f.originalFilename ? h('span', { class: 'muted' }, ` · ${f.originalFilename}`) : h('span', { class: 'muted' }, ' · thumbnail')),
         h('span', { class: 'mono small' }, f.bytes === null ? 'ontbreekt' : formatBytes(f.bytes))))),
       h('label', { class: 'check purge-ack' }, ack, 'Ik begrijp dat dit definitief is'),
     ],
@@ -375,6 +380,92 @@ async function purgeDialog(ctx, item) {
       } catch (err) { toast(err.message, 'error'); return false; }
     },
   });
+}
+
+// ---------- Merken ----------
+
+export async function viewBrands(ctx) {
+  document.title = 'Merken — Studio Review';
+  const brands = await api('GET', '/api/brands');
+  mount(ctx.pageEl, h('div', { class: 'page page-narrow' },
+    ctx.pageHeader({ title: 'Merken', meta: 'Logo, naam en accentkleur van de klantweergave' }),
+    h('div', { class: 'notice notice-info' }, icon('info'), h('span', {}, 'Kies per project een merk via ', h('strong', {}, 'Project bewerken'), '. De klant ziet het in het klantportaal en op de reviewpagina’s. De opbouw van de pagina is voor elk merk gelijk; zonder merk ziet de klant de standaard Studio Review-weergave.')),
+    brands.map((b) => brandCard(ctx, b))));
+}
+
+function brandCard(ctx, brand) {
+  const name = h('input', { type: 'text', maxlength: '80', value: brand.name, 'aria-label': `Naam van ${brand.name}` });
+  const color = h('input', { type: 'color', value: brand.accentColor, 'aria-label': 'Accentkleur kiezen', class: 'color-input' });
+  const hex = h('input', { type: 'text', maxlength: '7', value: brand.accentColor, 'aria-label': 'Accentkleur als hexcode', class: 'hex-input mono' });
+  const contrastNote = h('p', { class: 'small muted' });
+  const preview = h('div', { class: 'brand-preview', 'aria-label': `Voorbeeld van de klantweergave van ${brand.name}` });
+  let current = { ...brand };
+
+  const drawPreview = () => {
+    applyBrand({ ...current, accent: hex.value }, preview);
+    const pal = palette(hex.value);
+    contrastNote.textContent = !pal ? 'Vul een geldige kleur in, bijvoorbeeld #38c6b8.'
+      : pal['--accent'].toLowerCase() !== hex.value.toLowerCase() ? 'Op de donkere achtergrond wordt deze kleur iets lichter getoond, zodat knoppen en tekst goed leesbaar blijven.' : 'Goed leesbaar op de donkere achtergrond.';
+    mount(preview,
+      h('div', { class: 'bp-header' }, brandMark({ ...current, name: name.value || brand.name })),
+      h('div', { class: 'bp-body' },
+        h('div', { class: 'bp-title' }, 'Voorjaarscampagne 2026'),
+        h('div', { class: 'bp-card' },
+          h('div', { class: 'bp-thumb' }, icon('film')),
+          h('div', { class: 'bp-card-body' }, h('strong', {}, 'Hoofdvideo'), clientPill('in_review', { small: true }),
+            h('span', { class: 'btn btn-sm btn-primary' }, icon('chat'), h('span', { class: 'btn-label' }, 'Bekijken en reageren')))),
+        h('a', { class: 'bp-link small', href: '#', onClick: (e) => e.preventDefault() }, 'Voorbeeldlink in accentkleur')));
+  };
+  color.addEventListener('input', () => { hex.value = color.value; drawPreview(); });
+  hex.addEventListener('input', () => { if (/^#[0-9a-f]{6}$/i.test(hex.value)) color.value = hex.value; drawPreview(); });
+  name.addEventListener('input', drawPreview);
+
+  const save = button('Opslaan', { variant: 'primary', size: 'sm', onClick: async (e) => {
+    const restore = busy(e.currentTarget);
+    try { current = await api('PATCH', `/api/brands/${brand.id}`, { name: name.value, accentColor: hex.value }); toast(`${current.name} opgeslagen`, 'success'); drawPreview(); } catch (err) { toast(err.message, 'error'); }
+    restore();
+  } });
+
+  const logoInfo = h('div', { class: 'logo-row' });
+  const drawLogo = () => mount(logoInfo,
+    current.logoUrl ? h('img', { src: current.logoUrl, alt: `Logo ${current.name}`, class: 'logo-thumb' }) : h('span', { class: 'small muted' }, 'Nog geen logo: de klant ziet dan de naam met initialen.'),
+    button(current.logoUrl ? 'Ander logo…' : 'Logo uploaden…', { icon: 'upload', size: 'sm', onClick: pickLogo }),
+    current.logoUrl ? button('Verwijderen', { icon: 'trash', size: 'sm', variant: 'ghost', onClick: async (e) => {
+      const restore = busy(e.currentTarget);
+      try { current = await api('DELETE', `/api/brands/${brand.id}/logo`); toast('Logo verwijderd', 'success'); drawLogo(); drawPreview(); } catch (err) { toast(err.message, 'error'); restore(); }
+    } }) : null);
+  function pickLogo() {
+    const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', class: 'visually-hidden' });
+    input.addEventListener('change', async () => {
+      const file = input.files[0];
+      input.remove();
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) { toast('Het logo is te groot (maximaal 2 MB).', 'error'); return; }
+      try {
+        const res = await fetch(`/api/brands/${brand.id}/logo`, { method: 'PUT', headers: { 'x-requested-with': 'review-tool', 'content-type': file.type || 'application/octet-stream' }, body: file, credentials: 'same-origin' });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || `Uploaden mislukt (${res.status})`);
+        current = data;
+        toast('Logo opgeslagen', 'success');
+        drawLogo();
+        drawPreview();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    document.body.append(input);
+    input.click();
+  }
+  drawLogo();
+  drawPreview();
+
+  return h('section', { class: 'card brand-card' },
+    h('div', { class: 'card-head' }, h('h2', { class: 'card-title' }, brand.name), h('span', { class: 'small muted' }, plural(brand.projectCount, 'project', 'projecten'))),
+    h('div', { class: 'brand-grid' },
+      h('div', { class: 'brand-form' },
+        field('Merknaam', name),
+        h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Accentkleur'), h('div', { class: 'color-row' }, color, hex), contrastNote),
+        h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Logo'), logoInfo, h('span', { class: 'field-hint' }, 'PNG, JPG of WebP tot 2 MB, liefst met transparante achtergrond en lichte kleuren (de klantweergave is donker). SVG is niet toegestaan.')),
+        h('div', {}, save)),
+      preview));
 }
 
 // ---------- Archief ----------

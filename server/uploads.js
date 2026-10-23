@@ -7,6 +7,7 @@ const { now } = require('./db');
 const { HttpError } = require('./status');
 const { extensionOf, FORMATS, probe, makePoster, resolveTools } = require('./media');
 const { diskFree } = require('./storage');
+const { ATTACHMENT_TYPES, checkAttachment, verifyContent } = require('./files');
 
 /**
  * Hervatbare uploads in blokken. De browser stuurt blokken van ~8 MB met een
@@ -69,21 +70,28 @@ function uploadRoutes(router, db, config, { access, storage }) {
   }
 
   router.post('/uploads', async (req, res) => {
+    // purpose: "video" (nieuwe video of versie) of "attachment" (bijlage bij de briefing van een project).
+    const purpose = req.body?.purpose === 'attachment' ? 'attachment' : 'video';
+    if (purpose === 'attachment' && !req.body?.projectId) throw new HttpError(400, 'Geef aan bij welk project deze bijlage hoort.');
     const target = uploadTarget(req);
-    await assertMediaCheck();
     const { filename, size } = req.body || {};
-    const ext = extensionOf(filename);
-    if (!ext) throw new HttpError(400, `Dit bestandstype wordt niet ondersteund. Toegestaan: ${Object.keys(FORMATS).map((e) => '.' + e).join(', ')}`);
     const bytes = Number(size);
     if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new HttpError(400, 'Ongeldige bestandsgrootte');
+    if (purpose === 'attachment') {
+      checkAttachment(filename, bytes, config.maxUploadBytes);
+    } else {
+      await assertMediaCheck();
+      const ext = extensionOf(filename);
+      if (!ext) throw new HttpError(400, `Dit bestandstype wordt niet ondersteund. Toegestaan: ${Object.keys(FORMATS).map((e) => '.' + e).join(', ')}`);
+    }
     if (bytes > config.maxUploadBytes) throw new HttpError(413, `Bestand is te groot (maximaal ${Math.round(config.maxUploadBytes / 1024 ** 3)} GB)`);
     ensureTmpDir();
     await assertSpace(bytes);
     const id = crypto.randomBytes(16).toString('hex');
     fs.writeFileSync(tmpPath(id), '');
     const at = now();
-    db.prepare('INSERT INTO uploads (id, user_id, original_filename, size_bytes, project_id, video_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, req.user.id, path.basename(String(filename)), bytes, target.projectId, target.videoId, at, at);
+    db.prepare('INSERT INTO uploads (id, user_id, original_filename, size_bytes, project_id, video_id, purpose, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, req.user.id, path.basename(String(filename)), bytes, target.projectId, target.videoId, purpose, at, at);
     res.status(201).json({ id, chunkSize: config.chunkBytes, receivedBytes: 0 });
   });
 
@@ -143,6 +151,7 @@ function uploadRoutes(router, db, config, { access, storage }) {
     const up = db.prepare('SELECT * FROM uploads WHERE id = ? AND user_id = ?').get(String(uploadId || ''), user.id);
     if (!up) throw new HttpError(400, 'Upload niet gevonden of verlopen. Start de upload opnieuw.');
     if (up.received_bytes !== up.size_bytes) throw new HttpError(400, 'De upload is nog niet compleet');
+    if (up.purpose !== 'video') throw new HttpError(400, 'Deze upload is een bijlage, geen video.');
     // Een upload mag alleen worden gebruikt voor het project/de video waarvoor hij is gestart.
     if ((up.project_id && target.projectId && up.project_id !== target.projectId) || (up.video_id && up.video_id !== target.videoId)) {
       throw new HttpError(400, 'Deze upload hoort bij een ander project of een andere video.');
@@ -191,6 +200,37 @@ function uploadRoutes(router, db, config, { access, storage }) {
   }
 
   /**
+   * Zet een voltooide bijlage-upload om naar een opgeslagen bestand, na controle van de inhoud.
+   * Geeft { key, name, mime, size }.
+   */
+  async function finalizeAttachment(uploadId, user, projectId) {
+    const up = db.prepare('SELECT * FROM uploads WHERE id = ? AND user_id = ?').get(String(uploadId || ''), user.id);
+    if (!up) throw new HttpError(400, 'Upload niet gevonden of verlopen. Start de upload opnieuw.');
+    if (up.purpose !== 'attachment') throw new HttpError(400, 'Deze upload is geen bijlage.');
+    if (up.project_id !== projectId) throw new HttpError(400, 'Deze upload hoort bij een ander project.');
+    if (up.received_bytes !== up.size_bytes) throw new HttpError(400, 'De upload is nog niet compleet');
+    storage.assertReady();
+    busy.add(up.id);
+    try {
+      const ext = checkAttachment(up.original_filename, up.size_bytes, config.maxUploadBytes);
+      const source = tmpPath(up.id);
+      try {
+        await verifyContent(source, ext);
+      } catch (err) {
+        db.prepare('DELETE FROM uploads WHERE id = ?').run(up.id);
+        await fsp.rm(source, { force: true });
+        throw err;
+      }
+      const key = `${crypto.randomBytes(12).toString('hex')}.${ext}`;
+      await storage.importFile(source, key);
+      db.prepare('DELETE FROM uploads WHERE id = ?').run(up.id);
+      return { key, name: up.original_filename, mime: ATTACHMENT_TYPES[ext].mime, size: up.size_bytes };
+    } finally {
+      busy.delete(up.id);
+    }
+  }
+
+  /**
    * Ruimt uploads op zonder activiteit sinds `uploadExpiryHours`, plus losse
    * .part-bestanden zonder databaserecord. Actieve uploads blijven staan.
    */
@@ -228,7 +268,7 @@ function uploadRoutes(router, db, config, { access, storage }) {
     return { bytes, files, active: db.prepare('SELECT COUNT(*) AS n FROM uploads').get().n };
   }
 
-  return { finalize, cleanupExpired, assertSpace, tmpUsage };
+  return { finalize, finalizeAttachment, cleanupExpired, assertSpace, tmpUsage };
 }
 
 module.exports = { uploadRoutes };

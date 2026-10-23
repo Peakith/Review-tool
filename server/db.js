@@ -147,7 +147,59 @@ CREATE TABLE IF NOT EXISTS project_members (
   PRIMARY KEY (project_id, user_id)
 );
 
+-- Merken voor de klantweergave (logo, naam, accentkleur). Een project kiest er één.
+CREATE TABLE IF NOT EXISTS brands (
+  id INTEGER PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  accent_color TEXT NOT NULL,
+  logo_key TEXT,
+  logo_mime TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- Eén stabiele link per project naar het klantportaal. Vervangen = oude intrekken + nieuwe maken.
+CREATE TABLE IF NOT EXISTS project_links (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revoked_by INTEGER REFERENCES users(id),
+  last_used_at TEXT
+);
+
+-- Briefing en referenties per project: tekst, link of bestand; standaard intern.
+CREATE TABLE IF NOT EXISTS briefing_items (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, -- text | link | file
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '',
+  visibility TEXT NOT NULL DEFAULT 'internal', -- internal | client
+  file_key TEXT,
+  file_name TEXT,
+  file_mime TEXT,
+  file_size INTEGER,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  trashed_at TEXT,
+  trashed_by INTEGER
+);
+
+-- Eenmalige gegevensmigraties (zie migrate()).
+CREATE TABLE IF NOT EXISTS app_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_videos_project ON videos(project_id);
+CREATE INDEX IF NOT EXISTS idx_briefing_project ON briefing_items(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_links_project ON project_links(project_id);
 CREATE INDEX IF NOT EXISTS idx_versions_video ON versions(video_id);
 CREATE INDEX IF NOT EXISTS idx_comments_version ON comments(version_id);
 CREATE INDEX IF NOT EXISTS idx_events_version ON status_events(version_id);
@@ -176,7 +228,36 @@ const COLUMNS = [
   // Waarvoor een upload bedoeld is, zodat rechten al bij het begin gecontroleerd worden.
   ['uploads', 'project_id', 'INTEGER'],
   ['uploads', 'video_id', 'INTEGER'],
+  // Bouwronde 2: klantportaal, merken, opleveringen, briefing en interne reacties.
+  ['uploads', 'purpose', "TEXT NOT NULL DEFAULT 'video'"],
+  ['projects', 'brand_id', 'INTEGER'],
+  ['projects', 'portal_intro', "TEXT NOT NULL DEFAULT ''"],
+  ['videos', 'kind', 'TEXT'],
+  ['videos', 'aspect_ratio', 'TEXT'],
+  ['videos', 'channel', "TEXT NOT NULL DEFAULT ''"],
+  // Reviewlinks die automatisch bij een projectlink horen (één per video).
+  ['share_links', 'project_link_id', 'INTEGER'],
+  // Teamreacties: intern (alleen team) of zichtbaar voor de klant.
+  ['comments', 'internal', 'INTEGER NOT NULL DEFAULT 0'],
 ];
+
+const DEFAULT_BRANDS = [
+  ['studio-brutaal', 'Studio Brutaal', '#ff6a3d'],
+  ['moviemates', 'Moviemates', '#38c6b8'],
+];
+
+/** Eenmalige stappen; elke stap draait precies één keer per database. */
+const ONCE = {
+  // Vóór deze versie zag de klant álle teamreacties op een gedeelde versie. Losse teamnotities
+  // worden nu intern; antwoorden van het team op een klantreactie blijven zichtbaar voor de klant.
+  'comments-internal-v1': (db) => db.exec("UPDATE comments SET internal = 1 WHERE author_type = 'team' AND parent_id IS NULL"),
+  'brands-v1': (db) => {
+    const at = new Date().toISOString();
+    for (const [slug, name, color] of DEFAULT_BRANDS) {
+      db.prepare('INSERT OR IGNORE INTO brands (slug, name, accent_color, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(slug, name, color, at, at);
+    }
+  },
+};
 
 function migrate(db) {
   for (const [table, column, type] of COLUMNS) {
@@ -187,7 +268,21 @@ function migrate(db) {
     -- Een herhaald verzoek (zelfde request_id via dezelfde link) wordt maar één keer verwerkt.
     CREATE UNIQUE INDEX IF NOT EXISTS uq_rounds_request ON feedback_rounds(share_link_id, request_id) WHERE request_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS uq_approvals_request ON approvals(share_link_id, request_id) WHERE request_id IS NOT NULL;
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_comments_request ON comments(share_link_id, request_id) WHERE request_id IS NOT NULL;`);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_comments_request ON comments(share_link_id, request_id) WHERE request_id IS NOT NULL;
+    -- Per projectlink hooguit één afgeleide reviewlink per video.
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_share_links_portal ON share_links(project_link_id, video_id) WHERE project_link_id IS NOT NULL;`);
+  for (const [key, step] of Object.entries(ONCE)) {
+    if (db.prepare('SELECT 1 FROM app_meta WHERE key = ?').get(key)) continue;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      step(db);
+      db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?)').run(key, new Date().toISOString());
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
 }
 
 function openDb(config) {

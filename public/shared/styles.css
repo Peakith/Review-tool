@@ -322,3 +322,20 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; m
   .btn { min-height: 40px; }
   .btn-sm { min-height: 34px; }
 }
+
+/* ---------- Merk (logo of naammarkering) ---------- */
+.brand-lockup { display: inline-flex; align-items: center; gap: 10px; min-width: 0; color: var(--text); font-weight: 650; }
+.brand-lockup .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; }
+.brand-lockup .brand-mark .icon { --icon-size: 14px; margin-left: 1px; }
+.brand-logo { display: block; max-height: 34px; max-width: 180px; width: auto; height: auto; object-fit: contain; }
+.brand-namemark { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+.brand-initials { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 12.5px; font-weight: 800; letter-spacing: .02em; flex-shrink: 0; }
+.brand-name { font-size: 15px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Zichtbaarheid: intern of zichtbaar voor de klant (altijd icoon + tekst) */
+.badge-internal { background: var(--surface-3); color: var(--text-2); }
+.badge-visible { background: var(--st-ready-bg); color: var(--st-ready); }
+
+.facts { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 8px; }
+.facts li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--text-2); }
+.facts .icon { color: var(--accent-strong); margin-top: 1px; --icon-size: 16px; }
+.facts strong { color: var(--text); }

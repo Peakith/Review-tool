@@ -27,12 +27,16 @@ function versionFileDto(v) {
   };
 }
 
-function commentDtos(db, versionId, { reviewerKey = null } = {}) {
+/**
+ * Reacties als boom. Voor klanten (includeInternal: false) vallen interne teamnotities weg, en
+ * daarmee ook de antwoorden eronder.
+ */
+function commentDtos(db, versionId, { reviewerKey = null, includeInternal = true } = {}) {
   // Na goedkeuring is er geen feedbackronde meer te versturen; dan is niets meer "nog niet verstuurd".
   const approved = db.prepare('SELECT status FROM versions WHERE id = ?').get(versionId)?.status === 'approved';
   const rows = db.prepare(`SELECT c.*, u.name AS resolved_by_name FROM comments c
     LEFT JOIN users u ON u.id = c.resolved_by
-    WHERE c.version_id = ? ORDER BY c.created_at, c.id`).all(versionId);
+    WHERE c.version_id = ? ${includeInternal ? '' : 'AND c.internal = 0'} ORDER BY c.created_at, c.id`).all(versionId);
   const byId = new Map();
   const roots = [];
   for (const c of rows) {
@@ -43,6 +47,7 @@ function commentDtos(db, versionId, { reviewerKey = null } = {}) {
       timecode: c.timecode,
       authorName: c.author_name,
       authorType: c.author_type,
+      ...(includeInternal ? { internal: !!c.internal, userId: c.user_id } : {}),
       // "verified": identiteit is vastgesteld via teamaccount of persoonlijke akkoordlink.
       verified: c.author_type !== 'guest',
       pending: c.author_type !== 'team' && !c.round_id && !approved,
@@ -55,9 +60,13 @@ function commentDtos(db, versionId, { reviewerKey = null } = {}) {
       createdAt: c.created_at,
       replies: [],
     };
+    if (c.parent_id) {
+      // Antwoord op een reactie die deze lezer niet mag zien: ook niet tonen.
+      byId.get(c.parent_id)?.replies.push(dto);
+      continue;
+    }
     byId.set(c.id, dto);
-    if (c.parent_id && byId.has(c.parent_id)) byId.get(c.parent_id).replies.push(dto);
-    else roots.push(dto);
+    roots.push(dto);
   }
   roots.sort((a, b) => (a.timecode ?? Infinity) - (b.timecode ?? Infinity) || a.id - b.id);
   return roots;

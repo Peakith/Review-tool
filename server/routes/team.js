@@ -5,6 +5,7 @@ const auth = require('../auth');
 const { normalizeTitle, titleFromFilename, downloadFilename, contentDisposition } = require('../media');
 const { versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos } = require('../views');
 const { intParam } = require('../access');
+const { KINDS, ASPECTS, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions } = require('../client');
 
 // Media voor het team: wel cachen, maar bij elk gebruik opnieuw laten controleren, zodat
 // een item in de prullenbak of ingetrokken toegang direct effect heeft.
@@ -18,7 +19,9 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
   const latestShared = (videoId) =>
     db.prepare('SELECT * FROM versions WHERE video_id = ? AND shared_at IS NOT NULL AND trashed_at IS NULL ORDER BY number DESC LIMIT 1').get(videoId);
 
-  const linkUrl = (req, token) => `${config.publicUrl || `${req.protocol}://${req.get('host')}`}/r/${token}`;
+  const origin = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
+  const linkUrl = (req, token) => `${origin(req)}/r/${token}`;
+  const activePortalLink = (projectId) => db.prepare('SELECT * FROM project_links WHERE project_id = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT 1').get(projectId);
 
   // Open klantreacties: hoofdreacties van klant of akkoordgever die het team nog niet heeft afgehandeld.
   const openClientComments = (versionId) => db.prepare(
@@ -38,6 +41,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     return {
       id: v.id,
       title: v.title,
+      meta: videoMeta(v, latest),
       approverName: v.approver_name,
       updatedAt: v.updated_at,
       archivedAt: v.archived_at,
@@ -87,17 +91,27 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     const name = normalizeTitle(req.body?.name);
     if (!name) throw new HttpError(400, 'Geef het project een naam');
     const clientName = String(req.body?.clientName || '').trim().slice(0, 200);
-    const info = db.prepare('INSERT INTO projects (name, client_name, created_by, created_at) VALUES (?, ?, ?, ?)')
-      .run(name, clientName, req.user.id, now());
+    const brandId = req.body?.brandId ? Number(req.body.brandId) : null;
+    if (brandId !== null && !db.prepare('SELECT id FROM brands WHERE id = ?').get(brandId)) throw new HttpError(400, 'Onbekend merk');
+    const intro = String(req.body?.portalIntro || '').trim().slice(0, 2000);
+    const info = db.prepare('INSERT INTO projects (name, client_name, brand_id, portal_intro, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(name, clientName, brandId, intro, req.user.id, now());
     res.status(201).json({ id: Number(info.lastInsertRowid) });
   });
 
   router.patch('/projects/:id', (req, res) => {
     const { project: p } = access.project(req, req.params.id, 'manage', { write: true });
-    const name = req.body?.name !== undefined ? normalizeTitle(req.body.name) : p.name;
+    const body = req.body || {};
+    const name = body.name !== undefined ? normalizeTitle(body.name) : p.name;
     if (!name) throw new HttpError(400, 'Geef het project een naam');
-    const clientName = req.body?.clientName !== undefined ? String(req.body.clientName).trim().slice(0, 200) : p.client_name;
-    db.prepare('UPDATE projects SET name = ?, client_name = ? WHERE id = ?').run(name, clientName, p.id);
+    const clientName = body.clientName !== undefined ? String(body.clientName).trim().slice(0, 200) : p.client_name;
+    let brandId = p.brand_id;
+    if (body.brandId !== undefined) {
+      brandId = body.brandId === null || body.brandId === '' ? null : Number(body.brandId);
+      if (brandId !== null && !db.prepare('SELECT id FROM brands WHERE id = ?').get(brandId)) throw new HttpError(400, 'Onbekend merk');
+    }
+    const intro = body.portalIntro !== undefined ? String(body.portalIntro).trim().slice(0, 2000) : p.portal_intro;
+    db.prepare('UPDATE projects SET name = ?, client_name = ?, brand_id = ?, portal_intro = ? WHERE id = ?').run(name, clientName, brandId, intro, p.id);
     res.json({ ok: true });
   });
 
@@ -112,6 +126,12 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       createdAt: p.created_at,
       archivedAt: p.archived_at,
       myLevel: level,
+      brandId: p.brand_id,
+      brand: brandDto(db, p.brand_id),
+      portalIntro: p.portal_intro || '',
+      briefingCount: db.prepare('SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ? AND trashed_at IS NULL').get(p.id).n,
+      sharedBriefingCount: db.prepare("SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ? AND trashed_at IS NULL AND visibility = 'client'").get(p.id).n,
+      portalLinkActive: !!activePortalLink(p.id),
       archivedVideoCount: db.prepare('SELECT COUNT(*) AS n FROM videos WHERE project_id = ? AND trashed_at IS NULL AND archived_at IS NOT NULL').get(p.id).n,
       videos: videos.map(videoSummary),
     });
@@ -173,14 +193,20 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
   router.get('/videos/:id', (req, res) => {
     const { video: v, project, level } = access.video(req, req.params.id, 'view');
     const versions = db.prepare('SELECT * FROM versions WHERE video_id = ? AND trashed_at IS NULL ORDER BY number DESC').all(v.id);
-    const links = db.prepare('SELECT * FROM share_links WHERE video_id = ? ORDER BY created_at DESC').all(v.id);
+    // Links die automatisch bij de projectlink horen, staan niet in deze lijst (die beheer je via het klantportaal).
+    const links = db.prepare('SELECT * FROM share_links WHERE video_id = ? AND project_link_id IS NULL ORDER BY created_at DESC').all(v.id);
     const shared = latestShared(v.id);
     res.json({
       id: v.id,
       title: v.title,
+      meta: videoMeta(v, versions[0]),
+      kind: v.kind,
+      aspectRatio: v.aspect_ratio,
+      channel: v.channel,
       approverName: v.approver_name,
       approverEmail: v.approver_email,
-      project: { id: project.id, name: project.name, clientName: project.client_name, archivedAt: project.archived_at },
+      project: { id: project.id, name: project.name, clientName: project.client_name, archivedAt: project.archived_at, brand: brandDto(db, project.brand_id) },
+      portalLinkActive: !!activePortalLink(project.id),
       createdAt: v.created_at,
       archivedAt: v.archived_at || project.archived_at || null,
       myLevel: level,
@@ -217,8 +243,19 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
   router.patch('/videos/:id', (req, res) => {
     const body = req.body || {};
     const changesApprover = body.approverName !== undefined || body.approverEmail !== undefined;
-    // Titel wijzigen: uploaden. Akkoordgever wijzigen: publiceren/delen.
+    // Titel en gegevens (type, verhouding, kanaal) wijzigen: uploaden. Akkoordgever wijzigen: publiceren/delen.
     const { video: v } = access.video(req, req.params.id, changesApprover ? 'publish' : 'upload', { write: true });
+    let kind = v.kind;
+    if (body.kind !== undefined) {
+      kind = body.kind || null;
+      if (kind && !KINDS[kind]) throw new HttpError(400, 'Onbekend type video');
+    }
+    let aspect = v.aspect_ratio;
+    if (body.aspectRatio !== undefined) {
+      aspect = body.aspectRatio || null;
+      if (aspect && !ASPECTS.includes(aspect)) throw new HttpError(400, 'Onbekende beeldverhouding');
+    }
+    const channel = body.channel !== undefined ? String(body.channel).replace(/\s+/g, ' ').trim().slice(0, 80) : v.channel;
     let title = v.title;
     if (body.title !== undefined) {
       // Alleen de zichtbare titel verandert; bestanden, links en versies niet.
@@ -229,8 +266,8 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     const approverEmail = body.approverEmail !== undefined ? String(body.approverEmail).trim().slice(0, 200) : v.approver_email;
     if (approverEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(approverEmail)) throw new HttpError(400, 'Vul een geldig e-mailadres voor de akkoordgever in');
     db.tx(() => {
-      db.prepare('UPDATE videos SET title = ?, approver_name = ?, approver_email = ?, updated_at = ? WHERE id = ?')
-        .run(title, approverName, approverEmail, now(), v.id);
+      db.prepare('UPDATE videos SET title = ?, approver_name = ?, approver_email = ?, kind = ?, aspect_ratio = ?, channel = ?, updated_at = ? WHERE id = ?')
+        .run(title, approverName, approverEmail, kind, aspect, channel, now(), v.id);
       if (approverName !== v.approver_name || approverEmail !== v.approver_email) {
         // Andere akkoordgever: oude persoonlijke akkoordlinks verliezen hun geldigheid.
         db.prepare("UPDATE share_links SET revoked_at = ?, revoked_by = ? WHERE video_id = ? AND role = 'approver' AND revoked_at IS NULL")
@@ -280,7 +317,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     db.tx(() => {
       db.prepare('UPDATE versions SET shared_at = ? WHERE id = ?').run(now(), ver.id);
       changeStatus(db, ver.id, 'in_review', { event: 'shared', ...actor(req) });
-      const active = db.prepare("SELECT id FROM share_links WHERE video_id = ? AND role = 'reviewer' AND revoked_at IS NULL").get(ver.video_id);
+      const active = db.prepare("SELECT id FROM share_links WHERE video_id = ? AND role = 'reviewer' AND revoked_at IS NULL AND project_link_id IS NULL").get(ver.video_id);
       if (!active) {
         createdLink = createLink(ver.video_id, { role: 'reviewer', label: 'Reviewlink' }, req.user);
       }
@@ -343,22 +380,29 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     res.json(commentDtos(db, ver.id));
   });
 
+  // Teamreacties zijn standaard intern. Een antwoord op een klantreactie is standaard zichtbaar
+  // voor de klant (zoals voorheen); "internal" in de aanvraag bepaalt het expliciet.
   router.post('/versions/:id/comments', (req, res) => {
     const { version: ver } = access.version(req, req.params.id, 'view', { write: true });
     const body = String(req.body?.body || '').trim();
     if (!body) throw new HttpError(400, 'Een reactie mag niet leeg zijn');
     let parentId = null;
     let timecode = null;
+    let internal = true;
     if (req.body?.parentId) {
       const parent = db.prepare('SELECT id, version_id, parent_id FROM comments WHERE id = ?').get(Number(req.body.parentId));
       if (!parent || parent.version_id !== ver.id) throw new HttpError(400, 'Reactie om op te antwoorden bestaat niet');
       parentId = parent.parent_id || parent.id;
-    } else if (req.body?.timecode !== undefined && req.body?.timecode !== null) {
-      timecode = Math.max(0, Number(req.body.timecode) || 0);
+      const root = db.prepare('SELECT author_type, internal FROM comments WHERE id = ?').get(parentId);
+      // Onder een interne notitie blijft alles intern.
+      internal = root.internal ? true : (typeof req.body.internal === 'boolean' ? req.body.internal : root.author_type === 'team');
+    } else {
+      if (req.body?.timecode !== undefined && req.body?.timecode !== null) timecode = Math.max(0, Number(req.body.timecode) || 0);
+      if (typeof req.body?.internal === 'boolean') internal = req.body.internal;
     }
-    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, author_name, author_type, user_id, created_at)
-      VALUES (?, ?, ?, ?, ?, 'team', ?, ?)`).run(ver.id, parentId, body.slice(0, 5000), timecode, req.user.name, req.user.id, now());
-    res.status(201).json({ id: Number(info.lastInsertRowid) });
+    const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, author_name, author_type, user_id, internal, created_at)
+      VALUES (?, ?, ?, ?, ?, 'team', ?, ?, ?)`).run(ver.id, parentId, body.slice(0, 5000), timecode, req.user.name, req.user.id, internal ? 1 : 0, now());
+    res.status(201).json({ id: Number(info.lastInsertRowid), internal });
   });
 
   const getComment = (req) => {
@@ -377,11 +421,107 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     res.json({ ok: true });
   });
 
+  // Zichtbaarheid van een teamreactie wijzigen (eigen reactie, of met publicatierechten).
+  router.patch('/comments/:id', (req, res) => {
+    const c = getComment(req);
+    if (c.author_type !== 'team') throw new HttpError(400, 'Alleen teamreacties hebben een zichtbaarheid');
+    if (typeof req.body?.internal !== 'boolean') throw new HttpError(400, 'Geef aan of de reactie intern is');
+    const { level } = access.version(req, c.version_id, 'view', { write: true });
+    if (c.user_id !== req.user.id && !['publish', 'manage'].includes(level)) throw new HttpError(403, 'Je kunt alleen de zichtbaarheid van je eigen reacties wijzigen');
+    if (c.parent_id && !req.body.internal && db.prepare('SELECT internal FROM comments WHERE id = ?').get(c.parent_id)?.internal) {
+      throw new HttpError(409, 'Dit antwoord staat onder een interne notitie en blijft daarom intern.');
+    }
+    db.tx(() => {
+      db.prepare('UPDATE comments SET internal = ? WHERE id = ?').run(req.body.internal ? 1 : 0, c.id);
+      // Een notitie intern maken neemt de antwoorden eronder mee.
+      if (req.body.internal && !c.parent_id) db.prepare('UPDATE comments SET internal = 1 WHERE parent_id = ? AND author_type = \'team\'').run(c.id);
+    });
+    res.json({ ok: true });
+  });
+
   router.delete('/comments/:id', (req, res) => {
     const c = getComment(req);
     if (c.user_id !== req.user.id) throw new HttpError(403, 'Je kunt alleen je eigen reacties verwijderen');
     db.prepare('DELETE FROM comments WHERE id = ?').run(c.id);
     res.json({ ok: true });
+  });
+
+  // ---------- Klantportaal (projectlink) ----------
+
+  const portalLinkDto = (req, l) => (l ? { id: l.id, url: `${origin(req)}/p/${l.token}`, createdAt: l.created_at, lastUsedAt: l.last_used_at } : null);
+
+  /** Trekt de projectlink in, met de reviewlinks die via het portaal zijn ontstaan. */
+  function revokePortalLink(link, user) {
+    const at = now();
+    db.prepare('UPDATE project_links SET revoked_at = ?, revoked_by = ? WHERE id = ? AND revoked_at IS NULL').run(at, user.id, link.id);
+    db.prepare('UPDATE share_links SET revoked_at = ?, revoked_by = ? WHERE project_link_id = ? AND revoked_at IS NULL').run(at, user.id, link.id);
+  }
+
+  router.get('/projects/:id/portal-link', (req, res) => {
+    const { project: p } = access.project(req, req.params.id, 'publish');
+    const videoLinks = db.prepare(`SELECT COUNT(*) AS n FROM share_links s JOIN videos v ON v.id = s.video_id
+      WHERE v.project_id = ? AND s.project_link_id IS NULL AND s.revoked_at IS NULL AND v.trashed_at IS NULL`).get(p.id).n;
+    res.json({
+      link: portalLinkDto(req, activePortalLink(p.id)),
+      revokedCount: db.prepare('SELECT COUNT(*) AS n FROM project_links WHERE project_id = ? AND revoked_at IS NOT NULL').get(p.id).n,
+      // Afzonderlijke review- en akkoordlinks per video staan los van de projectlink.
+      separateVideoLinks: videoLinks,
+      publishedVideos: db.prepare(`SELECT COUNT(DISTINCT v.id) AS n FROM videos v JOIN versions ver ON ver.video_id = v.id
+        WHERE v.project_id = ? AND v.trashed_at IS NULL AND ver.shared_at IS NOT NULL AND ver.trashed_at IS NULL`).get(p.id).n,
+      localOnly: /^(localhost|127\.|\[::1\])/.test(new URL(origin(req)).host),
+    });
+  });
+
+  // Maken, of met { replace: true } vervangen: de oude link werkt daarna niet meer.
+  router.post('/projects/:id/portal-link', (req, res) => {
+    const { project: p } = access.project(req, req.params.id, 'publish', { write: true });
+    const result = db.tx(() => {
+      const current = activePortalLink(p.id);
+      if (current && req.body?.replace !== true) return { link: current, created: false };
+      if (current) revokePortalLink(current, req.user);
+      const token = auth.randomToken(24);
+      const info = db.prepare('INSERT INTO project_links (project_id, token, created_by, created_at) VALUES (?, ?, ?, ?)').run(p.id, token, req.user.id, now());
+      return { link: db.prepare('SELECT * FROM project_links WHERE id = ?').get(Number(info.lastInsertRowid)), created: true, replaced: !!current };
+    });
+    res.status(result.created ? 201 : 200).json({ link: portalLinkDto(req, result.link), created: result.created, replaced: !!result.replaced });
+  });
+
+  // Intrekken mag ook bij een gearchiveerd project of een project in de prullenbak.
+  router.post('/projects/:id/portal-link/revoke', (req, res) => {
+    const { project: p } = access.project(req, req.params.id, 'publish', { allowTrashed: true });
+    const current = activePortalLink(p.id);
+    if (current) db.tx(() => revokePortalLink(current, req.user));
+    res.json({ ok: true, revoked: !!current });
+  });
+
+  // ---------- Voorbeeld: zo ziet de klant het ----------
+  // Dezelfde opbouw en filters als het klantportaal en de klantlinks, maar via het teamaccount.
+
+  router.get('/projects/:id/portal-preview', (req, res) => {
+    const { project: p } = access.project(req, req.params.id, 'view');
+    res.json({
+      ...portalDto(db, p, {
+        videoLink: (v) => `/voorbeeld/video/${v.id}`,
+        posterUrl: (v, ver) => `/api/versions/${ver.id}/poster`,
+        fileUrl: (b) => `/api/briefing/${b.id}/file`,
+      }),
+      preview: { projectId: p.id, portalLinkActive: !!activePortalLink(p.id) },
+    });
+  });
+
+  router.get('/preview/videos/:id', (req, res) => {
+    const { video: v, project } = access.video(req, req.params.id, 'view');
+    res.json({
+      ...clientVideoInfo(db, { video: v, project, role: 'reviewer', archived: !!(v.archived_at || project.archived_at), portal: { url: `/voorbeeld/project/${project.id}` } }),
+      preview: { projectId: project.id, videoId: v.id },
+    });
+  });
+
+  router.get('/preview/videos/:id/versions/:versionId/comments', (req, res) => {
+    const { video: v } = access.video(req, req.params.id, 'view');
+    const ver = sharedVersions(db, v.id).find((x) => x.id === Number(req.params.versionId));
+    if (!ver) throw new HttpError(404, 'Deze versie is niet gepubliceerd en dus niet zichtbaar voor de klant.');
+    res.json(commentDtos(db, ver.id, { includeInternal: false }));
   });
 
   // ---------- Media ----------

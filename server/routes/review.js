@@ -2,7 +2,8 @@
 const { now } = require('../db');
 const { HttpError, changeStatus, OPEN_FOR_CLIENT } = require('../status');
 const { downloadFilename, contentDisposition } = require('../media');
-const { versionDto, commentDtos, approvalDto } = require('../views');
+const { commentDtos } = require('../views');
+const { clientVideoInfo, sharedVersions: listShared } = require('../client');
 
 /**
  * Klant-API. Iedere aanvraag controleert opnieuw of de link bestaat en niet is
@@ -16,6 +17,11 @@ function reviewRoutes(router, db, config, { storage }) {
       : null;
     if (!link) return next(new HttpError(404, 'Deze reviewlink bestaat niet.'));
     if (link.revoked_at) return next(new HttpError(410, 'Deze reviewlink is ingetrokken. Vraag het team om een nieuwe link.'));
+    // Geopend via het klantportaal: geldig zolang de projectlink geldig is.
+    if (link.project_link_id) {
+      req.projectLink = db.prepare('SELECT * FROM project_links WHERE id = ?').get(link.project_link_id);
+      if (!req.projectLink || req.projectLink.revoked_at) return next(new HttpError(410, 'Deze projectlink is ingetrokken. Vraag het team om een nieuwe link.'));
+    }
     req.link = link;
     req.video = db.prepare('SELECT * FROM videos WHERE id = ?').get(link.video_id);
     if (!req.video) return next(new HttpError(404, 'Deze video bestaat niet meer.'));
@@ -31,8 +37,7 @@ function reviewRoutes(router, db, config, { storage }) {
     next();
   });
 
-  const sharedVersions = (videoId) =>
-    db.prepare('SELECT * FROM versions WHERE video_id = ? AND shared_at IS NOT NULL AND trashed_at IS NULL ORDER BY number DESC').all(videoId);
+  const sharedVersions = (videoId) => listShared(db, videoId);
 
   const getSharedVersion = (req) => {
     const id = Number(req.params.versionId);
@@ -81,25 +86,21 @@ function reviewRoutes(router, db, config, { storage }) {
   };
 
   router.get('/review/:token', (req, res) => {
-    const project = req.project;
-    const versions = sharedVersions(req.video.id);
-    res.json({
-      archived: req.archived,
-      title: req.video.title,
-      project: { name: project.name, clientName: project.client_name },
+    res.json(clientVideoInfo(db, {
+      video: req.video,
+      project: req.project,
       role: req.link.role,
       allowDownload: !!req.link.allow_download,
-      approver: req.video.approver_name ? { name: req.video.approver_name } : null,
-      // De persoon met de akkoordlink is geverifieerd via die persoonlijke link.
-      identity: req.link.role === 'approver' ? { name: req.link.approver_name, verified: true } : null,
-      versions: versions.map((v, i) => ({ ...versionDto(v), isLatest: i === 0, approval: approvalDto(db, v.id) })),
-      totalShared: versions.length,
-    });
+      approverName: req.link.approver_name,
+      archived: req.archived,
+      portal: req.projectLink ? { url: `/p/${req.projectLink.token}` } : null,
+    }));
   });
 
   router.get('/review/:token/versions/:versionId/comments', (req, res) => {
     const ver = getSharedVersion(req);
-    res.json(commentDtos(db, ver.id, { reviewerKey: reviewerKey(req) }));
+    // Interne teamnotities zijn nooit zichtbaar voor de klant.
+    res.json(commentDtos(db, ver.id, { reviewerKey: reviewerKey(req), includeInternal: false }));
   });
 
   // Een losse reactie opslaan verandert de status niet.
@@ -119,9 +120,10 @@ function reviewRoutes(router, db, config, { storage }) {
     let parentId = null;
     let timecode = null;
     if (req.body?.parentId) {
-      const parent = db.prepare('SELECT id, version_id, parent_id FROM comments WHERE id = ?').get(Number(req.body.parentId));
-      if (!parent || parent.version_id !== ver.id) throw new HttpError(400, 'Reactie om op te antwoorden bestaat niet');
+      const parent = db.prepare('SELECT id, version_id, parent_id, internal FROM comments WHERE id = ?').get(Number(req.body.parentId));
+      if (!parent || parent.version_id !== ver.id || parent.internal) throw new HttpError(400, 'Reactie om op te antwoorden bestaat niet');
       parentId = parent.parent_id || parent.id;
+      if (db.prepare('SELECT internal FROM comments WHERE id = ?').get(parentId)?.internal) throw new HttpError(400, 'Reactie om op te antwoorden bestaat niet');
     } else if (req.body?.timecode !== undefined && req.body?.timecode !== null) {
       timecode = Math.max(0, Number(req.body.timecode) || 0);
       if (ver.duration_seconds) timecode = Math.min(timecode, ver.duration_seconds);

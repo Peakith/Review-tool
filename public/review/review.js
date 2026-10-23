@@ -1,13 +1,22 @@
 import {
-  h, mount, icon, button, busy, api, apiWithRetry, newRequestId, statusPill, toast, openDialog, field,
+  h, mount, icon, button, api, apiWithRetry, newRequestId, toast, openDialog, field,
   formatDate, plural, draftStore, emptyState,
 } from '/shared/util.js';
 import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
+import { applyBrand, brandMark } from '/shared/brand.js';
+import { clientPill, metaLine } from '/shared/client.js';
 
 const token = location.pathname.split('/').filter(Boolean).pop();
-const base = `/api/review/${encodeURIComponent(token)}`;
+// /voorbeeld/video/<id>: het team bekijkt deze pagina precies zoals de klant, alleen-lezen.
+const preview = location.pathname.startsWith('/voorbeeld/');
+const base = preview ? `/api/preview/videos/${encodeURIComponent(token)}` : `/api/review/${encodeURIComponent(token)}`;
+const urls = {
+  comments: (vid) => `${base}/versions/${vid}/comments`,
+  media: (vid) => (preview ? `/api/versions/${vid}/media` : `${base}/versions/${vid}/media`),
+  poster: (vid) => (preview ? `/api/versions/${vid}/poster` : `${base}/versions/${vid}/poster`),
+};
 const root = document.getElementById('root');
 
 const store = {
@@ -38,13 +47,18 @@ async function load(versionId) {
   try {
     state.info = await api('GET', base);
   } catch (err) {
+    if (preview && err.status === 401) return fatal('Log eerst in', 'Deze voorbeeldweergave is alleen voor teamleden. Log in en open het voorbeeld opnieuw vanuit de video.', 'lock');
+    if (err.status === 410 && /projectlink/.test(err.message)) return fatal('Deze link werkt niet meer', 'De projectlink is ingetrokken. Vraag het productieteam om een nieuwe link.', 'lock');
     if (err.status === 410) return fatal('Deze link is ingetrokken', 'Je hebt geen toegang meer tot deze video. Vraag het productieteam om een nieuwe link.', 'lock');
     if (err.status === 404) return fatal('Link niet gevonden', 'Controleer of je de volledige link hebt gekopieerd, of vraag het team om een nieuwe link.', 'link');
     return fatal('Laden lukt niet', err.message, 'alert', () => load(versionId));
   }
-  document.title = `${state.info.title} · Review`;
+  applyBrand(state.info.brand);
+  document.title = `${state.info.title} · ${state.info.brand?.name || 'Review'}`;
   if (!state.info.versions.length) {
-    return fatal(state.info.title, 'Er staat nog geen versie voor je klaar. Je kunt deze link bewaren: zodra het team een versie deelt, zie je die hier.', 'clock', () => load());
+    return fatal(state.info.title, preview
+      ? 'Van deze video is nog geen versie gepubliceerd. De klant ziet nu alleen een wachtmelding (en de video staat niet in het portaal).'
+      : 'Er staat nog geen versie voor je klaar. Je kunt deze link bewaren: zodra het team een versie deelt, zie je die hier.', 'clock', () => load());
   }
   const wanted = state.info.versions.find((v) => v.id === versionId) || state.info.versions[0];
   await showVersion(wanted);
@@ -57,7 +71,7 @@ async function showVersion(version) {
   state.player?.destroy();
   state.composer?.destroy();
   try {
-    state.comments = await api('GET', `${base}/versions/${version.id}/comments`, undefined, keyHeader);
+    state.comments = await api('GET', urls.comments(version.id), undefined, keyHeader);
   } catch (err) {
     if (err.status === 410) return load();
     state.comments = [];
@@ -67,12 +81,12 @@ async function showVersion(version) {
 }
 
 async function refreshComments() {
-  state.comments = await api('GET', `${base}/versions/${state.version.id}/comments`, undefined, keyHeader);
+  state.comments = await api('GET', urls.comments(state.version.id), undefined, keyHeader);
   drawComments();
 }
 
 const isApprover = () => state.info.role === 'approver';
-const canAct = () => !state.info.archived && state.version.isLatest && ['in_review', 'changes_requested'].includes(state.version.status);
+const canAct = () => !preview && !state.info.archived && state.version.isLatest && ['in_review', 'changes_requested'].includes(state.version.status);
 const myPending = () => {
   let n = 0;
   const walk = (list) => list.forEach((c) => { if (c.mine && c.pending) n++; walk(c.replies || []); });
@@ -100,8 +114,8 @@ function render() {
   const status = clientStatus(version);
 
   const player = createPlayer({
-    src: `${base}/versions/${version.id}/media`,
-    poster: version.hasPoster ? `${base}/versions/${version.id}/poster` : undefined,
+    src: urls.media(version.id),
+    poster: version.hasPoster ? urls.poster(version.id) : undefined,
     duration: version.duration,
   });
   state.player = player;
@@ -115,15 +129,19 @@ function render() {
     : null;
   if (versionPicker) versionPicker.querySelector('select').value = String(version.id);
 
+  const meta = metaLine(info.meta);
   const header = h('header', { class: 'r-header' },
     h('div', { class: 'r-header-inner' },
       h('div', { class: 'r-titles' },
+        h('div', { class: 'r-brand' }, brandMark(info.brand, { size: 'sm' }),
+          info.portal ? h('a', { class: 'r-back', href: info.portal.url }, icon('arrowLeft'), 'Alle video’s van dit project') : null),
         h('div', { class: 'r-project truncate' }, [info.project.clientName, info.project.name].filter(Boolean).join(' · ')),
-        h('h1', { title: info.title }, info.title)),
+        h('h1', { title: info.title }, info.title),
+        meta ? h('div', { class: 'r-meta-line' }, meta) : null),
       h('div', { class: 'r-version' },
         h('span', { class: 'version-chip' }, h('strong', {}, `Versie ${version.number}`), version.isLatest ? h('span', { class: 'version-latest' }, 'nieuwste') : h('span', { class: 'version-old' }, `van ${latest.number}`)),
         versionPicker,
-        statusPill(version.status))));
+        clientPill(version.status))));
 
   // ---- Statusuitleg ----
   const statusCard = h('section', { class: `r-status ${status.cls}`, 'aria-live': 'polite' },
@@ -178,6 +196,9 @@ function render() {
     : null;
 
   mount(root,
+    preview ? h('div', { class: 'preview-bar', role: 'note' }, icon('eye'),
+      h('span', {}, h('strong', {}, 'Voorbeeld: '), 'zo ziet de klant deze video via een reviewlink of het portaal. Interne notities en niet-gepubliceerde versies zijn verborgen; reageren is hier uitgeschakeld.'),
+      h('a', { href: `/video/${info.preview.videoId}`, class: 'btn btn-sm btn-secondary' }, icon('arrowLeft'), h('span', { class: 'btn-label' }, 'Terug naar de werkplek'))) : null,
     header,
     h('main', { class: 'r-main' },
       h('section', { class: 'r-stage', 'aria-label': 'Video' }, player.el,

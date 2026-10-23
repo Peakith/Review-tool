@@ -5,6 +5,36 @@ Vanaf versie 0.2.0 staan programma en gegevens los van elkaar:
 - **Programma**: de uitgepakte map. Bij elke update komt er een nieuwe.
 - **Gegevens**: `~/Studio Review/` met daarin `gegevens/`, `backups/` en `instellingen.env`. Deze map blijft gewoon staan.
 
+## Van 0.2.0 naar 0.3.0 (bouwronde 2: klantportaal, merken, briefing)
+
+Je gegevens staan al in `~/Studio Review`. Bijwerken is daarom alleen een nieuwe programmamap.
+
+1. **Maak een back-up:** **Opslag & back-ups › Nu back-up maken**. Wacht tot er *compleet en gecontroleerd* staat.
+2. **Stop de app:** dubbelklik **`Stop Studio Review.command`** in je huidige programmamap, of sluit het startvenster.
+3. **Pak de nieuwe ZIP uit in een nieuwe map** in Downloads. Bestaat de mapnaam al, dan zet macOS er “ 2” achter; dat is prima.
+4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.**
+   - Weigert macOS het bestand, dan geldt hetzelfde als de vorige keer: rechtermuisknop › **Open**, of **Systeeminstellingen › Privacy en beveiliging › Toch openen**.
+   - De eerste start installeert de onderdelen opnieuw. Er wordt niets gevraagd over je gegevens.
+   - De database krijgt automatisch de nieuwe velden. Bestaande projecten, video's, links, reacties en goedkeuringen blijven werken.
+5. **Ververs een openstaand tabblad** (Cmd + R). Onderin de zijbalk staat dan **Studio Review 0.3.0**.
+6. **Controleer en richt in:**
+   - **Merken:** upload eventueel de logo's van Studio Brutaal en Moviemates en controleer de kleuren.
+   - **Per project:** kies bij **Project bewerken** een merk en schrijf eventueel een introductie.
+   - **Wat de klant ziet:** bekijk het met **Klantweergave**.
+7. Werkt alles, gooi dan de oude programmamap weg.
+
+**Goed om te weten na deze update**
+- Losse teamnotities die je vóór de update plaatste, zijn nu **intern**: de klant ziet ze niet meer. Antwoorden op klantreacties blijven zichtbaar.
+- Wil je een oude notitie toch tonen, kies dan bij die reactie **Zichtbaar maken voor klant**.
+- Projectlinks (klantportaal) beginnen lokaal met `http://localhost:3000`. Ze werken alleen op deze Mac en zijn nog niet bereikbaar voor klanten buiten je computer.
+
+**Terug naar de vorige versie?**
+1. Stop de app.
+2. Zet in de oude programmamap de back-up van stap 1 terug met `npm run herstel`.
+3. Start de oude versie weer.
+
+De oude versie start ook zonder herstel op de bijgewerkte gegevens. Maar die kent de nieuwe functies niet en toont dan weer álle teamnotities aan klanten. Gebruik daarom het herstel.
+
 ## De eerste keer (van je huidige versie naar 0.2.0)
 
 Je huidige versie staat in `~/Downloads/Review-tool-nieuw` en bewaart de gegevens nog in de map `data/` daarbinnen.

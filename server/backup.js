@@ -18,7 +18,7 @@ const { VERSION } = require('./build');
  * dus ook grote video's passen niet in één keer in het werkgeheugen.
  */
 const FORMAT = 1;
-const COUNT_TABLES = ['users', 'projects', 'videos', 'versions', 'comments', 'share_links', 'feedback_rounds', 'approvals'];
+const COUNT_TABLES = ['users', 'projects', 'videos', 'versions', 'comments', 'share_links', 'feedback_rounds', 'approvals', 'briefing_items', 'project_links', 'brands'];
 
 const stamp = (d = new Date()) => {
   const p = (n) => String(n).padStart(2, '0');
@@ -64,12 +64,23 @@ function inspectDb(file) {
   const db = new sqlite.DatabaseSync(file, { readOnly: true });
   try {
     const integrity = db.prepare('PRAGMA integrity_check').get();
+    // Oudere databases (en back-ups daarvan) hebben nog niet alle tabellen.
+    const has = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
     const counts = {};
-    for (const t of COUNT_TABLES) counts[t] = db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n;
+    for (const t of COUNT_TABLES) if (has(t)) counts[t] = db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n;
     const files = [];
     for (const v of db.prepare('SELECT stored_name, has_poster, size_bytes FROM versions ORDER BY id').all()) {
       files.push({ key: v.stored_name, expectedBytes: v.size_bytes });
       if (v.has_poster) files.push({ key: `${v.stored_name}.jpg`, expectedBytes: null });
+    }
+    // Bijlagen bij briefings (ook in de prullenbak) en merklogo's.
+    if (has('briefing_items')) {
+      for (const b of db.prepare("SELECT file_key, file_size FROM briefing_items WHERE kind = 'file' AND file_key IS NOT NULL ORDER BY id").all()) {
+        files.push({ key: b.file_key, expectedBytes: b.file_size });
+      }
+    }
+    if (has('brands')) {
+      for (const b of db.prepare('SELECT logo_key FROM brands WHERE logo_key IS NOT NULL ORDER BY id').all()) files.push({ key: b.logo_key, expectedBytes: null });
     }
     return { integrityOk: Object.values(integrity)[0] === 'ok', counts, files };
   } finally {
@@ -261,6 +272,7 @@ async function restoreBackup({ backupPath, dataDir, mediaDir, allowIncomplete = 
     const restored = inspectDb(path.join(stageData, 'review.db'));
     if (!restored.integrityOk) throw new Error('De herstelde database is niet in orde.');
     for (const t of COUNT_TABLES) {
+      if (manifest.counts[t] === undefined) continue; // tabel bestond nog niet toen de back-up werd gemaakt
       if (restored.counts[t] !== manifest.counts[t]) throw new Error(`Aantal ${t} na herstel (${restored.counts[t]}) wijkt af van de back-up (${manifest.counts[t]}).`);
     }
   } catch (err) {

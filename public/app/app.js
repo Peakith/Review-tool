@@ -6,6 +6,7 @@ import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom, commentCounts } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
 import { configureUploads, enqueue, checkFile, suggestTitle, createUploadTray, onUploadsChange } from './uploads.js';
+import { viewTeam, viewStorage, viewTrash, viewArchive, can, menuButton } from './admin.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -47,7 +48,10 @@ async function route() {
   const views = [
     [/^\/projecten\/(\d+)$/, (id) => viewProject(Number(id)), 'projects'],
     [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
-    [/^\/team$/, () => viewTeam(), 'team'],
+    [/^\/team$/, () => viewTeam(ctx()), 'team'],
+    [/^\/opslag$/, () => (session.user.isAdmin ? viewStorage(ctx()) : viewNotFound()), 'storage'],
+    [/^\/prullenbak$/, () => viewTrash(ctx()), 'trash'],
+    [/^\/archief$/, () => viewArchive(ctx()), 'archive'],
     [/^\/?$/, () => viewProjects(), 'projects'],
   ];
   const match = views.find(([re]) => (m = path.match(re)));
@@ -65,6 +69,9 @@ async function route() {
   }
   pageEl.focus({ preventScroll: true });
 }
+
+/** Gedeelde context voor de beheerschermen (admin.js). */
+const ctx = () => ({ session, pageEl, pageHeader, navigate, refresh: () => route() });
 
 function viewNotFound() {
   document.title = 'Niet gevonden — Studio Review';
@@ -88,11 +95,17 @@ function ensureShell() {
     h('div', { class: 'side-scroll' },
       h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
         h('a', { href: '/', 'data-nav': true, dataset: { section: 'projects' } }, icon('folder'), 'Projecten'),
-        h('a', { href: '/team', 'data-nav': true, dataset: { section: 'team' } }, icon('users'), 'Team')),
+        h('a', { href: '/archief', 'data-nav': true, dataset: { section: 'archive' } }, icon('history'), 'Archief'),
+        h('a', { href: '/prullenbak', 'data-nav': true, dataset: { section: 'trash' } }, icon('trash'), 'Prullenbak'),
+        session.user.isAdmin
+          ? h('a', { href: '/team', 'data-nav': true, dataset: { section: 'team' } }, icon('users'), 'Team & rechten')
+          : h('a', { href: '/team', 'data-nav': true, dataset: { section: 'team' } }, icon('users'), 'Mijn account'),
+        session.user.isAdmin ? h('a', { href: '/opslag', 'data-nav': true, dataset: { section: 'storage' } }, icon('server'), 'Opslag & back-ups') : null),
       h('div', { class: 'side-label' }, 'Recent'),
       sidebarProjects),
     h('div', { class: 'side-foot' },
       systemStatus(),
+      h('div', { class: 'side-version', title: 'Versie van deze installatie' }, `Studio Review ${session.version?.label || ''}`),
       h('div', { class: 'side-user' },
         h('span', { class: 'avatar', 'aria-hidden': 'true' }, initials(session.user.name)),
         h('div', { class: 'side-user-text' }, h('div', { class: 'truncate' }, session.user.name), h('div', { class: 'truncate small muted' }, session.user.email)),
@@ -134,10 +147,19 @@ async function refreshSidebar(currentProjectId) {
 /** Waarschuwt als er serveronderdelen ontbreken. */
 function systemBanner() {
   const m = session.media;
+  const sys = session.system;
+  if (sys && !sys.storage.ok) {
+    return h('div', { class: 'system-banner is-error', role: 'alert' }, icon('alert'),
+      h('span', {}, h('strong', {}, 'Opslag niet bereikbaar. '), sys.storage.reason));
+  }
+  if (sys?.dataInAppDir && session.user.isAdmin) {
+    return h('div', { class: 'system-banner' }, icon('alert'),
+      h('span', {}, h('strong', {}, 'Je gegevens staan nog in de programmamap. '), 'Bij een update met een nieuwe ZIP blijven ze daar achter. Verhuis ze eenmalig: stop de app en kies "verhuizen" bij de startknop, of voer ', h('code', {}, 'npm run verhuis'), ' uit.'));
+  }
   if (!m) return null;
   if (!m.uploadsEnabled) {
     return h('div', { class: 'system-banner is-error', role: 'alert' }, icon('alert'),
-      h('span', {}, h('strong', {}, 'Uploaden is uitgeschakeld. '), 'ffprobe (onderdeel van ffmpeg) is niet gevonden, dus de inhoud van bestanden kan niet worden gecontroleerd. Bestaande video’s en reviews werken gewoon. Zie “Team › Systeem” voor de oplossing.'));
+      h('span', {}, h('strong', {}, 'Uploaden is uitgeschakeld. '), 'ffprobe (onderdeel van ffmpeg) is niet gevonden, dus de inhoud van bestanden kan niet worden gecontroleerd. Bestaande video’s en reviews werken gewoon. Installeer ffmpeg (brew install ffmpeg) en start de app opnieuw.'));
   }
   if (m.unverifiedAllowed && !m.ffprobe) {
     return h('div', { class: 'system-banner is-error', role: 'alert' }, icon('alert'), 'Uploads worden zonder inhoudscontrole geaccepteerd (ALLOW_UNVERIFIED_UPLOADS). Niet geschikt voor productie.');
@@ -255,13 +277,17 @@ const PROJECT_FILTERS = [
 
 async function viewProjects() {
   document.title = 'Projecten — Studio Review';
-  const newBtn = button('Nieuw project', { icon: 'plus', variant: 'primary', onClick: newProjectDialog });
+  // Alleen beheerders maken projecten; teamleden zien de projecten waar ze toegang toe hebben.
+  const newBtn = session.user.isAdmin ? button('Nieuw project', { icon: 'plus', variant: 'primary', onClick: newProjectDialog }) : null;
   mount(pageEl, h('div', { class: 'page' }, pageHeader({ title: 'Projecten', actions: newBtn }),
     h('div', { class: 'project-grid' }, skeletonRows(3, 'skeleton-card'))));
   const projects = await api('GET', '/api/projects');
 
   if (!projects.length) {
-    mount(pageEl, h('div', { class: 'page' }, pageHeader({ title: 'Projecten' }), onboarding()));
+    mount(pageEl, h('div', { class: 'page' }, pageHeader({ title: 'Projecten' }), session.user.isAdmin ? onboarding() : h('div', { class: 'card' }, emptyState({
+      icon: 'lock', title: 'Nog geen projecten voor jou',
+      text: 'Je ziet hier de projecten waar een beheerder je toegang toe geeft. Vraag de beheerder om je aan een project toe te voegen.',
+    }))));
     return;
   }
 
@@ -440,11 +466,45 @@ function makeDropTarget(el, onFiles, label) {
   });
 }
 
+const TRASH_URL = { project: (id) => `/api/projects/${id}`, video: (id) => `/api/videos/${id}`, version: (id) => `/api/versions/${id}` };
+const TRASH_WHAT = { project: 'Het project', video: 'De video', version: 'Deze versie' };
+
+/** Naar de prullenbak, met bevestiging vooraf en "Ongedaan maken" achteraf. */
+async function moveToTrash(type, id, name, after) {
+  const ok = await confirmDialog({
+    title: `“${name}” naar de prullenbak?`,
+    body: h('div', {},
+      h('p', {}, `${TRASH_WHAT[type]} verdwijnt uit de overzichten en is niet meer bereikbaar via klantlinks of directe links.`),
+      h('p', { class: 'muted' }, 'De bestanden blijven bewaard tot een beheerder ze definitief verwijdert. Terugzetten kan via de prullenbak.')),
+    confirmLabel: 'Naar prullenbak', danger: true,
+  });
+  if (!ok) return;
+  try {
+    await api('DELETE', TRASH_URL[type](id));
+    toast(`“${name}” staat in de prullenbak.`, 'success', { action: { label: 'Ongedaan maken', onClick: async () => {
+      try { await api('POST', '/api/trash/restore', { type, id }); toast(`“${name}” is teruggezet.`, 'success'); route(); } catch (err) { toast(err.message, 'error'); }
+    } } });
+    after();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function setArchived(type, id, name, archived) {
+  try {
+    await api('POST', `/api/${type === 'project' ? 'projects' : 'videos'}/${id}/archive`, { archived });
+    toast(archived ? `“${name}” is gearchiveerd. Bestanden blijven bewaard; klanten kunnen nog kijken maar niet reageren.` : `“${name}” is weer actief.`, 'success');
+    route();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 async function viewProject(id) {
-  const project = await api('GET', `/api/projects/${id}`);
+  const params = new URLSearchParams(location.search);
+  const showArchived = params.get('archief') === '1';
+  const project = await api('GET', `/api/projects/${id}${showArchived ? '?archived=1' : ''}`);
   document.title = `${project.name} — Studio Review`;
   refreshSidebar(project.id);
-  const params = new URLSearchParams(location.search);
+  const archived = !!project.archivedAt;
+  const mayUpload = can(project.myLevel, 'upload') && !archived;
+  const mayManage = can(project.myLevel, 'manage');
   const state = { q: '', filter: params.get('filter') || 'all' };
   const listEl = h('div', { class: 'video-list', role: 'list' });
   const filterBar = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Filter video’s' });
@@ -452,7 +512,7 @@ async function viewProject(id) {
 
   const reload = async () => {
     if (!location.pathname.endsWith(`/projecten/${id}`)) return;
-    const fresh = await api('GET', `/api/projects/${id}`).catch(() => null);
+    const fresh = await api('GET', `/api/projects/${id}${showArchived ? '?archived=1' : ''}`).catch(() => null);
     if (fresh) { project.videos = fresh.videos; draw(); refreshSidebar(project.id); }
   };
   const onDone = () => reload();
@@ -465,6 +525,10 @@ async function viewProject(id) {
       type: 'button', 'aria-pressed': String(state.filter === f.key),
       onClick: () => { state.filter = f.key; history.replaceState(null, '', f.key === 'all' ? location.pathname : `?filter=${f.key}`); draw(); },
     }, f.label, h('span', { class: 'seg-count' }, searched.filter(f.test).length))));
+    if (!project.videos.length && !mayUpload) {
+      mount(listEl, h('div', { class: 'card' }, emptyState({ icon: 'film', compact: true, title: 'Nog geen video’s', text: archived ? 'Dit project is gearchiveerd.' : 'Er staan nog geen video’s in dit project.' })));
+      return;
+    }
     if (!project.videos.length) {
       mount(listEl, h('button', { type: 'button', class: 'dropzone-big', onClick: chooseFiles },
         h('div', { class: 'empty-icon' }, icon('upload')),
@@ -480,7 +544,7 @@ async function viewProject(id) {
         action: button('Filters wissen', { onClick: () => { state.q = ''; search.value = ''; state.filter = 'all'; draw(); } }) }));
       return;
     }
-    mount(listEl, shown.map((v) => videoRow(v, reload)));
+    mount(listEl, shown.map((v) => videoRow(v, reload, { mayUpload, mayManage })));
   }
   search.addEventListener('input', () => { state.q = search.value; draw(); });
 
@@ -490,23 +554,34 @@ async function viewProject(id) {
       title: h('h1', { class: 'page-title', title: project.name }, project.name),
       meta: [project.clientName ? h('span', {}, project.clientName) : null, h('span', {}, plural(project.videos.length, 'video', 'video’s'))],
       actions: [
-        button('Bewerken', { icon: 'edit', variant: 'ghost', onClick: () => editProject(project) }),
-        button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }),
+        mayManage ? menuButton([
+          ['Project bewerken…', () => editProject(project), { icon: 'edit' }],
+          archived ? ['Uit archief halen', () => setArchived('project', project.id, project.name, false), { icon: 'refresh' }]
+            : ['Archiveren', () => setArchived('project', project.id, project.name, true), { icon: 'history' }],
+          ['Naar prullenbak…', () => moveToTrash('project', project.id, project.name, () => navigate('/')), { icon: 'trash', danger: true }],
+        ], 'Projectacties') : null,
+        mayUpload ? button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }) : null,
       ],
     }),
+    archived ? h('div', { class: 'notice notice-info page-notice' }, icon('history'),
+      h('span', {}, h('strong', {}, 'Dit project is gearchiveerd. '), 'Alles blijft bewaard en is te bekijken, maar uploaden, publiceren en reageren kan niet. Klanten kunnen hun links nog openen.'),
+      mayManage ? button('Uit archief halen', { size: 'sm', onClick: () => setArchived('project', project.id, project.name, false) }) : null) : null,
+    !can(project.myLevel, 'upload') && !archived ? h('p', { class: 'small muted page-notice' }, icon('lock'), `Je rechten in dit project: ${({ view: 'bekijken en reageren', publish: 'publiceren en delen' })[project.myLevel] || project.myLevel}.`) : null,
     project.videos.length ? h('div', { class: 'toolbar' }, h('div', { class: 'search toolbar-search' }, icon('search'), search), filterBar) : null,
     listEl,
-    project.videos.length ? h('p', { class: 'drop-hint small muted' }, icon('upload'), 'Tip: sleep bestanden op deze pagina om nieuwe video’s toe te voegen. Een nieuwe versie van een bestaande video upload je vanaf die video.') : null);
-  makeDropTarget(content, (files) => addVideos(project, files, onDone), 'Loslaten om als nieuwe video’s toe te voegen');
+    project.archivedVideoCount || showArchived ? h('p', { class: 'small' }, h('a', { href: showArchived ? location.pathname : `${location.pathname}?archief=1`, 'data-nav': true },
+      showArchived ? 'Gearchiveerde video’s verbergen' : `${plural(project.archivedVideoCount, 'gearchiveerde video', 'gearchiveerde video’s')} tonen`)) : null,
+    project.videos.length && mayUpload ? h('p', { class: 'drop-hint small muted' }, icon('upload'), 'Tip: sleep bestanden op deze pagina om nieuwe video’s toe te voegen. Een nieuwe versie van een bestaande video upload je vanaf die video.') : null);
+  if (mayUpload) makeDropTarget(content, (files) => addVideos(project, files, onDone), 'Loslaten om als nieuwe video’s toe te voegen');
   mount(pageEl, content);
   draw();
 }
 
-function videoRow(v, reload) {
+function videoRow(v, reload, { mayUpload, mayManage }) {
   const lv = v.latestVersion;
   const sv = v.sharedVersion;
   const titleText = h('a', { href: `/video/${v.id}`, 'data-nav': true, class: 'video-row-title', title: v.title }, v.title);
-  const renameBtn = button('', { icon: 'edit', variant: 'ghost', size: 'sm', 'aria-label': `Titel van “${v.title}” wijzigen`, onClick: (e) => { e.preventDefault(); startRename(); } });
+  const renameBtn = mayUpload && !v.archivedAt ? button('', { icon: 'edit', variant: 'ghost', size: 'sm', 'aria-label': `Titel van “${v.title}” wijzigen`, onClick: (e) => { e.preventDefault(); startRename(); } }) : null;
   const titleWrap = h('div', { class: 'video-row-titlewrap' }, titleText, renameBtn);
 
   function startRename() {
@@ -536,7 +611,7 @@ function videoRow(v, reload) {
     input.select();
   }
 
-  return h('div', { class: 'video-row', role: 'listitem', onClick: (e) => { if (!e.target.closest('button, input, a')) navigate(`/video/${v.id}`); } },
+  return h('div', { class: 'video-row', role: 'listitem', onClick: (e) => { if (!e.target.closest('button, input, a, .menu-wrap')) navigate(`/video/${v.id}`); } },
     h('a', { href: `/video/${v.id}`, 'data-nav': true, class: 'thumb', tabindex: '-1', 'aria-hidden': 'true' },
       posterImg(v.posterVersionId),
       lv?.duration ? h('span', { class: 'thumb-duration' }, timecode(lv.duration)) : null),
@@ -547,8 +622,14 @@ function videoRow(v, reload) {
         h('span', { class: `ver-chip${sv ? '' : ' is-none'}`, title: 'Versie die de klant via de link ziet' }, icon('eye'),
           sv ? [h('span', { class: 'muted' }, 'Klant ziet'), ` v${sv.number}`] : h('span', { class: 'muted' }, 'Nog niet gedeeld')))),
     h('div', { class: 'video-row-side' },
+      v.archivedAt ? h('span', { class: 'badge badge-neutral' }, icon('history'), 'Gearchiveerd') : null,
       v.openComments ? h('span', { class: 'badge badge-warn', title: 'Open reacties van de klant' }, icon('chat'), `${v.openComments} open`) : null,
       h('span', { class: 'small muted', title: formatDate(v.lastActivityAt) }, relativeDate(v.lastActivityAt)),
+      mayManage ? menuButton([
+        v.archivedAt ? ['Uit archief halen', () => setArchived('video', v.id, v.title, false), { icon: 'refresh' }]
+          : ['Archiveren', () => setArchived('video', v.id, v.title, true), { icon: 'history' }],
+        ['Naar prullenbak…', () => moveToTrash('video', v.id, v.title, reload), { icon: 'trash', danger: true }],
+      ], `Acties voor ${v.title}`) : null,
       icon('chevronRight')));
 }
 
@@ -611,6 +692,11 @@ async function viewVideo(id) {
     player.setMarkers(markersFrom(comments, activeId));
   }
 
+  const level = video.myLevel;
+  const archived = !!video.archivedAt;
+  // Wat mag deze gebruiker hier? (de server controleert dit ook; dit bepaalt alleen welke knoppen er staan)
+  const may = (need) => can(level, need) && !archived;
+
   const composer = createComposer({
     player,
     placeholder: 'Interne notitie of antwoord bij dit moment…',
@@ -656,20 +742,22 @@ async function viewVideo(id) {
   versionSelect.addEventListener('change', () => navigate(`/video/${video.id}?v=${versionSelect.value}`));
 
   const refresh = () => route();
-  const shareBtn = button('Delen', { icon: 'link', onClick: () => shareDialog(video, refresh) });
-  const newVersionBtn = button('Nieuwe versie', { icon: 'layers', onClick: () => newVersionDialog(video) });
+  const shareBtn = can(level, 'publish') ? button('Delen', { icon: 'link', onClick: () => shareDialog(video, refresh) }) : null;
+  const newVersionBtn = may('upload') ? button('Nieuwe versie', { icon: 'layers', onClick: () => newVersionDialog(video) }) : null;
+  if (archived) composer.setDisabled(true, 'Gearchiveerd: reageren is niet meer mogelijk.');
 
   const content = h('div', { class: 'workspace page-drop' },
     pageHeader({
       crumbs: [{ label: 'Projecten', href: '/' }, { label: video.project.name, href: `/projecten/${video.project.id}` }],
-      title: titleEditor(video),
+      title: titleEditor(video, may('upload')),
       meta: [
         h('span', { class: 'meta-item' }, h('span', { class: 'muted' }, 'Intern nieuwste: '), `Versie ${latest.number}`),
         h('span', { class: 'meta-item' }, icon('eye'), h('span', { class: 'muted' }, ' Klant ziet: '), clientVersion ? `Versie ${clientVersion.number}` : 'nog niets gedeeld'),
       ],
-      actions: [versionSelect, newVersionBtn, shareBtn, moreMenu(video, version)],
+      actions: [versionSelect, newVersionBtn, shareBtn, moreMenu(video, version, { level, archived })],
     }),
-    publishBar(video, version, latest, clientVersion, refresh),
+    archived ? h('div', { class: 'notice notice-info page-notice' }, icon('history'), h('span', {}, h('strong', {}, 'Gearchiveerd. '), 'Deze video is alleen te bekijken. Klanten kunnen hun link nog openen, maar niet meer reageren of goedkeuren.')) : null,
+    publishBar(video, version, latest, clientVersion, refresh, may),
     h('div', { class: 'workspace-grid' },
       h('section', { class: 'stage', 'aria-label': 'Video' },
         player.el,
@@ -680,7 +768,7 @@ async function viewVideo(id) {
       h('aside', { class: 'side-panel', 'aria-label': 'Reacties en details' },
         h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Paneel' }, tabButtons),
         Object.values(panels))));
-  makeDropTarget(content, (files) => newVersionDialog(video, files[0]), `Loslaten als nieuwe versie (Versie ${latest.number + 1})`);
+  if (may('upload')) makeDropTarget(content, (files) => newVersionDialog(video, files[0]), `Loslaten als nieuwe versie (Versie ${latest.number + 1})`);
   mount(pageEl, content);
   selectTab(['comments', 'versions', 'history'].includes(tab) ? tab : 'comments');
   drawComments();
@@ -691,11 +779,11 @@ async function viewVideo(id) {
   cleanup = () => { clearInterval(poll); player.destroy(); composer.destroy(); };
 }
 
-function titleEditor(video) {
+function titleEditor(video, editable) {
   const wrap = h('div', { class: 'title-edit' });
   const show = () => mount(wrap,
     h('h1', { class: 'page-title', title: video.title }, video.title),
-    button('', { icon: 'edit', variant: 'ghost', size: 'sm', 'aria-label': 'Titel wijzigen', title: 'Titel wijzigen', onClick: edit }));
+    editable ? button('', { icon: 'edit', variant: 'ghost', size: 'sm', 'aria-label': 'Titel wijzigen', title: 'Titel wijzigen', onClick: edit }) : null);
   function edit() {
     const input = h('input', { type: 'text', value: video.title, maxlength: '200', class: 'title-input', 'aria-label': 'Zichtbare titel' });
     const save = h('button', { class: 'btn btn-primary btn-sm', type: 'submit' }, h('span', { class: 'btn-label' }, 'Opslaan'));
@@ -720,7 +808,7 @@ function titleEditor(video) {
 }
 
 /** Vaste plek die zegt waar de geselecteerde versie staat en wat de volgende stap is. */
-function publishBar(video, version, latest, clientVersion, refresh) {
+function publishBar(video, version, latest, clientVersion, refresh, may) {
   const isLatest = version.id === latest.id;
   const act = async (btn, fn, msg) => {
     const restore = busy(btn);
@@ -735,7 +823,7 @@ function publishBar(video, version, latest, clientVersion, refresh) {
   } else if (version.status === 'concept') {
     text = [h('strong', {}, `Versie ${version.number} is intern.`), clientVersion ? ` Klanten zien nog Versie ${clientVersion.number}.` : ' Klanten zien nog niets.', ' Zet de versie klaar zodra hij gecontroleerd is.'];
     const b = button('Klaar voor review', { icon: 'flag', variant: 'primary', onClick: () => act(b, () => api('POST', `/api/versions/${version.id}/ready`), `Versie ${version.number} staat klaar om te delen`) });
-    actions = [b];
+    actions = may('upload') ? [b] : [];
   } else if (version.status === 'ready_for_review') {
     text = [h('strong', {}, `Versie ${version.number} is klaar, maar nog niet gedeeld.`), ` Na publiceren zien klanten via hun bestaande link Versie ${version.number}${clientVersion ? ` in plaats van Versie ${clientVersion.number}` : ''}, en wordt de status In review.`];
     const b = button(`Publiceren naar klant`, { icon: 'send', variant: 'primary', onClick: async () => {
@@ -748,53 +836,38 @@ function publishBar(video, version, latest, clientVersion, refresh) {
       });
       if (ok) act(b, () => api('POST', `/api/versions/${version.id}/share`), `Versie ${version.number} is gepubliceerd. Klanten zien deze versie nu.`);
     } });
-    actions = [b];
+    actions = may('publish') ? [b] : [h('span', { class: 'small muted' }, icon('lock'), ' Publiceren doet een collega met publicatierechten.')];
   } else if (version.status === 'in_review') {
     text = [h('strong', {}, 'Klanten zien deze versie.'), ' Wacht op feedback of goedkeuring van de akkoordgever', video.approverName ? ` (${video.approverName})` : '', '.'];
-    actions = [button('Links bekijken', { icon: 'link', onClick: () => shareDialog(video, refresh) })];
+    actions = may('publish') ? [button('Links bekijken', { icon: 'link', onClick: () => shareDialog(video, refresh) })] : [];
   } else if (version.status === 'changes_requested') {
     text = [h('strong', {}, 'Feedback ontvangen.'), round ? ` ${round.reviewerName}${round.verified ? ' (akkoordgever)' : ''} verstuurde ${plural(round.commentCount, 'reactie', 'reacties')} op ${formatDate(round.at)}.` : '', ' Verwerk de feedback en upload een nieuwe versie.'];
-    actions = [button('Nieuwe versie uploaden', { icon: 'layers', variant: 'primary', onClick: () => newVersionDialog(video) })];
+    actions = may('upload') ? [button('Nieuwe versie uploaden', { icon: 'layers', variant: 'primary', onClick: () => newVersionDialog(video) })] : [];
   } else if (version.status === 'approved') {
     text = version.approval
       ? [h('strong', {}, `Goedgekeurd door ${version.approval.name}`), ` op ${formatDate(version.approval.at)}. Deze goedkeuring geldt alleen voor Versie ${version.number}.`]
       : [h('strong', {}, 'Handmatig op Goedgekeurd gezet.'), ' Er is geen klantgoedkeuring vastgelegd voor deze versie.'];
   }
-  const correct = h('button', { type: 'button', class: 'link-btn', onClick: () => statusDialog(version, refresh) }, icon('edit'), 'Status corrigeren');
+  const correct = may('manage') ? h('button', { type: 'button', class: 'link-btn', onClick: () => statusDialog(version, refresh) }, icon('edit'), 'Status corrigeren') : null;
   return h('section', { class: `publish-bar is-${version.status}${isLatest ? '' : ' is-old'}`, 'aria-label': 'Status en volgende stap' },
     h('div', { class: 'publish-status' }, h('span', { class: 'publish-version' }, `Versie ${version.number}`), statusPill(version.status)),
     h('p', { class: 'publish-text' }, text),
     h('div', { class: 'publish-actions' }, correct, actions));
 }
 
-function moreMenu(video, version) {
-  const menu = h('div', { class: 'menu', role: 'menu', hidden: true },
-    h('a', { class: 'menu-item', role: 'menuitem', href: `/api/versions/${version.id}/download`, download: '' }, icon('download'), `Download Versie ${version.number}`),
-    h('button', { type: 'button', class: 'menu-item is-danger', role: 'menuitem', onClick: async () => {
-      close();
-      const ok = await confirmDialog({ title: 'Video verwijderen?', body: `“${video.title}” met alle ${plural(video.versions.length, 'versie', 'versies')}, reacties en links wordt definitief verwijderd. Klantlinks werken daarna niet meer.`, confirmLabel: 'Definitief verwijderen', danger: true });
-      if (!ok) return;
-      try { await api('DELETE', `/api/videos/${video.id}`); toast('Video verwijderd'); navigate(`/projecten/${video.project.id}`); } catch (err) { toast(err.message, 'error'); }
-    } }, icon('trash'), 'Video verwijderen'));
-  const trigger = button('', { icon: 'more', variant: 'ghost', 'aria-label': 'Meer acties', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
-  const close = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', outside); };
-  const outside = (e) => { if (!wrap.contains(e.target)) close(); };
-  trigger.addEventListener('click', () => {
-    if (!menu.hidden) return close();
-    menu.hidden = false;
-    trigger.setAttribute('aria-expanded', 'true');
-    menu.querySelector('.menu-item')?.focus();
-    setTimeout(() => document.addEventListener('click', outside));
-  });
-  menu.addEventListener('keydown', (e) => {
-    const items = [...menu.querySelectorAll('.menu-item')];
-    const i = items.indexOf(document.activeElement);
-    if (e.key === 'Escape') { close(); trigger.focus(); }
-    if (e.key === 'ArrowDown') { items[(i + 1) % items.length].focus(); e.preventDefault(); }
-    if (e.key === 'ArrowUp') { items[(i - 1 + items.length) % items.length].focus(); e.preventDefault(); }
-  });
-  const wrap = h('div', { class: 'menu-wrap' }, trigger, menu);
-  return wrap;
+function moreMenu(video, version, { level, archived }) {
+  const back = () => navigate(`/projecten/${video.project.id}`);
+  const items = [[`Download Versie ${version.number}`, () => { location.href = `/api/versions/${version.id}/download`; }, { icon: 'download' }]];
+  if (can(level, 'manage')) {
+    if (video.versions.length > 1) {
+      items.push([`Versie ${version.number} naar prullenbak…`, () => moveToTrash('version', version.id, `${video.title} · versie ${version.number}`, () => navigate(`/video/${video.id}`)), { icon: 'layers', danger: true }]);
+    }
+    items.push(archived
+      ? ['Video uit archief halen', () => setArchived('video', video.id, video.title, false), { icon: 'refresh' }]
+      : ['Video archiveren', () => setArchived('video', video.id, video.title, true), { icon: 'history' }]);
+    items.push(['Video naar prullenbak…', () => moveToTrash('video', video.id, video.title, back), { icon: 'trash', danger: true }]);
+  }
+  return menuButton(items, 'Meer acties');
 }
 
 function versionsList(video, current) {
@@ -967,49 +1040,6 @@ async function shareDialog(video, refresh) {
 async function shareDialogReopen(videoId) {
   if (location.pathname !== `/video/${videoId}`) return;
   try { const fresh = await api('GET', `/api/videos/${videoId}`); shareDialog(fresh, () => route()); } catch { /* pagina toont al de fout */ }
-}
-
-// ---------- Team ----------
-
-async function viewTeam() {
-  document.title = 'Team — Studio Review';
-  const [users, freshSession] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/session')]);
-  session = { ...session, media: freshSession.media };
-  const m = session.media;
-  const name = h('input', { name: 'name', required: true, autocomplete: 'off' });
-  const email = h('input', { name: 'email', type: 'email', required: true, autocomplete: 'off' });
-  const password = h('input', { name: 'password', type: 'password', minlength: '10', required: true, autocomplete: 'new-password' });
-  const submit = h('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), h('span', { class: 'btn-label' }, 'Teamlid toevoegen'));
-  const form = h('form', { class: 'card', onSubmit: async (e) => {
-    e.preventDefault();
-    const restore = busy(submit);
-    try {
-      await api('POST', '/api/users', { name: name.value, email: email.value, password: password.value });
-      toast('Teamlid toegevoegd. Deel het wachtwoord via een veilig kanaal.', 'success');
-      route();
-    } catch (err) { toast(err.message, 'error'); restore(); }
-  } },
-  h('h2', { class: 'card-title' }, 'Teamlid toevoegen'),
-  h('div', { class: 'form-grid' }, field('Naam', name), field('E-mailadres', email), field('Tijdelijk wachtwoord', password, 'Minimaal 10 tekens.')),
-  submit);
-
-  const tool = (label, ok, p, missing) => h('li', { class: ok ? 'is-ok' : 'is-bad' }, icon(ok ? 'checkCircle' : 'alert'),
-    h('div', {}, h('strong', {}, label), h('div', { class: 'small muted mono' }, ok ? p : missing)));
-
-  mount(pageEl, h('div', { class: 'page page-narrow' },
-    pageHeader({ title: 'Team', meta: plural(users.length, 'teamlid', 'teamleden') }),
-    h('section', { class: 'card' }, h('h2', { class: 'card-title' }, 'Teamleden'),
-      h('ul', { class: 'user-list' }, users.map((u) => h('li', {},
-        h('span', { class: 'avatar' }, initials(u.name)),
-        h('div', { class: 'user-text' }, h('strong', { class: 'truncate' }, u.name, u.id === session.user.id ? h('span', { class: 'muted' }, ' (jij)') : null), h('span', { class: 'small muted truncate' }, u.email)),
-        h('span', { class: 'small muted' }, `sinds ${formatDate(u.createdAt).split(',')[0]}`))))),
-    form,
-    h('section', { class: 'card', id: 'systeem' }, h('h2', { class: 'card-title' }, 'Systeem'),
-      h('ul', { class: 'system-list' },
-        tool('ffprobe · inhoudscontrole van uploads', m?.ffprobe, m?.paths?.ffprobe, 'Niet gevonden. Installeer ffmpeg (macOS: brew install ffmpeg) of zet FFPROBE_PATH in .env en herstart.'),
-        tool('ffmpeg · thumbnails', m?.ffmpeg, m?.paths?.ffmpeg, 'Niet gevonden. Zonder ffmpeg krijgen nieuwe uploads geen thumbnail.'),
-        tool('Uploads', m?.uploadsEnabled, m?.unverifiedAllowed && !m?.ffprobe ? 'Zonder inhoudscontrole (alleen voor ontwikkeling)' : 'Ingeschakeld, met inhoudscontrole', 'Uitgeschakeld tot ffprobe beschikbaar is.')),
-      h('p', { class: 'small muted' }, 'Controleer de installatie in de terminal met ', h('code', {}, 'npm run check'), '.'))));
 }
 
 // Uploads die klaar zijn, verversen het zijbalkoverzicht.

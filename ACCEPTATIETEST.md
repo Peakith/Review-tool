@@ -55,6 +55,20 @@ Je hebt twee browservensters nodig: één voor het **team** en een privévenster
 
 ---
 
+## F. Startknop, gegevens en beheer (op je eigen Mac)
+Deze punten zijn **niet op een echte Mac getest**: de start- en stopknop zijn alleen op Linux getest. Doe ze daarom zelf, en volg voor de eerste keer **[UPDATEN.md](UPDATEN.md)**.
+
+| # | Doe | Verwacht | ✓ |
+|---|---|---|---|
+| 25 | Dubbelklik `Start Studio Review.command` in de nieuwe map. | macOS vraagt eenmalig om toestemming (zie de README). Daarna opent Terminal, de controles staan op ✓, de vraag om gegevens over te nemen verschijnt, en de browser opent vanzelf. | ☐ |
+| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.2.0 (build …)". | ☐ |
+| 27 | Dubbelklik nog eens op de startknop. | Er start niets nieuws; de bestaande sessie opent in de browser. | ☐ |
+| 28 | **Opslag & back-ups › Nu back-up maken.** | De back-up krijgt "compleet en gecontroleerd", met de juiste aantallen en in een map onder `~/Studio Review/backups`. | ☐ |
+| 29 | **Team & rechten** → voeg een freelancer toe met toegang "Bekijken en reageren" tot één project. Log in als freelancer (privévenster). | De freelancer ziet alleen dat project, kan reageren, maar ziet geen upload-, deel- of publiceerknoppen. | ☐ |
+| 30 | Gooi als beheerder een testvideo in de prullenbak en open de klantlink ervan. | De klant krijgt "niet meer beschikbaar". Na **Prullenbak › Terugzetten** werkt de link weer. | ☐ |
+| 31 | Dubbelklik `Stop Studio Review.command`. | De melding "Studio Review is gestopt. Je gegevens zijn bewaard." verschijnt, en het startvenster stopt. | ☐ |
+| 32 | Start opnieuw en ververs een tabblad dat nog openstond. | De pagina werkt direct, zonder harde verversing of het legen van de cache. | ☐ |
+
 ## Handmatige browsertestlijst
 Automatisch getest (`npm run test:browser`, zie de PR): **Chrome 141 desktop (Linux, headless)** en **Chrome 141 met Pixel 7-emulatie**. Al het andere moet nog met de hand. Voer per browser minstens stappen 8–11, 13, 19–20 en 7 uit.
 

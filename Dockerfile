@@ -10,14 +10,16 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY server ./server
 COPY public ./public
-COPY scripts/create-user.js ./scripts/create-user.js
+COPY scripts ./scripts
 
 ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data \
+    BACKUP_DIR=/backups \
+    STUDIO_REVIEW_HOME=/data-home \
     LANG=C.UTF-8
-RUN mkdir -p /data && chown node:node /data
-VOLUME /data
+RUN mkdir -p /data /backups /data-home && chown node:node /data /backups /data-home
+VOLUME ["/data", "/backups"]
 USER node
 EXPOSE 3000
 

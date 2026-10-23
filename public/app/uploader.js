@@ -43,11 +43,11 @@ function putChunk(url, blob, onProgress, signal) {
 }
 
 /** Meldt een nieuwe upload aan bij de server. */
-export function createUpload(file) {
+export function createUpload(file, target = {}) {
   return request('/api/uploads', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ filename: file.name, size: file.size }),
+    body: JSON.stringify({ filename: file.name, size: file.size, ...target }),
   });
 }
 

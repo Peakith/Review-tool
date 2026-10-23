@@ -1,4 +1,6 @@
 'use strict';
+const os = require('node:os');
+const path = require('node:path');
 const { loadConfig } = require('./config');
 const { readLock, writeLock, removeLock } = require('./lock');
 
@@ -50,6 +52,16 @@ const server = app.listen(config.port, async () => {
 
   if (needsSetup()) {
     const base = config.publicUrl || `http://localhost:${config.port}`;
+    if (config.dataSource === 'vast') {
+      const { findEarlierInstalls } = require('../scripts/migrate-data');
+      const earlier = findEarlierInstalls([path.dirname(config.appDir), path.join(os.homedir(), 'Downloads')], [config.appDir]);
+      if (earlier.length) {
+        console.warn('');
+        console.warn(`!! Deze installatie is nog leeg, maar er staan gegevens van een eerdere versie in ${earlier[0].dataDir}.`);
+        console.warn('!! Maak hier geen nieuw account aan. Stop de app en dubbelklik "Start Studio Review.command" (die biedt aan');
+        console.warn(`!! ze over te nemen), of voer uit:  npm run verhuis -- --van "${earlier[0].dataDir}"`);
+      }
+    }
     console.log('');
     console.log('Nog geen accounts. Maak het eerste teamaccount aan met deze installatiecode:');
     console.log(`  ${setupToken}`);

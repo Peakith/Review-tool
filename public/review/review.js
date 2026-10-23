@@ -72,7 +72,7 @@ async function refreshComments() {
 }
 
 const isApprover = () => state.info.role === 'approver';
-const canAct = () => state.version.isLatest && ['in_review', 'changes_requested'].includes(state.version.status);
+const canAct = () => !state.info.archived && state.version.isLatest && ['in_review', 'changes_requested'].includes(state.version.status);
 const myPending = () => {
   let n = 0;
   const walk = (list) => list.forEach((c) => { if (c.mine && c.pending) n++; walk(c.replies || []); });
@@ -82,6 +82,7 @@ const myPending = () => {
 
 /** In gewone taal: wat betekent de status van deze versie voor de klant? */
 function clientStatus(v) {
+  if (state.info.archived) return { cls: 'is-closed', icon: 'history', title: 'Afgerond en gearchiveerd', text: 'Je kunt de video nog bekijken, maar reageren en goedkeuren is niet meer mogelijk.' };
   if (!v.isLatest) return { cls: 'is-old', icon: 'history', title: 'Oudere versie', text: 'Alleen om terug te kijken. Reageren en goedkeuren kan op de nieuwste versie.' };
   if (v.status === 'approved') return { cls: 'is-approved', icon: 'checkCircle', title: 'Goedgekeurd', text: v.approval ? `Goedgekeurd door ${v.approval.name} op ${formatDate(v.approval.at)}.` : 'Deze versie is goedgekeurd.' };
   if (v.status === 'changes_requested') return { cls: 'is-changes', icon: 'send', title: 'Feedback verstuurd', text: 'Het team past de video aan. Je kunt nog aanvullen' + (isApprover() ? ' of deze versie alsnog goedkeuren.' : '.') };

@@ -12,6 +12,7 @@ services:
       TRUST_PROXY: "true"
     volumes:
       - review-data:/data
+      - review-backups:/backups
 
   caddy:
     image: caddy:2.8
@@ -31,4 +32,5 @@ services:
 
 volumes:
   review-data:
+  review-backups:
   caddy-data:

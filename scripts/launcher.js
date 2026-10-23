@@ -122,6 +122,39 @@ async function main() {
     }
   }
 
+  // ---- Nieuwe, lege installatie? Zoeken naar gegevens van een eerdere (uitgepakte) versie. ----
+  if (config.dataSource === 'vast' && needsSetup(config)) {
+    const { migrate, findEarlierInstalls } = require('./migrate-data');
+    const home = require('node:os').homedir();
+    const searchDirs = process.env.STUDIO_REVIEW_SEARCH
+      ? process.env.STUDIO_REVIEW_SEARCH.split(path.delimiter)
+      // Alleen de map naast deze installatie en Downloads: andere mappen (Bureaublad, Documenten) geven op macOS
+      // een privacyvraag. Staat de oude versie elders, gebruik dan npm run verhuis -- --van "<map>/data".
+      : [path.dirname(APP_DIR), path.join(home, 'Downloads')];
+    const found = findEarlierInstalls(searchDirs, [APP_DIR]);
+    if (found.length) {
+      line('\n! Er zijn nog geen gegevens voor deze installatie, maar wel bij een eerdere versie:');
+      found.forEach((f, i) => line(`  ${i + 1}. ${f.appDir}  (${f.counts.users} account(s), ${f.counts.projects} project(en), ${f.counts.videos} video('s), laatst gewijzigd ${new Date(f.modified).toLocaleString('nl-NL')})`));
+      line(`  Deze gegevens kunnen worden overgenomen naar ${path.join(config.root, 'gegevens')}.`);
+      line('  Er wordt eerst een back-up gemaakt; de oude map blijft onaangeroerd.');
+      const answer = await ask(found.length === 1 ? '  Overnemen? (j/n) ' : `  Welk nummer overnemen? (1-${found.length}, of n) `);
+      const pick = found.length === 1 ? (yes(answer) ? found[0] : null) : found[Number(answer) - 1] || (yes(answer) ? found[0] : null);
+      if (pick) {
+        try {
+          const r = await migrate({ source: pick.dataDir, target: path.join(config.root, 'gegevens'), backupDir: config.backupDir, copyMedia: !config.mediaConfigured });
+          line(`  ✓ Overgenomen en gecontroleerd: ${r.counts.users} account(s), ${r.counts.projects} project(en), ${r.files} bestand(en).`);
+          config = loadConfig();
+        } catch (err) {
+          line(`  ✗ Overnemen mislukt, er is niets gewijzigd: ${err.message}`);
+          line('  Stop de oude versie als die nog draait en start opnieuw. Er wordt nu niet gestart, zodat je geen lege installatie krijgt.');
+          return 3;
+        }
+      } else {
+        line(`  Niet overgenomen. Later kan het alsnog (met de app gestopt): npm run verhuis -- --van "${found[0].dataDir}"`);
+      }
+    }
+  }
+
   // ---- Starten ----
   const env = { ...process.env };
   let url = `http://localhost:${config.port}`;

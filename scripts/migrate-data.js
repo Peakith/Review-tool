@@ -16,7 +16,7 @@ const { gb, ask, yes, openReadOnly, argValue, fail } = require('./lib/cli');
 async function migrate({ source, target, backupDir, copyMedia = true, log = console.log }) {
   if (path.resolve(source) === path.resolve(target)) return { already: true };
   if (!fs.existsSync(path.join(source, 'review.db'))) throw new Error(`Geen database gevonden in ${source}.`);
-  if (fs.existsSync(path.join(target, 'review.db'))) throw new Error(`In ${target} staan al gegevens. Er is niets gewijzigd; controleer welke map je wilt gebruiken.`);
+  if (fs.existsSync(path.join(target, 'review.db')) && !isEmptyInstall(target)) throw new Error(`In ${target} staan al gegevens. Er is niets gewijzigd; controleer welke map je wilt gebruiken.`);
   if (isInside(target, source) || isInside(source, target)) throw new Error('De nieuwe map mag niet binnen de oude map liggen (of andersom).');
   if (isInside(backupDir, source) || isInside(backupDir, target)) throw new Error('De back-upmap moet buiten de oude en de nieuwe gegevensmap liggen.');
   assertNotRunning(source, 'start de verhuizing');
@@ -76,7 +76,51 @@ async function migrate({ source, target, backupDir, copyMedia = true, log = cons
   }
 }
 
-module.exports = { migrate };
+/** Een database zonder accounts en projecten (bijv. na één keer starten zonder account aan te maken). */
+function isEmptyInstall(dir) {
+  const counts = peekDb(path.join(dir, 'review.db'));
+  return !!counts && !counts.users && !counts.projects;
+}
+
+/** Snel en alleen-lezen: hoeveel accounts, projecten en video's staan er in deze database? */
+function peekDb(file) {
+  if (!fs.existsSync(file)) return null;
+  try {
+    const db = openReadOnly(file);
+    try {
+      const n = (t) => db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n;
+      return { users: n('users'), projects: n('projects'), videos: n('videos') };
+    } finally { db.close(); }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Zoekt eerdere installaties met gegevens in hun programmamap (<map>/data/review.db), bijvoorbeeld
+ * de vorige uitgepakte ZIP naast de nieuwe in Downloads. Kijkt één niveau diep in de opgegeven mappen.
+ */
+function findEarlierInstalls(searchDirs, exclude = []) {
+  const skip = new Set(exclude.map((d) => path.resolve(d)));
+  const found = new Map();
+  for (const base of searchDirs) {
+    let entries = [];
+    try { entries = fs.readdirSync(base, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.')) continue;
+      const appDir = path.resolve(base, e.name);
+      const dataDir = path.join(appDir, 'data');
+      if (skip.has(appDir) || found.has(dataDir)) continue;
+      const db = path.join(dataDir, 'review.db');
+      const counts = peekDb(db);
+      if (!counts || (!counts.users && !counts.projects)) continue;
+      found.set(dataDir, { appDir, dataDir, counts, modified: fs.statSync(db).mtimeMs });
+    }
+  }
+  return [...found.values()].sort((a, b) => b.modified - a.modified);
+}
+
+module.exports = { migrate, findEarlierInstalls, isEmptyInstall };
 
 if (require.main === module) {
   (async () => {

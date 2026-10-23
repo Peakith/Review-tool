@@ -88,7 +88,7 @@ async function process(item) {
   try {
     if (!item.uploaded) {
       if (!item.uploadId) {
-        const init = await createUpload(item.file);
+        const init = await createUpload(item.file, item.target.kind === 'video' ? { projectId: item.target.projectId } : { videoId: item.target.videoId });
         item.uploadId = init.id;
         item.chunkSize = init.chunkSize;
       }

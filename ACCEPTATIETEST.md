@@ -45,7 +45,7 @@ Je hebt twee browservensters nodig: één voor het **team** en een privévenster
 | 19 | Open de **akkoordlink** (liefst op je telefoon). | "Je reviewt als <naam>, Aangewezen akkoordgever". Onderin staan "Feedback versturen" en "Deze versie goedkeuren". | ☐ |
 | 20 | **Deze versie goedkeuren** → **Ja, keur Versie 2 goed**. | Groene bevestiging, status **Goedgekeurd** met naam, datum en tijd. | ☐ |
 | 21 | Team: ververs. | De statusbalk toont "Goedgekeurd door <naam>". Onder Versies staat v1 op "Aanpassingen nodig" en v2 op "Goedgekeurd". | ☐ |
-| 22 | **Status corrigeren** → kies "In review" en klik zonder reden op opslaan. Vul daarna een reden in. | Zonder reden lukt het niet. Met reden wordt de correctie opgeslagen; onder **Geschiedenis** staat "Reden: …" met jouw naam. | ☐ |
+| 22 | **Status van Versie 2 corrigeren** → kies "In review" en klik zonder reden op opslaan. Vul daarna een reden in. | Zonder reden lukt het niet. Met reden wordt de correctie opgeslagen; onder **Geschiedenis** staat "Reden: …" met jouw naam. | ☐ |
 
 ## E. Toegang intrekken
 | # | Doe | Verwacht | ✓ |
@@ -61,7 +61,7 @@ Deze punten zijn **niet op een echte Mac getest**: de start- en stopknop zijn al
 | # | Doe | Verwacht | ✓ |
 |---|---|---|---|
 | 25 | Dubbelklik `Start Studio Review.command` in de nieuwe map. | macOS vraagt eenmalig om toestemming (zie de README). Daarna opent Terminal, de controles staan op ✓, de vraag om gegevens over te nemen verschijnt, en de browser opent vanzelf. | ☐ |
-| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.5.0 (build …)". | ☐ |
+| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.5.1 (build …)". | ☐ |
 | 27 | Dubbelklik nog eens op de startknop. | Er start niets nieuws; de bestaande sessie opent in de browser. | ☐ |
 | 28 | **Opslag & back-ups › Nu back-up maken.** | De back-up krijgt "compleet en gecontroleerd", met de juiste aantallen en in een map onder `~/Studio Review/backups`. | ☐ |
 | 29 | **Team & rechten** → voeg een freelancer toe met toegang "Bekijken en reageren" tot één project. Log in als freelancer (privévenster). | De freelancer ziet alleen dat project, kan reageren, maar ziet geen upload-, deel- of publiceerknoppen. | ☐ |
@@ -110,7 +110,7 @@ Gebruik een testproject. Doe de klantstappen in een privévenster (niet ingelogd
 | # | Doe | Verwacht | ✓ |
 |---|---|---|---|
 | 56 | Laat de akkoordgever (privévenster, akkoordlink) versie 1 goedkeuren. Team: open de video. | In de statusbalk staat **Definitief vrijgeven…**. | ☐ |
-| 57 | Zet bij een andere video de status handmatig op Goedgekeurd (Status corrigeren). Open **Oplevering › Bestanden vrijgeven…**. | Die video kan niet worden gekozen; de uitleg zegt dat een statuslabel geen klantgoedkeuring vervangt. | ☐ |
+| 57 | Zet bij een andere video de status handmatig op Goedgekeurd (Status van Versie 1 corrigeren). Open **Oplevering › Bestanden vrijgeven…**. | Die video kan niet worden gekozen; de uitleg zegt dat een statuslabel geen klantgoedkeuring vervangt. | ☐ |
 | 58 | Kies versie 1 → **Overzicht bekijken** → **Vrijgeven**. Vul een oplevertekst in en sla op. Maak een **opleverlink**. | Het overzicht toont bestandsnaam, formaat en grootte. De rij staat op “Beschikbaar voor de klant”. | ☐ |
 | 59 | Privévenster: open de opleverlink en klik **Downloaden**. | Merk, oplevertekst, thumbnail, type/kanaal, MP4 + grootte, versie, datum. Het bestand heet “Titel - v1.mp4” en speelt af in QuickTime. | ☐ |
 | 60 | Team: upload een nieuwe versie (concept). | Onder Oplevering staat “Er is een nieuwere versie…”. De klant ziet en downloadt nog steeds versie 1. | ☐ |
@@ -120,7 +120,18 @@ Gebruik een testproject. Doe de klantstappen in een privévenster (niet ingelogd
 | 64 | Open het klantportaal (projectlink) in het privévenster. | Na een nieuwe vrijgave staat bovenaan de kaart “Definitieve bestanden”. | ☐ |
 | 65 | Team: tab **Klantactiviteit**. Filter op “Download aangevraagd” en op een video. | Je ziet je eigen klantstappen met tijd, video, versie en “Via opleverlink” / “Via akkoordlink van …”. Je eigen bezoeken als ingelogd teamlid staan er niet bij. | ☐ |
 | 66 | **Opslag & back-ups** → Klantactiviteit bewaren: zet 30 dagen en sla op. | Opgeslagen. Goedkeuringen en geschiedenis blijven staan. | ☐ |
+| 66a | Werkplek van een video waarvan v1 is opgeleverd en v2 bestaat: open v2 → **Status van Versie 2 corrigeren**. | Het venster zegt “alleen voor Versie 2” en “De definitieve oplevering is Versie 1”. Na opslaan blijft de opleverpagina v1 tonen en downloaden. | ☐ |
 | 67 | Op een iPhone (alleen met een bereikbaar adres): open een video met een tekening en tik op volledig scherm. | Een korte uitleg met **Groot in de pagina (met tekeningen)**. Daarin staat de tekening op de juiste plek. *Nog niet op een echte iPhone getest.* | ☐ |
+
+## J. Back-up terugzetten en klantlinks (± 10 min, alleen met testgegevens)
+Gebruik de aparte testgegevensmap (zie boven), nooit je echte gegevens.
+
+| # | Doe | Verwacht | ✓ |
+|---|---|---|---|
+| 68 | Maak een back-up. Trek daarna een reviewlink in. Stop de app en voer `npm run herstel` uit; kies die back-up. | Vóór het terugzetten zie je het aantal review-, akkoord-, project- en opleverlinks en de keuze; 1 (veilig) is de standaard. | ☐ |
+| 69 | Kies 1 (Enter) en bevestig. Start de app. | Bovenaan: “Alle … klantlinks zijn ongeldig gemaakt”. Elke oude klantlink toont “ingetrokken”. Goedkeuringen, reacties en opleveringen zijn er nog. | ☐ |
+| 70 | Maak een nieuwe reviewlink, projectlink en opleverlink en open ze in een privévenster. | Ze werken. | ☐ |
+| 71 | (Optioneel) Herhaal 68 en kies 2. | Eerst een extra waarschuwing. Daarna werkt ook de reviewlink die je na de back-up had ingetrokken weer, en de melding in de app is rood. | ☐ |
 
 ## Handmatige browsertestlijst
 Automatisch getest (`npm run test:browser`, zie de PR): **Chrome 141 desktop (Linux, headless)** en **Chrome 141 met Pixel 7-emulatie**. Al het andere moet nog met de hand. Voer per browser minstens stappen 8–11, 13, 19–20 en 7 uit.

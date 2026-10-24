@@ -192,6 +192,22 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   await cp.waitForSelector('.d-item');
   check('klant: ziet nog steeds versie 1 na de nieuwe upload', /Versie\s*1/.test(await cp.textContent('.d-item')) && !/Versie\s*2/.test(await cp.textContent('body')));
 
+  // Statuscorrectie: het venster noemt de exacte versie en de gevolgen voor goedkeuring en oplevering
+  await page.goto(`${BASE}/video/${main.videoId}?v=${v2.versionId}`);
+  await page.click('.publish-bar button:has-text("Status van Versie 2 corrigeren")');
+  const fixV2 = await page.textContent('dialog');
+  check('statuscorrectie v2: geldt alleen voor Versie 2; oplevering (Versie 1) verandert niet', /alleen voor Versie 2/.test(fixV2) && /De definitieve oplevering is Versie 1/.test(fixV2), fixV2.slice(0, 200));
+  await page.selectOption('dialog select', 'approved');
+  check('statuscorrectie v2 naar Goedgekeurd: uitleg dat een label geen klantgoedkeuring is', /alleen een label/.test(await page.textContent('dialog .status-impact')));
+  await page.click('dialog button:has-text("Annuleren")');
+  await page.goto(`${BASE}/video/${main.videoId}?v=${main.versionId}`);
+  await page.click('.publish-bar button:has-text("Status van Versie 1 corrigeren")');
+  await page.selectOption('dialog select', 'changes_requested');
+  const fixV1 = await page.textContent('dialog .status-impact');
+  check('statuscorrectie v1: waarschuwt dat de goedkeuring wordt ingetrokken en de oplevering geblokkeerd', /trekt de goedkeuring van Joris Bakker voor Versie 1 in/.test(fixV1) && /oplevering van deze versie wordt geblokkeerd/.test(fixV1), fixV1);
+  await shot(page, '99-statuscorrectie-per-versie');
+  await page.click('dialog button:has-text("Annuleren")');
+
   // ---------- A4. Bewust vervangen ----------
   await apiT('POST', `/api/versions/${v2.versionId}/ready`);
   await apiT('POST', `/api/versions/${v2.versionId}/share`, { round: 'new', requestId: 'share-v2-bbbbbbbb' });
@@ -202,7 +218,7 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   await ap.click('dialog button:has-text("Ja, keur Versie 2 goed")');
   await ap.waitForSelector('.notice-ok:has-text("goedgekeurd")');
   await ap.close();
-  await page.reload();
+  await page.goto(`${BASE}/projecten/${projectId}/oplevering`);
   await page.waitForSelector('.dl-row');
   await page.click('.dl-row button:has-text("Vervangen")');
   await page.waitForSelector('dialog .release-list');

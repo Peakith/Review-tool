@@ -3,7 +3,8 @@
 //     feedback, teamnotitie en -antwoord, akkoordlink en goedkeuring, en een back-up;
 //  2. de nieuwe code start op dezelfde gegevens: alles werkt nog, teamnotities zijn intern, antwoorden aan
 //     de klant blijven zichtbaar, klantportaal werkt;
-//  3. de back-up van de vorige versie wordt met de nieuwe code teruggezet en werkt.
+//  3. de back-up van de vorige versie wordt met de nieuwe code teruggezet en werkt; de klantlinks uit
+//     die back-up zijn daarbij (veilige standaard) ongeldig gemaakt.
 // Gebruik: npm run test:upgrade [-- <oude-commit>]
 'use strict';
 const fs = require('fs');
@@ -125,8 +126,13 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   await t3.post('/api/login', { email: 'sanne@agency.nl', password: 'een-lang-wachtwoord' });
   const restored = (await t3.get(`/api/videos/${created.videoId}`)).data;
   ok('na herstel: video met 2 versies en goedkeuring', restored.versions?.length === 2 && restored.versions[0].approval?.name === 'Joris');
-  const media = await fetch(`${base}/api/review/${token}/versions/${v2.versionId}/media`);
-  ok('na herstel: klant kan de video afspelen via de oude link', media.status === 200);
+  // Veilige standaard bij herstel: alle klantlinks uit de (oudere) back-up zijn ongeldig gemaakt.
+  ok('na herstel: oude review- en akkoordlink ongeldig (veilige standaard)', r.links.mode === 'invalidate'
+    && (await fetch(`${base}/api/review/${token}/versions/${v2.versionId}/media`)).status === 410 && (await client(base).get(`/api/review/${approver}`)).status === 410);
+  const teamMedia = await fetch(`${base}/api/versions/${v2.versionId}/media`, { headers: { cookie: t3.cookie() } });
+  ok('na herstel: video speelt af voor het team; melding over de klantlinks', teamMedia.status === 200 && (await t3.get('/api/session')).data.system.restoreNotice?.links === 'invalidate');
+  const freshLink = new URL((await t3.post(`/api/videos/${created.videoId}/links`, { role: 'reviewer' })).data.url).pathname.split('/').pop();
+  ok('na herstel: een nieuwe reviewlink werkt', (await fetch(`${base}/api/review/${freshLink}/versions/${v2.versionId}/media`)).status === 200);
   ok('na herstel: projectlink van ná de back-up bestaat niet meer (zoals verwacht)', (await client(base).get(new URL(link.url).pathname.replace('/p/', '/api/portal/'))).status === 404);
   ok('na herstel: oplevering van ná de back-up bestaat niet (geen verzonnen gegevens)', (await t3.get(`/api/projects/${projectId}/deliveries`)).data.history.length === 0);
   await stop(srv);

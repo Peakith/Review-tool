@@ -172,6 +172,19 @@ function systemBanner() {
     return h('div', { class: 'system-banner is-error', role: 'alert' }, icon('alert'),
       h('span', {}, h('strong', {}, 'Opslag niet bereikbaar. '), sys.storage.reason));
   }
+  if (sys?.restoreNotice) {
+    const n = sys.restoreNotice;
+    const dismiss = button('Begrepen', { size: 'sm', onClick: async (e) => {
+      const restore = busy(e.currentTarget);
+      try { await api('POST', '/api/system/restore-notice/dismiss'); sys.restoreNotice = null; e.target.closest('.system-banner')?.remove(); } catch (err) { toast(err.message, 'error'); restore(); }
+    } });
+    return h('div', { class: `system-banner${n.links === 'keep' ? ' is-error' : ''}`, role: 'status' }, icon(n.links === 'keep' ? 'alert' : 'info'),
+      h('span', {}, h('strong', {}, `Back-up van ${formatDate(n.backupCreatedAt)} teruggezet. `),
+        n.links === 'keep'
+          ? `De klantlinks uit de back-up werken weer (${n.linkCounts?.total ?? 0}). Links die je na die back-up had ingetrokken, kunnen dus weer toegang geven. Controleer ze en trek ze zo nodig opnieuw in.`
+          : `Alle ${n.linkCounts?.total ?? 0} klantlinks (review-, akkoord-, project- en opleverlinks) zijn ongeldig gemaakt. Maak nieuwe links aan en deel ze opnieuw. Goedkeuringen, reacties en opleveringen zijn bewaard.`),
+      dismiss);
+  }
   if (sys?.dataInAppDir && session.user.isAdmin) {
     return h('div', { class: 'system-banner' }, icon('alert'),
       h('span', {}, h('strong', {}, 'Je gegevens staan nog in de programmamap. '), 'Bij een update met een nieuwe ZIP blijven ze daar achter. Verhuis ze eenmalig: stop de app en kies "verhuizen" bij de startknop, of voer ', h('code', {}, 'npm run verhuis'), ' uit.'));
@@ -1068,7 +1081,7 @@ function publishBar(video, version, latest, clientVersion, refresh, may) {
       actions.push(button(`Naar Versie ${latest.number}`, { icon: 'arrowLeft', onClick: () => navigate(`/video/${video.id}`) }));
     }
   }
-  const correct = may('manage') ? h('button', { type: 'button', class: 'link-btn', onClick: () => statusDialog(version, refresh) }, icon('edit'), 'Status corrigeren') : null;
+  const correct = may('manage') ? h('button', { type: 'button', class: 'link-btn', onClick: () => statusDialog(video, version, refresh) }, icon('edit'), `Status van Versie ${version.number} corrigeren`) : null;
   return h('section', { class: `publish-bar is-${version.status}${isLatest ? '' : ' is-old'}`, 'aria-label': 'Status en volgende stap' },
     h('div', { class: 'publish-status' }, h('span', { class: 'publish-version' }, `Versie ${version.number}`), statusPill(version.status)),
     h('p', { class: 'publish-text' }, text),
@@ -1269,16 +1282,39 @@ function historyList(version) {
         e.note ? h('div', { class: 'small muted' }, `Reden: ${e.note}`) : null)))));
 }
 
-async function statusDialog(version, refresh) {
+async function statusDialog(video, version, refresh) {
+  // Een correctie geldt alleen voor precies deze versie; laat zien wat dat betekent voor goedkeuring en oplevering.
+  const delivered = video.delivery && video.delivery.versionId === version.id;
+  const otherDelivery = video.delivery && video.delivery.versionId !== version.id ? video.delivery : null;
+  const impact = h('div', { class: 'status-impact' });
+  const drawImpact = () => {
+    const to = select.value;
+    const notes = [];
+    if (version.releasable && to !== 'approved') {
+      notes.push(h('div', { class: 'notice notice-warn' }, icon('alert'), h('span', {}, h('strong', {}, `Dit trekt de goedkeuring van ${version.approval.name} voor Versie ${version.number} in. `),
+        delivered ? 'De definitieve oplevering van deze versie wordt geblokkeerd: nieuwe downloads zijn niet meer mogelijk. ' : '',
+        'Terugzetten op Goedgekeurd herstelt dat niet; daarvoor is een nieuwe goedkeuring door de akkoordgever nodig (en daarna opnieuw vrijgeven).')));
+    }
+    if (to === 'approved' && !version.releasable) {
+      notes.push(h('div', { class: 'notice notice-info' }, icon('info'), h('span', {}, 'Een handmatige “Goedgekeurd” is alleen een label: het telt niet als klantgoedkeuring en maakt definitief vrijgeven niet mogelijk.')));
+    }
+    if (otherDelivery) {
+      notes.push(h('p', { class: 'small muted' }, icon('package'), ` De definitieve oplevering is Versie ${otherDelivery.versionNumber}. Die verandert niet door een correctie op Versie ${version.number}.`));
+    }
+    mount(impact, notes);
+  };
   const select = h('select', { 'aria-label': 'Nieuwe status', required: true },
     Object.entries(STATUS_LABELS).map(([k, label]) => h('option', { value: k, disabled: k === version.status }, `${label}${k === version.status ? ' (huidig)' : ''}`)));
   select.value = Object.keys(STATUS_LABELS).find((k) => k !== version.status);
   const reason = h('textarea', { rows: '2', required: true, maxlength: '500', placeholder: 'Bijv. “Klant gaf telefonisch akkoord”' });
+  select.addEventListener('change', drawImpact);
+  drawImpact();
   await openDialog({
-    title: `Status van Versie ${version.number} corrigeren`,
+    title: `Status van Versie ${version.number} van “${video.title}” corrigeren`,
     body: [
-      h('p', {}, 'Gebruik dit alleen om een fout te herstellen. De wijziging wordt met jouw naam, tijdstip en reden in de geschiedenis bewaard.'),
+      h('p', {}, 'Gebruik dit alleen om een fout te herstellen. De wijziging geldt ', h('strong', {}, `alleen voor Versie ${version.number}`), ' (huidige status: ', STATUS_LABELS[version.status], ') en wordt met jouw naam, tijdstip en reden in de geschiedenis van die versie bewaard. Andere versies en hun goedkeuringen blijven ongewijzigd.'),
       field('Nieuwe status', select),
+      impact,
       field('Reden (verplicht)', reason),
       h('p', { class: 'small muted' }, 'Een handmatige “Goedgekeurd” is geen goedkeuring door de akkoordgever. Zichtbaarheid voor de klant verandert hier niet; delen doe je met “Publiceren naar klant”.'),
     ],
@@ -1286,7 +1322,7 @@ async function statusDialog(version, refresh) {
     onSubmit: async () => {
       try {
         await api('POST', `/api/versions/${version.id}/status`, { status: select.value, note: reason.value });
-        toast(`Status gecorrigeerd naar ${STATUS_LABELS[select.value]}`, 'success');
+        toast(`Status van Versie ${version.number} gecorrigeerd naar ${STATUS_LABELS[select.value]}`, 'success');
         refresh();
       } catch (err) { toast(err.message, 'error'); return false; }
     },

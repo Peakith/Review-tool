@@ -119,9 +119,15 @@ function createApp(overrides = {}) {
         // Gegevens staan nog in de programmamap: bij een update zouden ze achterblijven.
         dataInAppDir: config.dataSource === 'programmamap',
         legacyDataLeft: user.isAdmin && config.dataSource === 'vast' ? config.legacyDataDir : null,
+        // Na het terugzetten van een back-up: wat er met de klantlinks is gebeurd.
+        restoreNotice: user.isAdmin ? restoreNotice() : null,
       } : undefined,
     });
   });
+
+  const restoreNotice = () => {
+    try { return JSON.parse(db.prepare("SELECT value FROM app_meta WHERE key = 'restore-notice'").get()?.value || 'null'); } catch { return null; }
+  };
 
   api.post('/setup', (req, res) => {
     limiter.check(req.ip);

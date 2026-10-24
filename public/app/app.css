@@ -633,3 +633,5 @@ details.dl-section[open] > summary.dl-head::before { transform: rotate(90deg); }
 .act-note { font-style: italic; }
 .act-retention { margin-top: 14px; }
 .field-inline { display: inline-flex; align-items: center; gap: 8px; }
+.status-impact { display: grid; gap: 8px; }
+.status-impact:empty { display: none; }

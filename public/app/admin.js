@@ -331,8 +331,11 @@ function backupsCard(ctx, data) {
       h('ol', {},
         h('li', {}, 'Stop de app (Stop Studio Review.command of Ctrl+C in het startvenster).'),
         h('li', {}, 'Open Terminal in de programmamap en voer uit: ', h('code', {}, 'npm run herstel'), '. Kies de back-up uit de lijst.'),
-        h('li', {}, 'De back-up wordt eerst volledig gecontroleerd. Je huidige gegevens worden niet verwijderd maar bewaard als “…voor-herstel-<datum>”.'),
-        h('li', {}, 'Start de app opnieuw.'))));
+        h('li', {}, 'Kies wat er met klantlinks gebeurt. ', h('strong', {}, 'Standaard (veilig): alle review-, akkoord-, project- en opleverlinks worden ongeldig'),
+          ', omdat een back-up niet weet welke links je later hebt ingetrokken. Je maakt daarna nieuwe links aan en deelt die opnieuw. Alleen als je daar bewust voor kiest, gaan de links uit de back-up weer werken; dan kunnen eerder ingetrokken links ook weer toegang geven.'),
+        h('li', {}, 'De back-up wordt eerst volledig gecontroleerd. Je huidige gegevens worden niet verwijderd maar bewaard als “…voor-herstel-<datum>”. Goedkeuringen, reacties, opleveringen en geschiedenis blijven altijd bewaard.'),
+        h('li', {}, 'Start de app opnieuw. Bovenaan staat een melding over de klantlinks.')),
+      h('p', { class: 'small muted' }, 'Een gewone update met een nieuwe ZIP raakt klantlinks niet; die blijven gewoon werken.')));
 }
 
 // ---------- Prullenbak ----------

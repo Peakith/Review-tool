@@ -373,3 +373,41 @@ test('teamvoorbeeld van de opleverpagina: alleen-lezen, zelfde inhoud, geen acti
   assert.deepEqual((await client(srv.base).get(`/api/delivery/${t}`)).data.items, []);
   assert.equal((await client(srv.base).get(`/api/delivery/${'x'.repeat(32)}`)).status, 404);
 });
+
+test('statuscorrecties gelden per exacte versie: v2 corrigeren raakt de oplevering van v1 niet; v1 intrekken wel', async () => {
+  const p = await project('Per versie');
+  // v1 goedgekeurd en definitief vrijgegeven
+  assert.equal((await approve(p.approver, p.v1, 1)).status, 200);
+  const first = (await release(admin, p.projectId, [{ versionId: p.v1 }])).data.released[0];
+  const token = await deliveryLink(p.projectId);
+  const url = (await client(srv.base).get(`/api/delivery/${token}`)).data.items[0].downloadUrl;
+  // v2 geüpload en gepubliceerd voor review
+  const v2 = await newVersion(p);
+  await admin.post(`/api/versions/${v2}/ready`);
+  await admin.post(`/api/versions/${v2}/share`, { requestId: rid() });
+  // Handmatige correcties op v2 (ook naar Goedgekeurd en weer terug): oplevering van v1 blijft beschikbaar
+  for (const [status, note] of [['changes_requested', 'Klant belde: titel aanpassen'], ['approved', 'Per ongeluk'], ['in_review', 'Terug naar review']]) {
+    assert.equal((await admin.post(`/api/versions/${v2}/status`, { status, note })).status, 200);
+    assert.equal((await client(srv.base).get(url)).status, 200, `na correctie v2 → ${status}`);
+  }
+  assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM status_events WHERE event = 'manual' AND version_id = ?").get(p.v1).n, 0, 'geen correctie op v1 vastgelegd');
+  assert.equal(srv.db.prepare("SELECT COUNT(*) AS n FROM status_events WHERE event = 'manual' AND version_id = ?").get(v2).n, 3);
+  assert.equal((await admin.get(`/api/projects/${p.projectId}/deliveries`)).data.active[0].available, true);
+  // v2 handmatig "Goedgekeurd" geeft geen vrijgaverecht (geen klantgoedkeuring van v2)
+  await admin.post(`/api/versions/${v2}/status`, { status: 'approved', note: 'Label' });
+  assert.equal((await release(admin, p.projectId, [{ versionId: v2, replace: true }])).status, 409);
+  // De goedkeuring van v1 intrekken (correctie op v1) blokkeert downloads van die oplevering
+  assert.equal((await admin.post(`/api/versions/${p.v1}/status`, { status: 'changes_requested', note: 'Akkoord v1 ingetrokken' })).status, 200);
+  assert.equal((await client(srv.base).get(url)).status, 410);
+  assert.equal((await admin.get(`/api/projects/${p.projectId}/deliveries`)).data.active[0].reason, 'approval_revoked');
+  // Een handmatig label “Goedgekeurd” op v1 herstelt het ingetrokken akkoord niet
+  assert.equal((await admin.post(`/api/versions/${p.v1}/status`, { status: 'approved', note: 'Terugzetten' })).status, 200);
+  assert.equal((await client(srv.base).get(url)).status, 410);
+  const v1 = (await admin.get(`/api/videos/${p.videoId}`)).data.versions.find((v) => v.id === p.v1);
+  assert.equal(v1.releasable, false);
+  assert.match(v1.releaseProblem, /ingetrokken/);
+  assert.equal((await release(admin, p.projectId, [{ versionId: p.v1 }])).status, 409);
+  // De goedkeuring van v1 en de vrijgave blijven als historie bestaan
+  assert.equal(v1.approval.name, 'Joris');
+  assert.equal(srv.db.prepare('SELECT withdrawn_at FROM deliveries WHERE id = ?').get(first).withdrawn_at, null);
+});

@@ -121,7 +121,7 @@ const apiOf = (page, base) => ({
   await f.click('.video-row-title');
   await f.waitForSelector('.publish-bar');
   check('freelancer (bekijken): geen Delen, Nieuwe versie of Status corrigeren',
-    !(await f.isVisible('.page-actions button:has-text("Delen")')) && !(await f.isVisible('.page-actions button:has-text("Nieuwe versie")')) && !(await f.isVisible('text=Status corrigeren')));
+    !(await f.isVisible('.page-actions button:has-text("Delen")')) && !(await f.isVisible('.page-actions button:has-text("Nieuwe versie")')) && !(await f.isVisible('button:has-text("Status van Versie"):has-text("corrigeren")')));
   await f.click('.composer textarea');
   await f.fill('.composer textarea', 'Kleurcorrectie in dit shot nog checken.');
   await f.click('.composer button[type=submit]');

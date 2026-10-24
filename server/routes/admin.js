@@ -349,6 +349,13 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
 
   // ---------- Systeem ----------
 
+  // Melding na het terugzetten van een back-up wegklikken (alleen beheerder).
+  router.post('/system/restore-notice/dismiss', (req, res) => {
+    access.requireAdmin(req);
+    db.prepare("DELETE FROM app_meta WHERE key = 'restore-notice'").run();
+    res.json({ ok: true });
+  });
+
   router.get('/system', (req, res) => {
     access.requireAdmin(req);
     res.json({

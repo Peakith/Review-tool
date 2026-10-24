@@ -57,7 +57,7 @@ brew install node ffmpeg
 
 | Wat | Standaardlocatie | Bij een update |
 |---|---|---|
-| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.5.0` | vervangen |
+| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.5.1` | vervangen |
 | Gegevens (database met accounts, projecten, reacties, links en rechten; video's in `media/`) | `~/Studio Review/gegevens` | blijft staan |
 | Back-ups | `~/Studio Review/backups` | blijft staan |
 | Instellingen | `~/Studio Review/instellingen.env` | blijft staan |
@@ -77,7 +77,7 @@ brew install node ffmpeg
 | Commando | Wat het doet |
 |---|---|
 | **Opslag & back-ups › Nu back-up maken**, of `npm run backup` | Maakt een back-up terwijl de app draait. Die bevat de database (een consistente momentopname), alle video's en thumbnails, en `manifest.json` met aantallen, controlesommen en of hij compleet is. De back-up komt in een eigen map buiten de gegevensmap; video's worden in stromen gekopieerd, dus ook grote bestanden kosten weinig geheugen. |
-| `npm run herstel` | Zet een back-up terug; je kiest hem uit een lijst. De app moet gestopt zijn. De back-up wordt eerst volledig gecontroleerd en in een tijdelijke map klaargezet. Je huidige gegevens worden niet verwijderd, maar bewaard als `gegevens.voor-herstel-<datum>`. |
+| `npm run herstel` | Zet een back-up terug; je kiest hem uit een lijst. De app moet gestopt zijn. De back-up wordt eerst volledig gecontroleerd en in een tijdelijke map klaargezet. Je huidige gegevens worden niet verwijderd, maar bewaard als `gegevens.voor-herstel-<datum>`. **Klantlinks:** vooraf zie je hoeveel review-, akkoord-, project- en opleverlinks de back-up bevat. Standaard worden ze allemaal ongeldig (een back-up weet niet welke links later zijn ingetrokken); je maakt daarna nieuwe links. Alleen bewust (keuze 2 of `--links=herstellen`) gaan de links uit de back-up weer werken, ook later ingetrokken links. Goedkeuringen, reacties, opleveringen en geschiedenis blijven altijd bewaard. Een ZIP-update raakt links niet. |
 
 **Opslag**
 - **Opslag & back-ups** toont het gebruik per project en in totaal: actieve versies, oudere versies, gearchiveerd, prullenbak en tijdelijke uploads. Daarnaast zie je de vrije schijfruimte.
@@ -288,7 +288,7 @@ brew install node ffmpeg
   - een project in de prullenbak sluit de opleverlink af;
   - terugzetten brengt de toegang terug, maar activeert een ingetrokken link nooit opnieuw;
   - het venster voor definitief verwijderen waarschuwt als bestanden deel uitmaken van een oplevering.
-- **Back-up terugzetten** zet alles terug zoals het op het moment van die back-up was, dus ook opleverlinks die toen nog actief waren. Trek zo nodig na een herstel de opleverlink opnieuw in of vervang hem.
+- **Back-up terugzetten** maakt standaard alle klantlinks ongeldig, ook de opleverlink (zie `npm run herstel` hierboven). De vrijgaven zelf blijven staan; maak een nieuwe opleverlink en deel die.
 
 **Klantactiviteit** (tab **Klantactiviteit** in het project, voor wie mag publiceren en delen)
 - Gebeurtenissen:
@@ -343,7 +343,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 - Klantlinks en de akkoordgever werken los van accounts, net als voorheen.
 
 ## Versie en cache
-- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.5.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
+- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.5.1 (build 1a2b3c4d)`. Het werkt ook zonder Git:
   - de versie komt uit `package.json`;
   - de build is een vingerafdruk van de interfacebestanden.
 - Na een update is gewoon verversen genoeg. De pagina zelf wordt altijd gecontroleerd, en alle scripts en stijlen (ook geïmporteerde modules) komen van een adres per build.
@@ -367,7 +367,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
   - een versiekeuze, *Nieuwe versie* en *Delen* staan altijd op dezelfde plek.
 - **Reacties** filter je op open, afgehandeld of alles. Je kunt ze beantwoorden en afhandelen. Het invoerveld toont live op welk moment de reactie komt, en een klik maakt er een algemene reactie van.
 - **Deelvenster** met een duidelijk verschil tussen de **reviewlink** (bekijken, reageren, feedback; kan niet goedkeuren) en de **akkoordlink** (persoonlijk; alleen hiermee kan worden goedgekeurd). Links kopieer je en trek je in vanuit dit venster.
-- **Status corrigeren** kan alleen met een verplichte reden, die in de geschiedenis wordt bewaard.
+- **Status van Versie N corrigeren** kan alleen met een verplichte reden, die in de geschiedenis van precies die versie wordt bewaard. Andere versies en hun goedkeuringen veranderen niet; het venster toont wat de correctie betekent voor de goedkeuring en een eventuele oplevering.
 - **Downloaden** geeft `Titel - vN.<echte extensie>`, bijvoorbeeld `Campagnefilm — Hoofdvideo - v2.mp4`.
 - **Team & rechten:** teamleden en freelancers toevoegen, toegang per project, en zien of ffprobe en ffmpeg gevonden zijn (met paden). Zie *Rechten per project*.
 
@@ -394,7 +394,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 | Team: "Publiceren naar klant" | In review (klanten zien vanaf nu deze versie) |
 | Klant: "Feedback versturen" | Aanpassingen nodig |
 | Akkoordgever: "Deze versie goedkeuren" | Goedgekeurd |
-| Team: "Status corrigeren" (reden verplicht) | Elke status (gelogd met naam en reden) |
+| Team: "Status van Versie N corrigeren" (reden verplicht) | Elke status (gelogd met naam en reden) |
 
 Feedback en goedkeuring zijn alleen mogelijk op de nieuwste gedeelde versie met status *In review* of *Aanpassingen nodig*.
 
@@ -420,20 +420,23 @@ Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan
 ### Tests
 Alle tests gebruiken eigen, tijdelijke mappen en raken je echte gegevens in `~/Studio Review` niet aan.
 ```bash
-npm test                                                   # 110 servertests (vereist ffmpeg)
-CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (51 controles)
+npm test                                                   # 117 servertests (vereist ffmpeg)
+CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (52 controles)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rechten, opslag, back-ups, prullenbak, archief (23)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal, merk, opleveringen, briefing, desktop + mobiel (51)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:feedback # taken, rondes, tekenen, bereik, vergelijken, export, desktop + mobiel (50)
-CHROME_PATH=/pad/naar/chrome npm run test:browser:oplevering # opleveringen, klantactiviteit, iPhone-uitleg (nagebootst), desktop + mobiel (49)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:oplevering # opleveringen, klantactiviteit, statuscorrectie per versie, iPhone-uitleg (nagebootst), desktop + mobiel (52)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:update   # update met de vorige interface in de browsercache (7)
 npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (13)
-npm run test:upgrade                                       # bijwerken vanaf 0.4.0 met echte gegevens + oude back-up terugzetten (26)
+npm run test:upgrade                                       # bijwerken vanaf 0.4.0 met echte gegevens + oude back-up terugzetten (28)
+npm run test:offline-update                                # ZIP-update vanaf 0.4.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (11)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;
   - de prullenbak (klantlinks en directe media geblokkeerd, terugzetten, definitief verwijderen);
   - back-up en herstel van begin tot eind (account, project, versie, reacties en reviewlink);
+  - klantlinks bij herstel: standaard alle review-, akkoord-, project- en opleverlinks ongeldig (ook op een schone installatie), alleen bewust de links uit de back-up, historie intact, nieuwe links werken, de herstelopdracht zelf;
+  - statuscorrecties per exacte versie: een correctie op v2 raakt de oplevering van v1 niet, intrekken op v1 blokkeert wel, een handmatig label herstelt niets;
   - geheugengebruik bij een bestand van 400 MB;
   - verhuizen van gegevens, te weinig schijfruimte en een ontbrekende externe schijf;
   - cacheheaders;

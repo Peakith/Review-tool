@@ -236,11 +236,75 @@ async function verifyBackup(dir, { deep = true } = {}) {
 }
 
 /**
- * Zet een back-up terug in `dataDir` (en `mediaDir`). De huidige gegevens worden NIET
+ * Klantlinks (externe toegang met een token): reviewlinks en akkoordlinks (share_links, ook die via
+ * het klantportaal zijn ontstaan), projectlinks (klantportaal) en opleverlinks. Oudere back-ups
+ * hebben nog niet alle tabellen.
+ */
+const LINK_KINDS = [
+  ['reviewLinks', "SELECT COUNT(*) AS n FROM share_links WHERE revoked_at IS NULL AND role = 'reviewer'", 'share_links'],
+  ['approverLinks', "SELECT COUNT(*) AS n FROM share_links WHERE revoked_at IS NULL AND role = 'approver'", 'share_links'],
+  ['projectLinks', 'SELECT COUNT(*) AS n FROM project_links WHERE revoked_at IS NULL', 'project_links'],
+  ['deliveryLinks', 'SELECT COUNT(*) AS n FROM delivery_links WHERE revoked_at IS NULL', 'delivery_links'],
+];
+const LINK_TABLES = ['share_links', 'project_links', 'delivery_links'];
+const RESTORE_LINK_MODES = ['invalidate', 'keep'];
+
+/** Hoeveel klantlinks in deze database (of back-up) nog geldig zijn, per soort. */
+function activeLinkCounts(dbFile) {
+  const db = new sqlite.DatabaseSync(dbFile, { readOnly: true });
+  try {
+    const has = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
+    const counts = {};
+    for (const [key, sql, table] of LINK_KINDS) counts[key] = has(table) ? db.prepare(sql).get().n : 0;
+    counts.total = counts.reviewLinks + counts.approverLinks + counts.projectLinks + counts.deliveryLinks;
+    return counts;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Na het terugzetten in de (nog niet actieve) herstelde database: klantlinks ongeldig maken of
+ * bewust laten staan, en dat vastleggen zodat de app het na het starten kan melden.
+ * Alleen de links worden ingetrokken; goedkeuringen, reacties, opleveringen en geschiedenis blijven
+ * ongewijzigd (een goedkeuring verwijst naar de link, maar blijft gewoon bestaan).
+ */
+function applyLinkChoice(dbFile, { mode, manifest, before }) {
+  const db = new sqlite.DatabaseSync(dbFile);
+  try {
+    const at = new Date().toISOString();
+    const has = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      if (mode === 'invalidate') {
+        for (const t of LINK_TABLES) if (has(t)) db.prepare(`UPDATE ${t} SET revoked_at = ?, revoked_by = NULL WHERE revoked_at IS NULL`).run(at);
+      }
+      db.exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+      db.prepare("INSERT INTO app_meta (key, value) VALUES ('restore-notice', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        .run(JSON.stringify({ at, backupCreatedAt: manifest.createdAt, links: mode, linkCounts: before }));
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Zet een back-up terug in `dataDir` (en `mediaDir`).
+ *
+ * links: wat er met klantlinks gebeurt. Een back-up weet niet welke links ná het maken ervan zijn
+ * ingetrokken. Daarom is de standaard 'invalidate': alle review-, akkoord-, project- en opleverlinks
+ * worden ongeldig, en het team maakt nieuwe links aan. Met 'keep' werken de links uit de back-up
+ * weer, ook links die later waren ingetrokken; dat moet een bewuste keuze zijn.
+ * (Een gewone ZIP-update raakt links nooit; dit geldt alleen voor het terugzetten van een back-up.) De huidige gegevens worden NIET
  * verwijderd maar hernoemd naar "<map>.voor-herstel-<tijd>". Eerst wordt alles in een
  * tijdelijke map opgebouwd en gecontroleerd; pas daarna wordt omgewisseld.
  */
-async function restoreBackup({ backupPath, dataDir, mediaDir, allowIncomplete = false, onProgress = () => {} }) {
+async function restoreBackup({ backupPath, dataDir, mediaDir, allowIncomplete = false, links = 'invalidate', onProgress = () => {} }) {
+  if (!RESTORE_LINK_MODES.includes(links)) throw new Error(`Onbekende keuze voor klantlinks: ${links}`);
   const check = await verifyBackup(backupPath, { deep: true });
   const onlyMissing = check.problems.every((p) => p.includes('waren al niet aanwezig'));
   if (!check.ok && !(allowIncomplete && onlyMissing)) {
@@ -259,6 +323,7 @@ async function restoreBackup({ backupPath, dataDir, mediaDir, allowIncomplete = 
 
   await fsp.mkdir(stageData, { recursive: true });
   await fsp.mkdir(stageMedia, { recursive: true });
+  let linkCounts;
   try {
     onProgress({ phase: 'database' });
     const dbCopy = await copyWithHash(path.join(backupPath, 'review.db'), path.join(stageData, 'review.db'));
@@ -275,6 +340,8 @@ async function restoreBackup({ backupPath, dataDir, mediaDir, allowIncomplete = 
       if (manifest.counts[t] === undefined) continue; // tabel bestond nog niet toen de back-up werd gemaakt
       if (restored.counts[t] !== manifest.counts[t]) throw new Error(`Aantal ${t} na herstel (${restored.counts[t]}) wijkt af van de back-up (${manifest.counts[t]}).`);
     }
+    linkCounts = activeLinkCounts(path.join(stageData, 'review.db'));
+    applyLinkChoice(path.join(stageData, 'review.db'), { mode: links, manifest, before: linkCounts });
   } catch (err) {
     await fsp.rm(stageData, { recursive: true, force: true });
     if (!mediaInside) await fsp.rm(stageMedia, { recursive: true, force: true });
@@ -290,7 +357,7 @@ async function restoreBackup({ backupPath, dataDir, mediaDir, allowIncomplete = 
     if (fs.existsSync(mediaDir)) { keptMedia = `${mediaDir}.voor-herstel-${ts}`; await fsp.rename(mediaDir, keptMedia); }
     await fsp.rename(stageMedia, mediaDir);
   }
-  return { manifest, keptData, keptMedia };
+  return { manifest, keptData, keptMedia, links: { mode: links, counts: linkCounts } };
 }
 
-module.exports = { createBackup, createDbBackup, listBackups, verifyBackup, restoreBackup, snapshotDb, inspectDb, copyWithHash, sha256File, stamp, COUNT_TABLES };
+module.exports = { createBackup, createDbBackup, listBackups, verifyBackup, restoreBackup, activeLinkCounts, RESTORE_LINK_MODES, snapshotDb, inspectDb, copyWithHash, sha256File, stamp, COUNT_TABLES };

@@ -5,24 +5,34 @@ Vanaf versie 0.2.0 staan programma en gegevens los van elkaar:
 - **Programma**: de uitgepakte map. Bij elke update komt er een nieuwe.
 - **Gegevens**: `~/Studio Review/` met daarin `gegevens/`, `backups/` en `instellingen.env`. Deze map blijft gewoon staan.
 
-## Van 0.4.0 naar 0.5.0 (bouwronde 4: definitieve opleveringen en klantactiviteit)
+## Van 0.4.0 naar 0.5.1 (bouwronde 4: definitieve opleveringen en klantactiviteit)
 
-Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` blijven staan.
+Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` blijven staan, en je klantlinks blijven werken.
 
 1. **Maak eerst een back-up:** **Opslag & back-ups › Nu back-up maken**. Wacht tot er “compleet en gecontroleerd” staat.
 2. **Stop de app:** dubbelklik `Stop Studio Review.command`.
-3. **Pak de nieuwe ZIP uit** in een nieuwe map (laat de oude map nog even staan).
-4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.** Er zijn geen nieuwe onderdelen nodig; internet is niet nodig.
-5. **Ververs een openstaand tabblad.** Onderin de zijbalk staat dan **Studio Review 0.5.0**.
+3. **Pak de nieuwe ZIP uit** in een nieuwe map. Laat de oude map nog staan.
+4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.** De eerste start installeert de onderdelen (express en pdfkit) in de nieuwe map:
+   - **Normaal geen internet nodig:** deze onderdelen zijn bij de eerste start van 0.4.0 al gedownload en staan in de npm-cache op je Mac (`~/.npm`). De startknop haalt ze daar op. *Getest zonder netwerk: dit lukte in ongeveer 1 seconde.*
+   - **Is de npm-cache leeg** (bijvoorbeeld opgeruimd), dan is internet nodig. Zonder internet stopt de startknop na ruim een minuut met de melding *Installeren is mislukt*. Je gegevens worden niet aangeraakt.
+   - **Geen internet en lege cache?** Kopieer de map `node_modules` uit je vorige programmamap (0.4.0) naar de nieuwe map en start opnieuw. Dat kan bij deze update, omdat 0.4.0 en 0.5.1 precies dezelfde onderdelen gebruiken. *Getest zonder netwerk en zonder cache.*
+5. **Ververs een openstaand tabblad.** Onderin de zijbalk staat dan **Studio Review 0.5.1**.
 6. Open een project: er zijn twee nieuwe tabbladen, **Oplevering** en **Klantactiviteit**.
 
 **Goed om te weten na deze update**
 - Er wordt niets automatisch vrijgegeven. Bestaande goedkeuringen door de akkoordgever tellen wel: die versies kun je meteen bewust vrijgeven.
 - Versies die alleen handmatig op Goedgekeurd zijn gezet, kunnen niet worden vrijgegeven; daarvoor is een goedkeuring via de akkoordlink nodig.
 - Klantactiviteit wordt pas vanaf deze versie bijgehouden; er is geen activiteit van vóór de update.
-- Bestaande links, reacties, rondes, taken, exports en het klantportaal werken ongewijzigd.
+- Bestaande links, reacties, rondes, taken, exports en het klantportaal werken ongewijzigd. Een ZIP-update raakt klantlinks nooit.
+- Node.js (22.13 of nieuwer) en ffmpeg moeten al geïnstalleerd zijn, zoals bij 0.4.0.
 
-**Terug naar 0.4.0?** Stop de app, zet in de oude map de back-up van stap 1 terug met `npm run herstel`, en start de oude versie. Zonder herstel start 0.4.0 ook; die toont dan geen opleveringen en activiteit.
+**Een back-up terugzetten (`npm run herstel`) werkt vanaf deze versie anders voor klantlinks.**
+- Een back-up weet niet welke links je ná het maken ervan hebt ingetrokken. Daarom vraagt de herstelopdracht vooraf wat er met klantlinks gebeurt, en toont hij hoeveel review-, akkoord-, project- en opleverlinks er in de back-up geldig zijn.
+- **Standaard (veilig):** alle klantlinks worden ongeldig. Na het starten maak je nieuwe links aan (Delen bij de video, Klantportaal en Oplevering in het project) en deel je die opnieuw. Goedkeuringen, reacties, opleveringen en geschiedenis blijven volledig bewaard.
+- **Alleen als je daar bewust voor kiest** (keuze 2, of `npm run herstel -- --links=herstellen`) gaan de links uit de back-up weer werken. Ook links die je later had ingetrokken, geven dan weer toegang.
+- Na het starten staat bovenaan een melding met wat er met de links is gebeurd.
+
+**Terug naar 0.4.0?** Stop de app. Zet de back-up van stap 1 terug met `npm run herstel` in de **nieuwe** map (die stelt de vraag over klantlinks) en start daarna de oude versie in de oude map. De herstelopdracht van 0.4.0 zelf kent die vraag niet en laat alle links uit de back-up weer werken.
 
 ## Van 0.3.0 naar 0.4.0 (bouwronde 3: taken, rondes, tekenen, vergelijken, export)
 

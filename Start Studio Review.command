@@ -19,10 +19,19 @@ if ! node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.e
   echo "Werk bij met:  brew upgrade node"
   wacht; exit 1
 fi
+# Een nieuwe programmamap (ZIP) heeft nog geen onderdelen. npm haalt ze eerst uit de npm-cache op
+# deze Mac (eerder gedownload) en downloadt alleen wat daar ontbreekt; dan is internet nodig.
 if [ ! -d node_modules/express ] || [ ! -d node_modules/pdfkit ]; then
-  echo "Onderdelen installeren of bijwerken (npm install)…"
-  if ! npm install --omit=dev --no-audit --no-fund; then
-    echo "Installeren is mislukt. Voor deze eerste stap is internet nodig."
+  echo "Onderdelen installeren (npm install)…"
+  echo "Eerder gedownloade onderdelen komen uit de npm-cache; ontbreekt er iets, dan is internet nodig."
+  echo "Zonder internet kan deze stap ruim een minuut duren voordat hij opgeeft."
+  if ! npm install --omit=dev --no-audit --no-fund --prefer-offline; then
+    echo
+    echo "Installeren is mislukt: de onderdelen konden niet worden gedownload en staan niet in de npm-cache."
+    echo "- Met internet: sluit dit venster en dubbelklik opnieuw op Start Studio Review.command."
+    echo "- Zonder internet: kopieer de map node_modules uit je vorige programmamap naar deze map en start"
+    echo "  opnieuw. Dat werkt alleen als beide versies dezelfde onderdelen gebruiken; zie UPDATEN.md."
+    echo "Je gegevens zijn niet aangeraakt."
     wacht; exit 1
   fi
 fi

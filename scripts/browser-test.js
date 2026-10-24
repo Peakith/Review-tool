@@ -315,7 +315,8 @@ async function waitUploadsDone(page, n) {
   await page.reload();
   await page.waitForSelector('.publish-bar.is-approved');
   check('team ziet goedkeuring door Joris Jansen', (await page.textContent('.publish-bar')).includes('Joris Jansen'));
-  await page.click('.publish-bar button:has-text("Status corrigeren")');
+  check('correctieknop noemt de exacte versie', await page.isVisible('button:has-text("Status van Versie"):has-text("corrigeren")'));
+  await page.click('.publish-bar button:has-text("Status van Versie 2 corrigeren")');
   await page.selectOption('dialog select', 'in_review');
   await page.click('dialog button:has-text("Status opslaan")');
   check('correctie zonder reden wordt geweigerd', await page.isVisible('dialog[open]'));

@@ -91,12 +91,13 @@ test('back-up tijdens gebruik, controleren en terugzetten met account, project, 
     const media = await fetch(`${base}/api/versions/${d.versionId}/media`, { headers: { cookie: admin.cookie() } });
     assert.equal(media.status, 200);
     assert.equal(crypto.createHash('sha256').update(Buffer.from(await media.arrayBuffer())).digest('hex'), originalHash, 'videobestand identiek');
+    // Veilige standaard bij herstel: de oude reviewlink is ongeldig gemaakt; de reacties zijn er nog.
+    assert.deepEqual(r.links.mode, 'invalidate');
     const guest = client(base);
     const review = await guest.get(`/api/review/${d.token}`);
-    assert.equal(review.status, 200, 'reviewlink werkt');
-    const comments = (await guest.get(`/api/review/${d.token}/versions/${d.versionId}/comments`, key)).data;
-    assert.equal(comments[0].body, 'Logo groter');
-    assert.equal(comments[0].sent, true, 'feedbackronde terug');
+    assert.equal(review.status, 410, 'oude reviewlink ongeldig na herstel');
+    const comments = (await admin.get(`/api/versions/${d.versionId}/comments`)).data;
+    assert.equal(comments.find((c) => c.body === 'Logo groter').sent, true, 'feedbackronde terug');
     const internal = (await admin.get(`/api/versions/${d.v2.versionId}/comments`)).data;
     assert.equal(internal[0].body, 'Interne notitie');
   } finally {

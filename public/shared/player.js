@@ -1,3 +1,4 @@
+import { tr } from './i18n.js';
 import { h, timecode, icon } from './util.js';
 
 export { icon };
@@ -50,7 +51,7 @@ const RATES = [1, 1.5, 2, 0.5];
  */
 export function createPlayer({ src, poster, duration: knownDuration, fps = 25 }) {
   const video = h('video', { src, poster, preload: 'metadata', playsinline: true, 'webkit-playsinline': true });
-  const playBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': 'Afspelen (spatie)' }, icon('play'));
+  const playBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': tr('Afspelen (spatie)') }, icon('play'));
   const timeEl = h('span', { class: 'pc-time', 'aria-live': 'off' }, `0:00 / ${timecode(knownDuration || 0)}`);
   const progress = h('div', { class: 'pc-progress' });
   const buffered = h('div', { class: 'pc-buffered' });
@@ -58,13 +59,13 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   const handle = h('div', { class: 'pc-handle' });
   const hoverTip = h('div', { class: 'pc-tip' });
   const track = h('div', {
-    class: 'pc-track', role: 'slider', tabindex: '0', 'aria-label': 'Tijdlijn (pijltjestoetsen: 5 seconden)',
+    class: 'pc-track', role: 'slider', tabindex: '0', 'aria-label': tr('Tijdlijn (pijltjestoetsen: 5 seconden)'),
     'aria-valuemin': '0', 'aria-valuenow': '0',
   }, h('div', { class: 'pc-rail' }, buffered, progress), markersEl, handle, hoverTip);
-  const rateBtn = h('button', { class: 'pc-btn pc-rate', type: 'button', 'aria-label': 'Afspeelsnelheid' }, '1×');
-  const muteBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': 'Geluid uit (M)' }, icon('volume'));
-  const fsBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': 'Volledig scherm (F)' }, icon('fullscreen'));
-  const bigPlay = h('button', { class: 'pc-bigplay', type: 'button', 'aria-label': 'Afspelen' }, icon('play'));
+  const rateBtn = h('button', { class: 'pc-btn pc-rate', type: 'button', 'aria-label': tr('Afspeelsnelheid') }, '1×');
+  const muteBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': tr('Geluid uit (M)') }, icon('volume'));
+  const fsBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': tr('Volledig scherm (F)') }, icon('fullscreen'));
+  const bigPlay = h('button', { class: 'pc-bigplay', type: 'button', 'aria-label': tr('Afspelen') }, icon('play'));
   const loading = h('div', { class: 'spinner pc-loading', 'aria-hidden': 'true' });
   const loadError = h('div', { class: 'pc-error', role: 'alert', hidden: true });
   const controls = h('div', { class: 'pc-controls' }, track,
@@ -112,7 +113,7 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
         type: 'button',
         class: `pc-marker${m.resolved ? ' is-resolved' : ''}${m.active ? ' is-active' : ''}${m.drawing ? ' has-drawing' : ''}`,
         title: `${timecode(m.time)}${m.end ? `–${timecode(m.end)}` : ''} · ${m.label || ''}`,
-        'aria-label': `Reactie op ${timecode(m.time)}${m.end ? ` tot ${timecode(m.end)}` : ''}${m.resolved ? ' (afgehandeld)' : ''}`,
+        'aria-label': `${tr('Reactie op {t}', { t: timecode(m.time) })}${m.end ? ` ${tr('tot')} ${timecode(m.end)}` : ''}${m.resolved ? ` ${tr('(afgehandeld)')}` : ''}`,
         onClick: (e) => { e.stopPropagation(); seek(m.time); onMarkerClick(m.id); },
       }), Math.min(100, (m.time / d) * 100)));
     }
@@ -201,8 +202,8 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   playBtn.addEventListener('click', toggle);
   bigPlay.addEventListener('click', toggle);
   video.addEventListener('click', toggle);
-  video.addEventListener('play', () => { setIcon(playBtn, 'pause', 'Pauzeren (spatie)'); el.classList.add('is-playing'); });
-  video.addEventListener('pause', () => { setIcon(playBtn, 'play', 'Afspelen (spatie)'); el.classList.remove('is-playing'); });
+  video.addEventListener('play', () => { setIcon(playBtn, 'pause', tr('Pauzeren (spatie)')); el.classList.add('is-playing'); });
+  video.addEventListener('pause', () => { setIcon(playBtn, 'play', tr('Afspelen (spatie)')); el.classList.remove('is-playing'); });
   video.addEventListener('waiting', () => el.classList.add('is-loading'));
   for (const ev of ['playing', 'canplay', 'pause', 'seeked']) video.addEventListener(ev, () => el.classList.remove('is-loading'));
   video.addEventListener('timeupdate', render);
@@ -214,8 +215,8 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
     el.classList.remove('is-loading');
     loadError.hidden = false;
     loadError.textContent = code === 2
-      ? 'De video kon niet worden geladen. Controleer je verbinding en ververs de pagina.'
-      : 'Deze video kan in deze browser niet worden afgespeeld. Mogelijk gebruikt het bestand een codec die browsers niet ondersteunen (zoals ProRes). Gebruik bij voorkeur H.264 in MP4.';
+      ? tr('De video kon niet worden geladen. Controleer je verbinding en ververs de pagina.')
+      : tr('Deze video kan in deze browser niet worden afgespeeld. Mogelijk gebruikt het bestand een codec die browsers niet ondersteunen (zoals ProRes). Gebruik bij voorkeur H.264 in MP4.');
   });
 
   rateBtn.addEventListener('click', () => {
@@ -225,7 +226,7 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   });
   const toggleMute = () => {
     video.muted = !video.muted;
-    setIcon(muteBtn, video.muted ? 'muted' : 'volume', video.muted ? 'Geluid aan (M)' : 'Geluid uit (M)');
+    setIcon(muteBtn, video.muted ? 'muted' : 'volume', video.muted ? tr('Geluid aan (M)') : tr('Geluid uit (M)'));
   };
   muteBtn.addEventListener('click', toggleMute);
 
@@ -234,27 +235,27 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   // Daarin kunnen we geen tekeningen tonen. Zijn er tekeningen, dan leggen we dat uit en bieden we
   // "Groot in de pagina": de speler vult dan het venster, mét tekeningen.
   let pageFull = false;
-  const fsChoice = h('div', { class: 'pc-fschoice', role: 'dialog', 'aria-label': 'Volledig scherm met tekeningen', hidden: true });
+  const fsChoice = h('div', { class: 'pc-fschoice', role: 'dialog', 'aria-label': tr('Volledig scherm met tekeningen'), hidden: true });
   stage.append(fsChoice);
   const setPageFull = (on) => {
     pageFull = on;
     el.classList.toggle('is-pagefull', on);
     document.documentElement.classList.toggle('has-pagefull-player', on);
-    setIcon(fsBtn, on ? 'minimize' : 'fullscreen', on ? 'Groot in de pagina sluiten (Esc)' : 'Volledig scherm (F)');
+    setIcon(fsBtn, on ? 'minimize' : 'fullscreen', on ? tr('Groot in de pagina sluiten (Esc)') : tr('Volledig scherm (F)'));
     fsChoice.hidden = true;
     requestAnimationFrame(layoutOverlay);
   };
   const hasDrawings = () => !!shown || markers.some((m) => m.drawing);
   function showFsChoice() {
-    const native = h('button', { type: 'button', class: 'btn btn-sm btn-secondary' }, 'Schermvullend zonder tekeningen');
-    const page = h('button', { type: 'button', class: 'btn btn-sm btn-primary' }, icon('fullscreen'), h('span', { class: 'btn-label' }, 'Groot in de pagina (met tekeningen)'));
-    const close = h('button', { type: 'button', class: 'btn btn-sm btn-ghost btn-icon', 'aria-label': 'Sluiten' }, icon('x'));
+    const native = h('button', { type: 'button', class: 'btn btn-sm btn-secondary' }, tr('Schermvullend zonder tekeningen'));
+    const page = h('button', { type: 'button', class: 'btn btn-sm btn-primary' }, icon('fullscreen'), h('span', { class: 'btn-label' }, tr('Groot in de pagina (met tekeningen)')));
+    const close = h('button', { type: 'button', class: 'btn btn-sm btn-ghost btn-icon', 'aria-label': tr('Sluiten') }, icon('x'));
     page.addEventListener('click', () => setPageFull(true));
     native.addEventListener('click', () => { fsChoice.hidden = true; video.webkitEnterFullscreen(); });
     close.addEventListener('click', () => { fsChoice.hidden = true; });
     fsChoice.replaceChildren(
-      h('div', { class: 'pc-fschoice-head' }, icon('info'), h('strong', {}, 'Tekeningen en volledig scherm'), close),
-      h('p', {}, 'De schermvullende weergave van iPhone toont geen tekeningen. Ze zijn niet verdwenen: kies “Groot in de pagina” om het beeld met tekeningen groot te bekijken.'),
+      h('div', { class: 'pc-fschoice-head' }, icon('info'), h('strong', {}, tr('Tekeningen en volledig scherm')), close),
+      h('p', {}, tr('De schermvullende weergave van iPhone toont geen tekeningen. Ze zijn niet verdwenen: kies “Groot in de pagina” om het beeld met tekeningen groot te bekijken.')),
       h('div', { class: 'pc-fschoice-actions' }, page, native));
     fsChoice.hidden = false;
     page.focus();

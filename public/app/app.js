@@ -18,6 +18,9 @@ import { createCompare } from '/shared/compare.js';
 import { exportDialog } from './export.js';
 import { viewDeliveries } from './deliveries.js';
 import { viewActivity } from './activity.js';
+import { protectionBadges, protectionButton } from './linkprotect.js';
+import { viewClients, viewClient, clientSection } from './clients.js';
+import { brandChip } from './brandchip.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -68,6 +71,8 @@ async function route() {
     [/^\/projecten\/(\d+)\/oplevering$/, (id) => viewProject(Number(id), 'delivery'), 'projects'],
     [/^\/projecten\/(\d+)\/activiteit$/, (id) => viewProject(Number(id), 'activity'), 'projects'],
     [/^\/taken$/, () => viewMyTasks(ctx()), 'tasks'],
+    [/^\/klanten$/, () => viewClients(ctx()), 'clients'],
+    [/^\/klanten\/(\d+)$/, (id) => viewClient(ctx(), Number(id)), 'clients'],
     [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
     [/^\/video\/(\d+)\/vergelijk$/, (id) => viewCompare(Number(id)), 'projects'],
   ];
@@ -113,7 +118,8 @@ function ensureShell() {
       searchBox({ navigate }),
       h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
         navLink('/', 'dashboard', 'grid', 'Dashboard'),
-        navLink('/projecten', 'projects', 'folder', 'Projecten')),
+        navLink('/projecten', 'projects', 'folder', 'Projecten'),
+        navLink('/klanten', 'clients', 'users', 'Klanten')),
       h('nav', { class: 'side-nav side-nav-secondary', 'aria-label': 'Snel naar' },
         navLink('/taken', 'tasks', 'tasks', 'Mijn taken', h('span', { class: 'side-count', id: 'my-task-count', hidden: true })))),
     h('div', { class: 'side-foot' },
@@ -204,7 +210,7 @@ function systemBanner() {
       h('span', {}, h('strong', {}, `Back-up van ${formatDate(n.backupCreatedAt)} teruggezet. `),
         n.links === 'keep'
           ? `De klantlinks uit de back-up werken weer (${n.linkCounts?.total ?? 0}). Links die je na die back-up had ingetrokken, kunnen dus weer toegang geven. Controleer ze en trek ze zo nodig opnieuw in.`
-          : `Alle ${n.linkCounts?.total ?? 0} klantlinks (review-, akkoord-, project- en opleverlinks) zijn ongeldig gemaakt. Maak nieuwe links aan en deel ze opnieuw. Goedkeuringen, reacties en opleveringen zijn bewaard.`),
+          : `Alle ${n.linkCounts?.total ?? 0} klantlinks (review-, akkoord-, project-, oplever- en klantportaallinks) zijn ongeldig gemaakt. Maak nieuwe links aan en deel ze opnieuw. Goedkeuringen, reacties en opleveringen zijn bewaard.`),
       dismiss);
   }
   if (sys?.dataInAppDir && session.user.isAdmin) {
@@ -651,7 +657,10 @@ async function viewProject(id, tab = 'videos') {
       crumbs: [{ label: 'Projecten', href: '/projecten' }],
       title: h('h1', { class: 'page-title', title: project.name }, project.name),
       meta: [
-        project.clientName ? h('span', {}, project.clientName) : null,
+        project.client ? h('a', { href: `/klanten/${project.client.id}`, 'data-nav': true, title: 'Gekoppelde klant' }, icon('users'), ' ', project.client.name)
+          : project.clientName ? h('span', {}, project.clientName) : null,
+        project.clientVisibility === 'completed' ? h('span', { class: 'badge badge-neutral', title: 'In het klantportaal ingeklapt onder “Afgeronde projecten”' }, 'afgerond voor klant') : null,
+        project.clientVisibility === 'off' ? h('span', { class: 'badge badge-danger', title: 'Geen enkele klantlink werkt voor dit project' }, icon('lock'), 'klanttoegang uit') : null,
         h('span', {}, plural(project.videos.length, 'video', 'video’s')),
         brandChip(project.brand),
       ],
@@ -661,7 +670,8 @@ async function viewProject(id, tab = 'videos') {
           ['Klantportaal (projectlink)…', () => portalDialog(project), { icon: 'globe' }],
           ['Opleverlink en oplevering', () => navigate(`/projecten/${project.id}/oplevering`), { icon: 'package' }],
           ['Klantweergave bekijken', () => window.open(`/voorbeeld/project/${project.id}`, '_blank', 'noopener'), { icon: 'eye' }],
-        ], 'Delen', { label: 'Delen', icon: 'link' }) : null,
+          mayManage ? ['Klant en klanttoegang…', () => clientSection(project, () => route()), { icon: 'users' }] : null,
+        ].filter(Boolean), 'Delen', { label: 'Delen', icon: 'link' }) : null,
         menuButton([
           project.videos.length ? ['Feedback exporteren…', () => exportDialog({ projectId: project.id, videos: project.videos }), { icon: 'fileDown' }] : null,
           ['Klantweergave bekijken', () => window.open(`/voorbeeld/project/${project.id}`, '_blank', 'noopener'), { icon: 'eye' }],
@@ -675,6 +685,9 @@ async function viewProject(id, tab = 'videos') {
     archived ? h('div', { class: 'notice notice-info page-notice' }, icon('history'),
       h('span', {}, h('strong', {}, 'Dit project is gearchiveerd. '), 'Alles blijft bewaard en is te bekijken, maar uploaden, publiceren en reageren kan niet. Klanten kunnen hun links nog openen.'),
       mayManage ? button('Uit archief halen', { size: 'sm', onClick: () => setArchived('project', project.id, project.name, false) }) : null) : null,
+    project.clientVisibility === 'off' ? h('div', { class: 'notice notice-warn page-notice' }, icon('lock'),
+      h('span', {}, h('strong', {}, 'Klanttoegang staat uit. '), 'Geen enkele klantlink werkt voor dit project: klantportaal, projectlink, review- en akkoordlinks, opleverlink en directe bestandsadressen.'),
+      mayManage ? button('Wijzigen', { size: 'sm', onClick: () => clientSection(project, () => route()) }) : null) : null,
     !can(project.myLevel, 'upload') && !archived ? h('p', { class: 'small muted page-notice' }, icon('lock'), `Je rechten in dit project: ${({ view: 'bekijken en reageren', publish: 'publiceren en delen' })[project.myLevel] || project.myLevel}.`) : null,
     tabs,
     isVideos ? [
@@ -706,12 +719,6 @@ async function viewProject(id, tab = 'videos') {
 }
 
 /** Merk van een project als klein label (kleurstip + naam). */
-function brandChip(brand) {
-  if (!brand) return null;
-  const dot = h('span', { class: 'brand-dot', 'aria-hidden': 'true' });
-  if (brand.accent) dot.style.setProperty('background', brand.accent);
-  return h('span', { class: 'brand-chip', title: 'Merk van de klantweergave' }, dot, brand.name);
-}
 
 function videoRow(v, reload, { mayUpload, mayManage }) {
   const lv = v.latestVersion;
@@ -1446,6 +1453,7 @@ async function shareDialog(video, refresh) {
     h('div', { class: 'link-row-head' },
       h('strong', { class: 'truncate' }, link.role === 'approver' ? link.approverName : (link.label || 'Reviewlink')),
       link.allowDownload ? h('span', { class: 'badge badge-neutral' }, icon('download'), 'download aan') : null,
+      protectionBadges(link.protection),
       h('span', { class: 'small muted link-used' }, link.lastUsedAt ? `geopend ${relativeDate(link.lastUsedAt)}` : 'nog niet geopend')),
     h('div', { class: 'link-copy' },
       h('input', { type: 'text', readonly: true, value: link.url, class: 'link-url', 'aria-label': 'Deel-link', onFocus: (e) => e.target.select() }),
@@ -1454,7 +1462,8 @@ async function shareDialog(video, refresh) {
         const ok = await confirmDialog({ title: 'Link intrekken?', body: 'Wie deze link heeft, krijgt direct geen toegang meer, ook niet tot het videobestand. Reacties en goedkeuringen blijven bewaard.', confirmLabel: 'Intrekken', danger: true });
         if (!ok) return;
         try { await api('POST', `/api/links/${link.id}/revoke`); toast('Link ingetrokken', 'success'); dialogDone(); } catch (err) { toast(err.message, 'error'); }
-      } })));
+      } })),
+    h('div', { class: 'link-row-foot' }, protectionButton('share', link, dialogDone)));
 
   let close;
   const dialogDone = () => { changed = true; close?.(); };
@@ -1572,13 +1581,13 @@ async function portalDialog(project) {
     } });
     mount(box,
       h('div', { class: 'link-row' },
-        h('div', { class: 'link-row-head' }, h('strong', {}, 'Projectlink'), h('span', { class: 'small muted link-used' }, l.lastUsedAt ? `geopend ${relativeDate(l.lastUsedAt)}` : 'nog niet geopend')),
+        h('div', { class: 'link-row-head' }, h('strong', {}, 'Projectlink'), protectionBadges(l.protection), h('span', { class: 'small muted link-used' }, l.lastUsedAt ? `geopend ${relativeDate(l.lastUsedAt)}` : 'nog niet geopend')),
         h('div', { class: 'link-copy' },
           h('input', { type: 'text', readonly: true, value: l.url, class: 'link-url', 'aria-label': 'Projectlink', onFocus: (e) => e.target.select() }),
           button('Kopiëren', { icon: 'copy', size: 'sm', onClick: async () => { await copyText(l.url); toast('Projectlink gekopieerd', 'success'); } }),
           h('a', { class: 'btn btn-sm btn-ghost', href: l.url, target: '_blank', rel: 'noopener', title: 'Openen als klant (nieuw tabblad)' }, icon('external'), h('span', { class: 'visually-hidden' }, 'Openen')))),
       localNote, facts,
-      h('div', { class: 'portal-actions' }, previewLink(project), h('span', { class: 'spacer' }), replace, revoke),
+      h('div', { class: 'portal-actions' }, previewLink(project), h('span', { class: 'spacer' }), protectionButton('project', l, draw), replace, revoke),
       h('p', { class: 'small muted' }, `Gemaakt ${formatDate(l.createdAt)}. Intrekken of vervangen raakt de afzonderlijke review- en akkoordlinks per video niet${st.separateVideoLinks ? ` (nu ${st.separateVideoLinks} actief)` : ''}.`));
   }
   draw();

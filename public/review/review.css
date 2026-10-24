@@ -195,3 +195,58 @@ a.brief-item:hover { border-color: var(--line-2); }
   .d-download { width: 100%; }
   .d-error { text-align: left; }
 }
+
+/* ---------- Bouwronde 5: taal, navigatie, beveiligde links, klantportaal ---------- */
+html[lang="en"] .howto summary::after { content: "Show"; }
+html[lang="en"] .howto[open] summary::after { content: "Hide"; }
+.lang-toggle { margin-left: auto; }
+.lang-toggle button { min-width: 38px; }
+.r-version .lang-toggle { margin-left: 4px; }
+
+.r-nav { max-width: 1600px; margin: 0 auto; padding: 0 24px 12px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.r-nav-link { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--text); text-decoration: none !important; }
+.r-nav-link:hover { border-color: var(--line-2); }
+.r-nav-link.is-prev { justify-self: start; max-width: 100%; }
+.r-nav-link.is-next { justify-self: end; text-align: right; max-width: 100%; }
+.r-nav-link.is-empty { visibility: hidden; }
+.r-nav-text { display: grid; min-width: 0; line-height: 1.25; }
+.r-nav-text .truncate { max-width: 34ch; font-weight: 500; font-size: 13.5px; }
+.r-nav-pos { white-space: nowrap; }
+
+.link-expiry { display: flex; align-items: center; gap: 6px; margin: 4px 4px 0; }
+.link-expiry .icon { --icon-size: 14px; }
+
+.gate { align-content: center; }
+.gate-card { width: min(420px, 100%); display: grid; gap: 12px; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.gate-head { display: flex; align-items: center; gap: 10px; }
+.gate-head .icon { --icon-size: 22px; color: var(--accent-strong); }
+.gate-head h1 { font-size: 19px; }
+.gate-form { display: grid; gap: 8px; }
+.gate-form .btn { justify-self: start; margin-top: 4px; }
+.gate-lang { display: flex; justify-content: flex-end; }
+.field-error { color: var(--danger-text, var(--danger)); font-size: 13px; margin: 0; }
+
+.r-revoked p { margin: 4px 0 0; }
+.approve-what { display: grid; gap: 2px; font-size: 16px; margin: 0 0 6px; }
+.approve-version { font-size: 14px; color: var(--text-2); }
+
+.p-note.is-mine { color: var(--accent-strong); font-weight: 500; }
+.p-note.is-warn { color: var(--warn-text, var(--st-review)); }
+.p-identity { margin-top: 12px; max-width: 640px; }
+.k-project { display: grid; gap: 14px; padding-top: 22px; margin-top: 8px; border-top: 1px solid var(--line); }
+.k-project-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.k-project-head h2 { font-size: 20px; overflow-wrap: anywhere; }
+.k-project .p-group-head h3 { font-size: 15px; }
+.k-completed { margin-top: 24px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.k-completed > summary { display: flex; align-items: center; gap: 8px; padding: 12px 16px; cursor: pointer; font-weight: 600; list-style: none; }
+.k-completed > summary::-webkit-details-marker { display: none; }
+.k-completed > summary .icon { color: var(--text-3); }
+.k-completed-body { padding: 0 16px 16px; }
+
+@media (max-width: 720px) {
+  .r-nav { padding: 0 14px 10px; grid-template-columns: 1fr 1fr; }
+  .r-nav-pos { display: none; }
+  .r-nav-link.is-empty { display: none; }
+  .r-nav-link.is-next { grid-column: 2; }
+  .r-nav-text .truncate { max-width: 18ch; }
+}

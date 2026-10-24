@@ -9,6 +9,8 @@ const { syncTaskFromComment } = require('./tasks');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { KINDS, ASPECTS, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions } = require('../client');
 const { activeDeliveryOf, deliveryState, validApproval, releaseProblem, REASON_TEAM } = require('../deliveries');
+const { protectionDto } = require('../linkguard');
+const { clientLanguage } = require('../clientportal');
 
 // Media voor het team: wel cachen, maar bij elk gebruik opnieuw laten controleren, zodat
 // een item in de prullenbak of ingetrokken toegang direct effect heeft.
@@ -163,6 +165,8 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       briefingCount: db.prepare('SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ? AND trashed_at IS NULL').get(p.id).n,
       sharedBriefingCount: db.prepare("SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ? AND trashed_at IS NULL AND visibility = 'client'").get(p.id).n,
       portalLinkActive: !!activePortalLink(p.id),
+      client: p.client_id ? { id: p.client_id, name: db.prepare('SELECT name FROM clients WHERE id = ?').get(p.client_id)?.name || '' } : null,
+      clientVisibility: p.client_visibility,
       deliveryCount: db.prepare('SELECT COUNT(*) AS n FROM deliveries d JOIN videos v ON v.id = d.video_id WHERE d.project_id = ? AND d.withdrawn_at IS NULL AND v.trashed_at IS NULL').get(p.id).n,
       // Nog af te handelen feedback (zelfde regels als het overzicht "Feedback & taken").
       openFeedback: db.prepare(`SELECT COUNT(*) AS n FROM comments c JOIN versions ver ON ver.id = c.version_id JOIN videos v ON v.id = ver.video_id
@@ -232,7 +236,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     const { video: v, project, level } = access.video(req, req.params.id, 'view');
     const versions = db.prepare('SELECT * FROM versions WHERE video_id = ? AND trashed_at IS NULL ORDER BY number DESC').all(v.id);
     // Links die automatisch bij de projectlink horen, staan niet in deze lijst (die beheer je via het klantportaal).
-    const links = db.prepare('SELECT * FROM share_links WHERE video_id = ? AND project_link_id IS NULL ORDER BY created_at DESC').all(v.id);
+    const links = db.prepare('SELECT * FROM share_links WHERE video_id = ? AND project_link_id IS NULL AND client_link_id IS NULL ORDER BY created_at DESC').all(v.id);
     const shared = latestShared(v.id);
     res.json({
       id: v.id,
@@ -291,6 +295,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
         createdAt: l.created_at,
         revokedAt: l.revoked_at,
         lastUsedAt: l.last_used_at,
+        protection: protectionDto(l),
       })),
     });
   });
@@ -402,7 +407,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       }
       db.prepare('UPDATE versions SET shared_at = ?, round_id = ?, change_note = ?, share_request_id = ? WHERE id = ?').run(now(), roundId, changeNote, requestId, ver.id);
       changeStatus(db, ver.id, 'in_review', { event: 'shared', ...actor(req), note: `Ronde ${roundNumber}${choice === 'new' ? ' (nieuw)' : ''}` });
-      const active = db.prepare("SELECT id FROM share_links WHERE video_id = ? AND role = 'reviewer' AND revoked_at IS NULL AND project_link_id IS NULL").get(ver.video_id);
+      const active = db.prepare("SELECT id FROM share_links WHERE video_id = ? AND role = 'reviewer' AND revoked_at IS NULL AND project_link_id IS NULL AND client_link_id IS NULL").get(ver.video_id);
       if (!active) {
         createdLink = createLink(ver.video_id, { role: 'reviewer', label: 'Reviewlink' }, req.user);
       }
@@ -570,7 +575,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
 
   // ---------- Klantportaal (projectlink) ----------
 
-  const portalLinkDto = (req, l) => (l ? { id: l.id, url: `${origin(req)}/p/${l.token}`, createdAt: l.created_at, lastUsedAt: l.last_used_at } : null);
+  const portalLinkDto = (req, l) => (l ? { id: l.id, url: `${origin(req)}/p/${l.token}`, createdAt: l.created_at, lastUsedAt: l.last_used_at, protection: protectionDto(l) } : null);
 
   /** Trekt de projectlink in, met de reviewlinks die via het portaal zijn ontstaan. */
   function revokePortalLink(link, user) {
@@ -582,7 +587,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
   router.get('/projects/:id/portal-link', (req, res) => {
     const { project: p } = access.project(req, req.params.id, 'publish');
     const videoLinks = db.prepare(`SELECT COUNT(*) AS n FROM share_links s JOIN videos v ON v.id = s.video_id
-      WHERE v.project_id = ? AND s.project_link_id IS NULL AND s.revoked_at IS NULL AND v.trashed_at IS NULL`).get(p.id).n;
+      WHERE v.project_id = ? AND s.project_link_id IS NULL AND s.client_link_id IS NULL AND s.revoked_at IS NULL AND v.trashed_at IS NULL`).get(p.id).n;
     res.json({
       link: portalLinkDto(req, activePortalLink(p.id)),
       revokedCount: db.prepare('SELECT COUNT(*) AS n FROM project_links WHERE project_id = ? AND revoked_at IS NOT NULL').get(p.id).n,
@@ -628,6 +633,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
         fileUrl: (b) => `/api/briefing/${b.id}/file`,
       }),
       delivery: require('./portal').deliverySummary(db, p, `/voorbeeld/oplevering/${p.id}`),
+      language: clientLanguage(db, p),
       preview: { projectId: p.id, portalLinkActive: !!activePortalLink(p.id) },
     });
   });
@@ -636,6 +642,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     const { video: v, project } = access.video(req, req.params.id, 'view');
     res.json({
       ...clientVideoInfo(db, { video: v, project, role: 'reviewer', archived: !!(v.archived_at || project.archived_at), portal: { url: `/voorbeeld/project/${project.id}` } }),
+      language: clientLanguage(db, project),
       preview: { projectId: project.id, videoId: v.id },
     });
   });

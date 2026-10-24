@@ -59,7 +59,7 @@ async function restoreFresh(links) {
 test('vooraf: de back-up laat zien hoeveel klantlinks er per soort geldig zijn', () => {
   const c = activeLinkCounts(`${backup.dir}/review.db`);
   // reviewlink + reviewlink via het portaal, akkoordlink, projectlink, opleverlink
-  assert.deepEqual(c, { reviewLinks: 2, approverLinks: 1, projectLinks: 1, deliveryLinks: 1, total: 5 });
+  assert.deepEqual(c, { reviewLinks: 2, approverLinks: 1, projectLinks: 1, deliveryLinks: 1, clientLinks: 0, total: 5 });
 });
 
 test('standaard (schone installatie): alle klantlinks ongeldig, historie intact, nieuwe links werken', async () => {

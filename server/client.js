@@ -68,10 +68,16 @@ function clientRound(db, version) {
   };
 }
 
-/** Goedkeuring zoals de klant die ziet: naam en moment (geen e-mailadres). */
+/**
+ * Goedkeuring zoals de klant die ziet: naam en moment (geen e-mailadres). Heeft het team de status
+ * daarna gecorrigeerd, dan geldt de goedkeuring als ingetrokken; de klant ziet dat en waarom er een
+ * nieuwe goedkeuring nodig is (zelfde regel als bij opleveringen).
+ */
 function clientApproval(db, versionId) {
   const a = approvalDto(db, versionId);
-  return a ? { name: a.name, at: a.at } : null;
+  if (!a) return null;
+  const left = db.prepare("SELECT created_at FROM status_events WHERE version_id = ? AND to_status != 'approved' AND created_at >= ? ORDER BY id LIMIT 1").get(versionId, a.at);
+  return { name: a.name, at: a.at, revoked: !!left, revokedAt: left?.created_at || null };
 }
 
 const sharedVersions = (db, videoId) =>

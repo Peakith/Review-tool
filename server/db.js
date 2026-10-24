@@ -267,6 +267,37 @@ CREATE TABLE IF NOT EXISTS client_activity (
   created_at TEXT NOT NULL
 );
 
+-- Klanten (bouwronde 5): een klant heeft projecten en één vast klantportaal. Projecten worden
+-- alleen expliciet aan een klant gekoppeld (nooit op basis van een overeenkomende naam).
+CREATE TABLE IF NOT EXISTS clients (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  brand_id INTEGER REFERENCES brands(id),
+  language TEXT NOT NULL DEFAULT 'nl',   -- standaardtaal van de klantweergave: nl | en
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+
+-- Link naar het klantportaal (alle zichtbare projecten van één klant). Met approver_email is het een
+-- persoonlijke link van een akkoordgever: alleen dan mag er (per video, als aangewezen akkoordgever)
+-- worden goedgekeurd.
+CREATE TABLE IF NOT EXISTS client_links (
+  id INTEGER PRIMARY KEY,
+  client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL DEFAULT '',
+  approver_name TEXT NOT NULL DEFAULT '',
+  approver_email TEXT NOT NULL DEFAULT '',
+  password_hash TEXT,
+  password_set_at TEXT,
+  expires_at TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revoked_by INTEGER REFERENCES users(id),
+  last_used_at TEXT
+);
+
 -- Opgeslagen zoekopdrachten per gebruiker (alleen de zoekvraag; resultaten worden altijd opnieuw
 -- en met de actuele rechten berekend).
 CREATE TABLE IF NOT EXISTS saved_searches (
@@ -354,6 +385,19 @@ const COLUMNS = [
   ['users', 'preferences', "TEXT NOT NULL DEFAULT '{}'"],
   ['versions', 'custom_poster', 'INTEGER NOT NULL DEFAULT 0'],
   ['versions', 'custom_poster_time', 'REAL'],
+  // Klanten, klanttoegang per project en linkbeveiliging (wachtwoord, vervaldatum).
+  ['projects', 'client_id', 'INTEGER'],
+  ['projects', 'client_visibility', "TEXT NOT NULL DEFAULT 'active'"],
+  ['share_links', 'client_link_id', 'INTEGER'],
+  ['share_links', 'password_hash', 'TEXT'],
+  ['share_links', 'password_set_at', 'TEXT'],
+  ['share_links', 'expires_at', 'TEXT'],
+  ['project_links', 'password_hash', 'TEXT'],
+  ['project_links', 'password_set_at', 'TEXT'],
+  ['project_links', 'expires_at', 'TEXT'],
+  ['delivery_links', 'password_hash', 'TEXT'],
+  ['delivery_links', 'password_set_at', 'TEXT'],
+  ['delivery_links', 'expires_at', 'TEXT'],
 ];
 
 const DEFAULT_BRANDS = [
@@ -385,7 +429,11 @@ function migrate(db) {
     CREATE UNIQUE INDEX IF NOT EXISTS uq_approvals_request ON approvals(share_link_id, request_id) WHERE request_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS uq_comments_request ON comments(share_link_id, request_id) WHERE request_id IS NOT NULL;
     -- Per projectlink hooguit één afgeleide reviewlink per video.
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_share_links_portal ON share_links(project_link_id, video_id) WHERE project_link_id IS NOT NULL;`);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_share_links_portal ON share_links(project_link_id, video_id) WHERE project_link_id IS NOT NULL;
+    -- Per klantlink hooguit één geldige afgeleide reviewlink per video.
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_share_links_client ON share_links(client_link_id, video_id) WHERE client_link_id IS NOT NULL AND revoked_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
+    CREATE INDEX IF NOT EXISTS idx_client_links_client ON client_links(client_id);`);
   for (const [key, step] of Object.entries(ONCE)) {
     if (db.prepare('SELECT 1 FROM app_meta WHERE key = ?').get(key)) continue;
     db.exec('BEGIN IMMEDIATE');

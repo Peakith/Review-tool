@@ -6,6 +6,8 @@ const { commentDtos, posterKey } = require('../views');
 const { clientVideoInfo, sharedVersions: listShared } = require('../client');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { recordActivity, shareLinkSource, isFirstRequest } = require('../activity');
+const linkguard = require('../linkguard');
+const { assertClientAccess, effectiveClientShare, clientLanguage, clientReviewToken, portalNeighbours } = require('../clientportal');
 
 /**
  * Klant-API. Iedere aanvraag controleert opnieuw of de link bestaat en niet is
@@ -17,20 +19,27 @@ function reviewRoutes(router, db, config, { storage }) {
     const link = /^[A-Za-z0-9_-]{20,64}$/.test(token)
       ? db.prepare('SELECT * FROM share_links WHERE token = ?').get(token)
       : null;
-    if (!link) return next(new HttpError(404, 'Deze reviewlink bestaat niet.'));
-    if (link.revoked_at) return next(new HttpError(410, 'Deze reviewlink is ingetrokken. Vraag het team om een nieuwe link.'));
+    // Ingetrokken, verlopen of beveiligd met een wachtwoord (ook via de portaallink waar hij onder valt).
+    linkguard.guard(db, req, 'share', link);
     // Geopend via het klantportaal: geldig zolang de projectlink geldig is.
-    if (link.project_link_id) {
-      req.projectLink = db.prepare('SELECT * FROM project_links WHERE id = ?').get(link.project_link_id);
-      if (!req.projectLink || req.projectLink.revoked_at) return next(new HttpError(410, 'Deze projectlink is ingetrokken. Vraag het team om een nieuwe link.'));
-    }
-    req.link = link;
+    if (link.project_link_id) req.projectLink = db.prepare('SELECT * FROM project_links WHERE id = ?').get(link.project_link_id);
     req.video = db.prepare('SELECT * FROM videos WHERE id = ?').get(link.video_id);
-    if (!req.video) return next(new HttpError(404, 'Deze video bestaat niet meer.'));
+    if (!req.video) return next(new HttpError(404, 'Deze video bestaat niet meer.', 'not_found'));
     req.project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.video.project_id);
     // In de prullenbak: niet meer bereikbaar via klantlinks (ook niet de bestanden).
     // De link zelf blijft ongewijzigd, zodat herstellen de toegang terugbrengt.
-    if (req.video.trashed_at || req.project.trashed_at) return next(new HttpError(410, 'Deze video is niet meer beschikbaar. Neem contact op met het productieteam.'));
+    if (req.video.trashed_at || req.project.trashed_at) return next(new HttpError(410, 'Deze video is niet meer beschikbaar. Neem contact op met het productieteam.', 'gone'));
+    // Klanttoegang uit: ook oude links en directe media-adressen werken niet.
+    assertClientAccess(req.project);
+    // Via een klantportaallink: alleen zolang het project bij die klant hoort. De rol (akkoordgever of
+    // reviewer) volgt uit de persoonlijke link en de huidige akkoordgever van de video.
+    if (link.client_link_id) {
+      req.clientLink = db.prepare('SELECT * FROM client_links WHERE id = ?').get(link.client_link_id);
+      if (req.project.client_id !== req.clientLink.client_id) return next(new HttpError(404, 'Deze video is niet beschikbaar via deze link.', 'not_found'));
+      req.link = effectiveClientShare(link, req.clientLink, req.video);
+    } else {
+      req.link = link;
+    }
     // Gearchiveerd: nog te bekijken, maar niet meer open voor reacties of goedkeuring.
     req.archived = !!(req.video.archived_at || req.project.archived_at);
     if (!link.last_used_at || Date.now() - Date.parse(link.last_used_at) > 60_000) {
@@ -40,6 +49,13 @@ function reviewRoutes(router, db, config, { storage }) {
   });
 
   const sharedVersions = (videoId) => listShared(db, videoId);
+
+  /** Vorige/volgende video, alleen binnen het portaal waar deze link uit voortkwam. */
+  const neighbours = (req) => {
+    if (req.clientLink) return portalNeighbours(db, req.project, req.video.id, (id) => clientReviewToken(db, req.clientLink, id));
+    if (req.projectLink) return portalNeighbours(db, req.project, req.video.id, (id) => require('./portal').portalReviewToken(db, req.projectLink, id));
+    return null;
+  };
 
   const getSharedVersion = (req) => {
     const id = Number(req.params.versionId);
@@ -89,15 +105,15 @@ function reviewRoutes(router, db, config, { storage }) {
 
   router.get('/review/:token', (req, res) => {
     recordActivity(db, req, { projectId: req.project.id, type: 'review_opened', videoId: req.video.id, src: shareLinkSource(req.link) });
-    res.json(clientVideoInfo(db, {
+    res.json({ ...clientVideoInfo(db, {
       video: req.video,
       project: req.project,
       role: req.link.role,
       allowDownload: !!req.link.allow_download,
       approverName: req.link.approver_name,
       archived: req.archived,
-      portal: req.projectLink ? { url: `/p/${req.projectLink.token}` } : null,
-    }));
+      portal: req.clientLink ? { url: `/k/${req.clientLink.token}` } : req.projectLink ? { url: `/p/${req.projectLink.token}` } : null,
+    }), language: clientLanguage(db, req.project), nav: neighbours(req), linkExpiresAt: linkguard.expiryOf(db, 'share', req.link) });
   });
 
   router.get('/review/:token/versions/:versionId/comments', (req, res) => {

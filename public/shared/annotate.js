@@ -2,10 +2,12 @@
 // Coördinaten worden opgeslagen van 0 tot 1 ten opzichte van het werkelijke beeld (zonder zwarte
 // randen), zodat de tekening op elke schermgrootte en in volledig scherm op dezelfde plek staat.
 // Werkt met muis, pen en aanraking (pointer events). Het videobestand verandert niet.
+import { tr } from './i18n.js';
 import { h, icon } from './util.js';
 import { renderShapes } from './player.js';
 
 export const COLORS = [['#ff4d4f', 'Rood'], ['#ffd60a', 'Geel'], ['#4cc9f0', 'Blauw'], ['#ffffff', 'Wit']];
+// Labels worden pas bij het tekenen vertaald (klantpagina's kunnen Engels zijn).
 const TOOLS = [['pen', 'Pen', 'pen'], ['arrow', 'Pijl', 'arrowTool'], ['rect', 'Rechthoek', 'rect']];
 const r4 = (n) => Math.round(n * 10000) / 10000;
 
@@ -17,18 +19,18 @@ export function createAnnotator(player, { onChange = () => {} } = {}) {
   let active = false;
   const overlay = player.overlay;
 
-  const toolButtons = TOOLS.map(([key, label, ic]) => h('button', { type: 'button', class: 'ann-btn', 'aria-pressed': 'false', title: label, 'aria-label': label, onClick: () => { tool = key; draw(); } }, icon(ic), h('span', { class: 'ann-label' }, label)));
-  const colorButtons = COLORS.map(([c, label]) => {
-    const b = h('button', { type: 'button', class: 'ann-color', 'aria-pressed': 'false', title: label, 'aria-label': `Kleur ${label.toLowerCase()}`, onClick: () => { color = c; draw(); } });
+  const toolButtons = TOOLS.map(([key, nl, ic]) => [key, tr(nl), ic]).map(([key, label, ic]) => h('button', { type: 'button', class: 'ann-btn', 'aria-pressed': 'false', title: label, 'aria-label': label, onClick: () => { tool = key; draw(); } }, icon(ic), h('span', { class: 'ann-label' }, label)));
+  const colorButtons = COLORS.map(([c, nl]) => [c, tr(nl)]).map(([c, label]) => {
+    const b = h('button', { type: 'button', class: 'ann-color', 'aria-pressed': 'false', title: label, 'aria-label': tr('Kleur {name}', { name: label.toLowerCase() }), onClick: () => { color = c; draw(); } });
     b.style.setProperty('--swatch', c);
     return b;
   });
-  const undoBtn = h('button', { type: 'button', class: 'ann-btn', title: 'Ongedaan maken', 'aria-label': 'Laatste vorm ongedaan maken', onClick: () => { shapes.pop(); paint(); onChange(value()); draw(); } }, icon('undo'), h('span', { class: 'ann-label' }, 'Ongedaan'));
-  const clearBtn = h('button', { type: 'button', class: 'ann-btn', title: 'Alles wissen', 'aria-label': 'Tekening wissen', onClick: () => { shapes = []; paint(); onChange(value()); draw(); } }, icon('eraser'), h('span', { class: 'ann-label' }, 'Wissen'));
-  const doneBtn = h('button', { type: 'button', class: 'btn btn-sm btn-secondary', onClick: () => stop() }, icon('check'), h('span', { class: 'btn-label' }, 'Klaar met tekenen'));
-  const toolbar = h('div', { class: 'ann-toolbar', role: 'toolbar', 'aria-label': 'Tekenen', hidden: true },
+  const undoBtn = h('button', { type: 'button', class: 'ann-btn', title: tr('Ongedaan maken'), 'aria-label': tr('Laatste vorm ongedaan maken'), onClick: () => { shapes.pop(); paint(); onChange(value()); draw(); } }, icon('undo'), h('span', { class: 'ann-label' }, tr('Ongedaan')));
+  const clearBtn = h('button', { type: 'button', class: 'ann-btn', title: tr('Alles wissen'), 'aria-label': tr('Tekening wissen'), onClick: () => { shapes = []; paint(); onChange(value()); draw(); } }, icon('eraser'), h('span', { class: 'ann-label' }, tr('Wissen')));
+  const doneBtn = h('button', { type: 'button', class: 'btn btn-sm btn-secondary', onClick: () => stop() }, icon('check'), h('span', { class: 'btn-label' }, tr('Klaar met tekenen')));
+  const toolbar = h('div', { class: 'ann-toolbar', role: 'toolbar', 'aria-label': tr('Tekenen'), hidden: true },
     h('div', { class: 'ann-group' }, toolButtons), h('div', { class: 'ann-group' }, colorButtons), h('div', { class: 'ann-group' }, undoBtn, clearBtn), doneBtn,
-    h('p', { class: 'ann-hint small muted' }, 'Teken op het stilstaande beeld. Je kunt ook gewoon tekst typen; een tekening is niet verplicht.'));
+    h('p', { class: 'ann-hint small muted' }, tr('Teken op het stilstaande beeld. Je kunt ook gewoon tekst typen; een tekening is niet verplicht.')));
 
   function draw() {
     toolButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(TOOLS[i][0] === tool)));

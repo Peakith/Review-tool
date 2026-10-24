@@ -1,5 +1,6 @@
 // Gedeelde bouwstenen voor team- en klantpagina. Alle tekst gaat via textContent,
 // zodat ingevoerde titels en reacties nooit als HTML worden uitgevoerd.
+import { tr, locale } from './i18n.js';
 import { icon } from './icons.js';
 
 export { icon };
@@ -85,19 +86,27 @@ export function timecode(seconds) {
   return hh ? `${hh}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
 }
 
-const dateFmt = new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-const dayFmt = new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'short' });
-export const formatDate = (iso) => (iso ? dateFmt.format(new Date(iso)) : '');
+// Datumnotatie volgt de taal van de pagina (klantpagina's kunnen Engels zijn; het team ziet altijd Nederlands).
+const fmtCache = new Map();
+const fmt = (opts) => {
+  const key = `${locale()}|${JSON.stringify(opts)}`;
+  if (!fmtCache.has(key)) fmtCache.set(key, new Intl.DateTimeFormat(locale(), opts));
+  return fmtCache.get(key);
+};
+const DATE = { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+export const formatDate = (iso) => (iso ? fmt(DATE).format(new Date(iso)) : '');
+/** Datum en tijd mét tijdzone ("12 nov 2026, 14:05 CET"), voor klantpagina's en vervaldatums. */
+export const formatDateZone = (iso) => (iso ? fmt({ ...DATE, timeZoneName: 'short' }).format(new Date(iso)) : '');
 
 export function relativeDate(iso) {
   if (!iso) return '';
   const diff = (Date.now() - Date.parse(iso)) / 1000;
-  if (diff < 60) return 'zojuist';
-  if (diff < 3600) return `${Math.floor(diff / 60)} min geleden`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} uur geleden`;
-  if (diff < 2 * 86400) return 'gisteren';
-  if (diff < 7 * 86400) return `${Math.floor(diff / 86400)} dagen geleden`;
-  return dayFmt.format(new Date(iso));
+  if (diff < 60) return tr('zojuist');
+  if (diff < 3600) return tr('{n} min geleden', { n: Math.floor(diff / 60) });
+  if (diff < 86400) return tr('{n} uur geleden', { n: Math.floor(diff / 3600) });
+  if (diff < 2 * 86400) return tr('gisteren');
+  if (diff < 7 * 86400) return tr('{n} dagen geleden', { n: Math.floor(diff / 86400) });
+  return fmt({ day: 'numeric', month: 'short' }).format(new Date(iso));
 }
 
 export function formatBytes(bytes) {
@@ -132,13 +141,13 @@ export async function api(method, url, body, extraHeaders = {}, { timeout = 30_0
   } catch (err) {
     const timedOut = err.name === 'AbortError';
     throw Object.assign(new Error(timedOut
-      ? 'De server reageert niet op tijd. Controleer je verbinding en probeer het opnieuw.'
-      : 'Geen verbinding met de server. Controleer je internetverbinding en probeer het opnieuw.'), { status: 0 });
+      ? tr('De server reageert niet op tijd. Controleer je verbinding en probeer het opnieuw.')
+      : tr('Geen verbinding met de server. Controleer je internetverbinding en probeer het opnieuw.')), { status: 0 });
   } finally {
     clearTimeout(timer);
   }
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json().catch(() => null) : null;
-  if (!res.ok) throw Object.assign(new Error(data?.error || `Er ging iets mis (${res.status}). Probeer het opnieuw.`), { status: res.status, data });
+  if (!res.ok) throw Object.assign(new Error(data?.error ? tr(data.error) : tr('Er ging iets mis ({status}). Probeer het opnieuw.', { status: res.status })), { status: res.status, data, code: data?.code || null });
   return data;
 }
 
@@ -198,9 +207,9 @@ export function errorState(err, retry) {
   return h('div', { class: 'error-state', role: 'alert' },
     icon('alert'),
     h('div', {},
-      h('strong', {}, err.status === 0 ? 'Geen verbinding' : 'Dit lukte niet'),
+      h('strong', {}, err.status === 0 ? tr('Geen verbinding') : tr('Dit lukte niet')),
       h('p', {}, err.message)),
-    retry ? button('Opnieuw proberen', { icon: 'refresh', onClick: retry }) : null);
+    retry ? button(tr('Opnieuw proberen'), { icon: 'refresh', onClick: retry }) : null);
 }
 
 export function skeletonRows(n = 3, cls = 'skeleton-row') {
@@ -213,7 +222,7 @@ export function openDialog({ title, body, actions, wide = false, onSubmit }) {
     const form = h('form', { method: 'dialog', class: 'dialog-form' },
       h('header', { class: 'dialog-head' },
         h('h2', {}, title),
-        h('button', { type: 'button', class: 'btn btn-ghost btn-icon', 'aria-label': 'Sluiten', onClick: () => dialog.close('') }, icon('x'))),
+        h('button', { type: 'button', class: 'btn btn-ghost btn-icon', 'aria-label': tr('Sluiten'), onClick: () => dialog.close('') }, icon('x'))),
       h('div', { class: 'dialog-body' }, body),
       actions ? h('footer', { class: 'dialog-actions' }, actions) : null);
     const dialog = h('dialog', { class: `dialog${wide ? ' dialog-wide' : ''}` }, form);
@@ -237,7 +246,7 @@ export function openDialog({ title, body, actions, wide = false, onSubmit }) {
 }
 
 /** Bevestigingsvenster met eigen knoptekst. Resolvet naar true/false. */
-export async function confirmDialog({ title, body, confirmLabel = 'Bevestigen', cancelLabel = 'Annuleren', danger = false, variant }) {
+export async function confirmDialog({ title, body, confirmLabel = tr('Bevestigen'), cancelLabel = tr('Annuleren'), danger = false, variant }) {
   const result = await openDialog({
     title,
     body: typeof body === 'string' ? h('p', {}, body) : body,
@@ -273,13 +282,11 @@ export const draftStore = {
 
 // ---------- Deadlines (datum + tijd, ondubbelzinnig met tijdzone) ----------
 
-const deadlineFmt = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
-const dayOnlyFmt = new Intl.DateTimeFormat('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
 /** "di 10 nov 2026, 17:00 CET" — in de tijdzone van de kijker, met de naam van die tijdzone erbij. */
-export const formatDeadline = (iso) => (iso ? deadlineFmt.format(new Date(iso)) : '');
+export const formatDeadline = (iso) => (iso ? fmt({ weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }).format(new Date(iso)) : '');
 /** Een kalenderdag (JJJJ-MM-DD) zonder tijdstip, dus zonder verschuiving door tijdzones. */
-export const formatDay = (day) => (day ? dayOnlyFmt.format(new Date(`${day}T12:00:00`)) : '');
+export const formatDay = (day) => (day ? fmt({ weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${day}T12:00:00`)) : '');
 export const isPast = (iso) => !!iso && Date.parse(iso) < Date.now();
 /** Lokale datum- en tijdvelden → ISO (UTC) voor de server. */
 export const localToIso = (date, time) => (date ? new Date(`${date}T${time || '17:00'}`).toISOString() : null);

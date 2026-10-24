@@ -42,7 +42,20 @@ Uitgangspunt: alle bestaande functies blijven bestaan en bereikbaar. Oude adress
 
 ## Overige schermen
 - Vergelijken, Mijn taken, Feedback & taken, Briefing, Oplevering, Klantactiviteit, Prullenbak, Archief, Merken, Team, Opslag: functioneel ongewijzigd, rustiger opgemaakt.
-- Klantpagina’s (review, projectportaal, opleverpagina): ongewijzigde functies; in fase B komen klantportaal per klant, taalkeuze en vorige/volgende erbij.
+- Klantpagina’s (review, projectportaal, opleverpagina): bestaande functies ongewijzigd; erbij gekomen in fase B: klantportaal per klant (`/k/…`), NL/EN-schakelaar rechtsboven, vorige/volgende onder de kop (alleen via een portaal), wachtwoordscherm en “geldig tot …” onderaan.
+
+## Fase B: waar staat wat
+| Functie | Plek |
+|---|---|
+| Klanten aanmaken, bewerken, verwijderen | **Klanten** in het hoofdmenu (alleen beheerders maken en bewerken) |
+| Project aan klant koppelen | Klantpagina → **Project koppelen**, of project → **Delen → Klant en klanttoegang…** (recht Beheren) |
+| Klanttoegang Actief / Afgerond / Uit | Klantpagina (per project) of **Delen → Klant en klanttoegang…**; bij “uit” een melding bovenaan het project |
+| Klantportaallink (algemeen of persoonlijk voor akkoordgever) | Klantpagina → **Klantportaal → Nieuwe link** (beheerders) |
+| Wachtwoord en vervaldatum | Knop **Beveiliging** bij elke link: Delen bij de video (review/akkoord), Delen → Klantportaal (projectlink), Oplevering (opleverlink), klantpagina (klantportaallink) |
+| Taal van de klantweergave | Klant bewerken (standaardtaal); de kijker kan zelf wisselen (NL/EN) |
+| Goedkeuren | Persoonlijke portaallink → video → **Deze versie goedkeuren** → één bevestiging. Losse akkoordlinks werken zoals voorheen. |
+
+Bestaande project-, review-, akkoord- en opleverlinks houden hun bereik; een losse reviewlink krijgt geen vorige/volgende.
 
 ## Nieuw per fase
 - **A**: dashboard (persoonlijk, aanpasbaar), globaal zoeken met opgeslagen zoekopdrachten, thema, originele bestandsnamen bij downloads, handmatige thumbnail.

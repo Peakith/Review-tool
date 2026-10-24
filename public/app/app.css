@@ -788,3 +788,26 @@ a.dash-row:hover { background: var(--surface-2); border-radius: 6px; }
   .tabpanel-comments .panel-scroll { max-height: 60vh; overflow-y: auto; }
 }
 .dash-grid.is-onboarding { display: block; }
+
+/* Linkbeveiliging (bouwronde 5, fase B) */
+.link-row-foot { display: flex; justify-content: flex-end; }
+.badge-danger { background: var(--danger-soft); color: var(--danger-text); }
+
+/* Klanten (bouwronde 5, fase B) */
+.client-list { display: grid; gap: 8px; }
+.client-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); color: var(--text); text-decoration: none !important; }
+.client-row:hover { border-color: var(--line-2); }
+.client-row > .icon:last-child { color: var(--text-3); margin-left: auto; }
+.client-avatar { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--surface-3); font-weight: 700; color: var(--text-2); }
+.client-main { display: grid; min-width: 0; flex: 1; }
+.client-projects { display: grid; gap: 6px; }
+.client-project { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg-2); }
+.client-project.is-off { border-color: var(--line-danger); }
+.client-project-main { display: grid; min-width: 0; flex: 1 1 220px; }
+.segmented button.is-danger[aria-pressed="true"] { background: var(--danger-soft); color: var(--danger-text); }
+.radio-cards { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; }
+.radio-card { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg-2); cursor: pointer; }
+.radio-card > span { display: grid; gap: 2px; }
+.radio-card:has(input:checked) { border-color: var(--accent); }
+.radio-card.is-danger:has(input:checked) { border-color: var(--danger); }
+.danger-zone { display: flex; justify-content: flex-end; margin-top: 8px; }

@@ -9,7 +9,9 @@ const {
   validApproval, releaseProblem, deliveryState, activeDeliveries, activeDeliveryOf, fileInfo,
   clientDeliveryDto, downloadableDelivery, REASON_TEAM,
 } = require('../deliveries');
-const { recordActivity, deliverySource, portalSource, isFirstRequest } = require('../activity');
+const { recordActivity, deliverySource, portalSource, clientSource, isFirstRequest } = require('../activity');
+const linkguard = require('../linkguard');
+const { assertClientAccess, clientLanguage, clientProject } = require('../clientportal');
 
 const TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
 const NO_STORE = 'private, no-store';
@@ -32,10 +34,10 @@ function deliveryClientRoutes(router, db, config, { storage }) {
   router.use('/delivery/:token', (req, res, next) => {
     const token = String(req.params.token || '');
     const link = TOKEN.test(token) ? db.prepare('SELECT * FROM delivery_links WHERE token = ?').get(token) : null;
-    if (!link) return next(new HttpError(404, 'Deze opleverlink bestaat niet.'));
-    if (link.revoked_at) return next(new HttpError(410, 'Deze opleverlink is ingetrokken. Vraag het productieteam om een nieuwe link.'));
+    linkguard.guard(db, req, 'delivery', link);
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(link.project_id);
-    if (!project || project.trashed_at) return next(new HttpError(410, 'Dit project is niet meer beschikbaar. Neem contact op met het productieteam.'));
+    if (!project || project.trashed_at) return next(new HttpError(410, 'Dit project is niet meer beschikbaar. Neem contact op met het productieteam.', 'gone'));
+    assertClientAccess(project);
     req.deliveryLink = link;
     req.project = project;
     if (!link.last_used_at || Date.now() - Date.parse(link.last_used_at) > 60_000) {
@@ -48,14 +50,21 @@ function deliveryClientRoutes(router, db, config, { storage }) {
     // [routeprefix, bron, url-basis, terug naar]
     { prefix: '/delivery/:token', src: (req) => deliverySource(req.deliveryLink), base: (req) => `/api/delivery/${req.deliveryLink.token}/files`, back: () => null },
     { prefix: '/portal/:token/delivery', src: (req) => portalSource(req.projectLink), base: (req) => `/api/portal/${req.projectLink.token}/delivery`, back: (req) => `/p/${req.projectLink.token}` },
+    { prefix: '/client/:token/projects/:projectId/delivery', src: (req) => clientSource(req.clientLink), base: (req) => `/api/client/${req.clientLink.token}/projects/${req.project.id}/delivery`, back: (req) => `/k/${req.clientLink.token}` },
   ];
+  // Via het klantportaal: alleen projecten die (nog) bij deze klant horen en niet op "uit" staan.
+  router.use('/client/:token/projects/:projectId/delivery', (req, res, next) => {
+    req.project = clientProject(db, req.clientLink, req.params.projectId);
+    next();
+  });
   for (const page of pages) {
-    const filePath = page.prefix === '/delivery/:token' ? '/delivery/:token/files/:deliveryId' : '/portal/:token/delivery/:deliveryId';
+    const filePath = page.prefix === '/delivery/:token' ? '/delivery/:token/files/:deliveryId' : `${page.prefix}/:deliveryId`;
     router.get(page.prefix, (req, res) => {
       const base = page.base(req);
       const dto = clientDeliveryDto(db, req.project, { poster: (d) => `${base}/${d.id}/poster`, download: (d) => `${base}/${d.id}/download` });
       recordActivity(db, req, { projectId: req.project.id, type: 'delivery_opened', src: page.src(req) });
-      res.json({ ...dto, portal: page.back(req) ? { url: page.back(req) } : null });
+      const own = req.deliveryLink || req.projectLink || req.clientLink;
+      res.json({ ...dto, language: clientLanguage(db, req.project), linkExpiresAt: own?.expires_at || null, portal: page.back(req) ? { url: page.back(req) } : null });
     });
     // Thumbnail telt niet als klantactie.
     router.get(`${filePath}/poster`, async (req, res) => {
@@ -82,7 +91,7 @@ function deliveryClientRoutes(router, db, config, { storage }) {
 function deliveryTeamRoutes(router, db, config, { access, storage }) {
   const origin = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
   const activeLink = (projectId) => db.prepare('SELECT * FROM delivery_links WHERE project_id = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT 1').get(projectId);
-  const linkDto = (req, l) => (l ? { id: l.id, url: `${origin(req)}/o/${l.token}`, createdAt: l.created_at, lastUsedAt: l.last_used_at } : null);
+  const linkDto = (req, l) => (l ? { id: l.id, url: `${origin(req)}/o/${l.token}`, createdAt: l.created_at, lastUsedAt: l.last_used_at, protection: linkguard.protectionDto(l) } : null);
   const localOnly = (req) => /^(localhost|127\.|\[::1\])/.test(new URL(origin(req)).host);
 
   /** Nieuwere versies dan de opgeleverde: de nieuwste interne en de nieuwste gepubliceerde. */
@@ -96,7 +105,7 @@ function deliveryTeamRoutes(router, db, config, { access, storage }) {
   /** Welke andere links geven (volgens hun eigen rechten) nog toegang tot deze bestanden? */
   function otherAccess(projectId) {
     const count = (sql) => db.prepare(sql).get(projectId).n;
-    const base = 'FROM share_links s JOIN videos v ON v.id = s.video_id WHERE v.project_id = ? AND v.trashed_at IS NULL AND s.revoked_at IS NULL AND s.project_link_id IS NULL';
+    const base = 'FROM share_links s JOIN videos v ON v.id = s.video_id WHERE v.project_id = ? AND v.trashed_at IS NULL AND s.revoked_at IS NULL AND s.project_link_id IS NULL AND s.client_link_id IS NULL';
     return {
       portalLinkActive: !!db.prepare('SELECT 1 FROM project_links WHERE project_id = ? AND revoked_at IS NULL').get(projectId),
       reviewLinksWithDownload: count(`SELECT COUNT(*) AS n ${base} AND s.role = 'reviewer' AND s.allow_download = 1`),

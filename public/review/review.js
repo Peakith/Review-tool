@@ -1,7 +1,9 @@
 import {
   h, mount, icon, button, api, apiWithRetry, newRequestId, toast, openDialog, field,
-  formatDate, plural, draftStore, emptyState, formatDeadline, isPast,
+  formatDate, formatDateZone, plural, draftStore, formatDeadline, isPast,
 } from '/shared/util.js';
+import { tr } from '/shared/i18n.js';
+import { initLang, langToggle, linkError, fatal as showFatal, expiryNote } from '/review/gate.js';
 import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
@@ -35,31 +37,24 @@ const keyHeader = { 'x-reviewer-key': reviewerKey };
 
 const state = { info: null, version: null, comments: [], activeId: null, player: null, composer: null, justSent: null };
 
-function fatal(title, message, iconName = 'alert', retry) {
-  document.title = title;
-  mount(root, h('main', { class: 'fatal' }, emptyState({
-    icon: iconName, title, text: message,
-    action: retry ? button('Opnieuw proberen', { icon: 'refresh', onClick: retry }) : null,
-  })));
-}
+const fatal = (title, message, iconName, retry) => showFatal(root, title, message, iconName, retry);
 
 async function load(versionId) {
-  if (!state.info) mount(root, h('div', { class: 'fatal' }, h('div', { class: 'spinner', role: 'status', 'aria-label': 'Laden' })));
+  if (!state.info) mount(root, h('div', { class: 'fatal' }, h('div', { class: 'spinner', role: 'status', 'aria-label': tr('Laden') })));
   try {
     state.info = await api('GET', base);
   } catch (err) {
     if (preview && err.status === 401) return fatal('Log eerst in', 'Deze voorbeeldweergave is alleen voor teamleden. Log in en open het voorbeeld opnieuw vanuit de video.', 'lock');
-    if (err.status === 410 && /projectlink/.test(err.message)) return fatal('Deze link werkt niet meer', 'De projectlink is ingetrokken. Vraag het productieteam om een nieuwe link.', 'lock');
-    if (err.status === 410) return fatal('Deze link is ingetrokken', 'Je hebt geen toegang meer tot deze video. Vraag het productieteam om een nieuwe link.', 'lock');
-    if (err.status === 404) return fatal('Link niet gevonden', 'Controleer of je de volledige link hebt gekopieerd, of vraag het team om een nieuwe link.', 'link');
-    return fatal('Laden lukt niet', err.message, 'alert', () => load(versionId));
+    if (!preview && linkError(root, err, { kind: 'share', token, onUnlocked: () => load(versionId), retry: () => load(versionId) })) return;
+    return fatal(tr('Laden lukt niet'), err.message, 'alert', () => load(versionId));
   }
+  initLang(state.info.language);
   applyBrand(state.info.brand);
   document.title = `${state.info.title} · ${state.info.brand?.name || 'Review'}`;
   if (!state.info.versions.length) {
     return fatal(state.info.title, preview
       ? 'Van deze video is nog geen versie gepubliceerd. De klant ziet nu alleen een wachtmelding (en de video staat niet in het portaal).'
-      : 'Er staat nog geen versie voor je klaar. Je kunt deze link bewaren: zodra het team een versie deelt, zie je die hier.', 'clock', () => load());
+      : tr('Er staat nog geen versie voor je klaar. Je kunt deze link bewaren: zodra het team een versie deelt, zie je die hier.'), 'clock', () => load());
   }
   const wanted = state.info.versions.find((v) => v.id === versionId) || state.info.versions[0];
   await showVersion(wanted);
@@ -97,12 +92,71 @@ const myPending = () => {
 
 /** In gewone taal: wat betekent de status van deze versie voor de klant? */
 function clientStatus(v) {
-  if (state.info.archived) return { cls: 'is-closed', icon: 'history', title: 'Afgerond en gearchiveerd', text: 'Je kunt de video nog bekijken, maar reageren en goedkeuren is niet meer mogelijk.' };
-  if (!v.isLatest) return { cls: 'is-old', icon: 'history', title: 'Oudere versie', text: 'Alleen om terug te kijken. Reageren en goedkeuren kan op de nieuwste versie.' };
-  if (v.status === 'approved') return { cls: 'is-approved', icon: 'checkCircle', title: 'Goedgekeurd', text: v.approval ? `Goedgekeurd door ${v.approval.name} op ${formatDate(v.approval.at)}.` : 'Deze versie is goedgekeurd.' };
-  if (v.status === 'changes_requested') return { cls: 'is-changes', icon: 'send', title: 'Feedback verstuurd', text: 'Het team past de video aan. Je kunt nog aanvullen' + (isApprover() ? ' of deze versie alsnog goedkeuren.' : '.') };
-  if (v.status === 'in_review') return { cls: 'is-review', icon: 'eye', title: 'Klaar voor jouw review', text: isApprover() ? 'Plaats reacties en verstuur je feedback, of keur deze versie goed.' : 'Plaats reacties en verstuur daarna je feedback.' };
-  return { cls: 'is-closed', icon: 'lock', title: 'Tijdelijk gesloten', text: 'Deze versie staat op dit moment niet open voor review.' };
+  if (state.info.archived) return { cls: 'is-closed', icon: 'history', title: tr('Afgerond en gearchiveerd'), text: tr('Je kunt de video nog bekijken, maar reageren en goedkeuren is niet meer mogelijk.') };
+  if (!v.isLatest) return { cls: 'is-old', icon: 'history', title: tr('Oudere versie'), text: tr('Alleen om terug te kijken. Reageren en goedkeuren kan op de nieuwste versie.') };
+  if (v.status === 'approved' && v.approval && !v.approval.revoked) return { cls: 'is-approved', icon: 'checkCircle', title: tr('Goedgekeurd'), text: tr('Goedgekeurd door {name} op {date}.', { name: v.approval.name, date: formatDateZone(v.approval.at) }) };
+  if (v.status === 'approved') return { cls: 'is-approved', icon: 'checkCircle', title: tr('Goedgekeurd'), text: tr('Deze versie is goedgekeurd.') };
+  if (v.status === 'changes_requested') return { cls: 'is-changes', icon: 'send', title: tr('Feedback verstuurd'), text: isApprover() ? tr('Het team past de video aan. Je kunt nog aanvullen of deze versie alsnog goedkeuren.') : tr('Het team past de video aan. Je kunt nog aanvullen.') };
+  if (v.status === 'in_review') return { cls: 'is-review', icon: 'eye', title: tr('Klaar voor jouw review'), text: isApprover() ? tr('Plaats reacties en verstuur je feedback, of keur deze versie goed.') : tr('Plaats reacties en verstuur daarna je feedback.') };
+  return { cls: 'is-closed', icon: 'lock', title: tr('Tijdelijk gesloten'), text: tr('Deze versie staat op dit moment niet open voor review.') };
+}
+
+/**
+ * Het team heeft een eerdere goedkeuring van deze versie ingetrokken (statuscorrectie). Leg uit wat
+ * dat betekent en wat er nu nodig is, zonder technische termen.
+ */
+function revokedApprovalNote(v) {
+  const a = v.approval;
+  if (!a?.revoked || !v.isLatest) return null;
+  const who = state.info.approver?.name;
+  const next = isApprover()
+    ? tr('Bekijk de versie opnieuw. Klopt alles, keur hem dan opnieuw goed; zo niet, verstuur je feedback.')
+    : who ? tr('Er is een nieuwe goedkeuring van {name} nodig.', { name: who }) : tr('Er is een nieuwe goedkeuring van de akkoordgever nodig.');
+  return h('div', { class: 'notice notice-warn r-revoked', role: 'note' }, icon('alert'),
+    h('div', {}, h('strong', {}, tr('Eerdere goedkeuring ingetrokken')),
+      h('p', { class: 'small' }, tr('{name} keurde deze versie goed op {date}. Het productieteam heeft die goedkeuring daarna ingetrokken op {revoked}, bijvoorbeeld omdat er nog iets moest worden aangepast.', { name: a.name, date: formatDateZone(a.at), revoked: formatDateZone(a.revokedAt) })),
+      h('p', { class: 'small' }, next)));
+}
+
+/** Nog niet geplaatste tekst of nog niet verstuurde reacties (om per ongeluk weggaan te voorkomen). */
+function unsentInput() {
+  const text = !!state.composer?.hasUnsent?.() || [...document.querySelectorAll('.reply-box:not([hidden]) textarea')].some((t) => t.value.trim());
+  return { text, pending: state.info && state.version ? myPending() : 0 };
+}
+
+/** Naar een andere video of het overzicht: eerst vragen als er iets niet is verstuurd. */
+async function leaveTo(href) {
+  const u = unsentInput();
+  if (!u.text && !u.pending) { location.href = href; return; }
+  const ok = await openDialog({
+    title: tr('Pagina verlaten?'),
+    body: h('ul', { class: 'facts' },
+      u.text ? h('li', {}, icon('chat'), h('span', {}, tr('Je hebt een reactie getypt die nog niet is geplaatst.'))) : null,
+      u.pending ? h('li', {}, icon('clock'), h('span', {}, tr(u.pending === 1 ? '{n} reactie is nog niet als feedback verstuurd. Het team ziet die pas na “Feedback versturen”.' : '{n} reacties zijn nog niet als feedback verstuurd. Het team ziet die pas na “Feedback versturen”.', { n: u.pending }))) : null),
+    actions: [h('button', { class: 'btn btn-primary', value: 'cancel', formnovalidate: true }, tr('Blijven')),
+      h('button', { class: 'btn btn-ghost', value: 'ok' }, tr('Toch verlaten'))],
+  });
+  if (ok === 'ok') { leaving = true; location.href = href; }
+}
+let leaving = false;
+window.addEventListener('beforeunload', (e) => {
+  if (leaving || preview || !state.info) return;
+  if (unsentInput().text) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/** Vorige/volgende video binnen het portaal waaruit deze link komt. */
+function navBar(nav) {
+  if (!nav || preview) return null;
+  const link = (item, dir) => (item
+    ? h('a', { class: `r-nav-link is-${dir}`, href: item.href, onClick: (e) => { e.preventDefault(); leaveTo(item.href); } },
+      dir === 'prev' ? icon('arrowLeft') : null,
+      h('span', { class: 'r-nav-text' }, h('span', { class: 'small muted' }, dir === 'prev' ? tr('Vorige video') : tr('Volgende video')), h('span', { class: 'truncate' }, item.title)),
+      dir === 'next' ? icon('arrowRight') : null)
+    : h('span', { class: `r-nav-link is-${dir} is-empty`, 'aria-hidden': 'true' }));
+  return h('nav', { class: 'r-nav', 'aria-label': tr('Andere video’s') },
+    link(nav.prev, 'prev'),
+    h('span', { class: 'r-nav-pos small muted' }, tr('Video {i} van {n}', { i: nav.index, n: nav.total })),
+    link(nav.next, 'next'));
 }
 
 let commentsEl;
@@ -129,9 +183,9 @@ function render() {
 
   // ---- Kop: welke video en versie bekijk ik? ----
   const versionPicker = info.versions.length > 1
-    ? h('label', { class: 'version-pick' }, h('span', { class: 'visually-hidden' }, 'Kies versie'),
+    ? h('label', { class: 'version-pick' }, h('span', { class: 'visually-hidden' }, tr('Kies versie')),
       h('select', { onChange: (e) => showVersion(info.versions.find((v) => v.id === Number(e.target.value))) },
-        info.versions.map((v) => h('option', { value: v.id }, `Versie ${v.number}${v.isLatest ? ' · nieuwste' : ''}`))))
+        info.versions.map((v) => h('option', { value: v.id }, `${tr('Versie {n}', { n: v.number })}${v.isLatest ? ` · ${tr('nieuwste')}` : ''}`))))
     : null;
   if (versionPicker) versionPicker.querySelector('select').value = String(version.id);
 
@@ -140,53 +194,55 @@ function render() {
     h('div', { class: 'r-header-inner' },
       h('div', { class: 'r-titles' },
         h('div', { class: 'r-brand' }, brandMark(info.brand, { size: 'sm' }),
-          info.portal ? h('a', { class: 'r-back', href: info.portal.url }, icon('arrowLeft'), 'Alle video’s van dit project') : null),
+          info.portal ? h('a', { class: 'r-back', href: info.portal.url, onClick: (e) => { e.preventDefault(); leaveTo(info.portal.url); } }, icon('arrowLeft'), info.portal.url.startsWith('/k/') ? tr('Naar het overzicht') : tr('Alle video’s van dit project')) : null),
         h('div', { class: 'r-project truncate' }, [info.project.clientName, info.project.name].filter(Boolean).join(' · ')),
         h('h1', { title: info.title }, info.title),
         meta ? h('div', { class: 'r-meta-line' }, meta) : null),
       h('div', { class: 'r-version' },
-        h('span', { class: 'version-chip' }, h('strong', {}, `Versie ${version.number}`), version.isLatest ? h('span', { class: 'version-latest' }, 'nieuwste') : h('span', { class: 'version-old' }, `van ${latest.number}`)),
+        h('span', { class: 'version-chip' }, h('strong', {}, tr('Versie {n}', { n: version.number })), version.isLatest ? h('span', { class: 'version-latest' }, tr('nieuwste')) : h('span', { class: 'version-old' }, tr('van {n}', { n: latest.number }))),
         versionPicker,
-        clientPill(version.status))));
+        clientPill(version.status),
+        preview ? null : langToggle(() => { const t = state.player?.video.currentTime || 0; render(); if (t) state.player.seek(t); }))),
+    navBar(info.nav));
 
   // ---- Statusuitleg ----
   const statusCard = h('section', { class: `r-status ${status.cls}`, 'aria-live': 'polite' },
     icon(status.icon),
     h('div', {}, h('strong', {}, status.title), h('p', {}, status.text)),
-    !version.isLatest ? button(`Naar Versie ${latest.number}`, { size: 'sm', onClick: () => showVersion(latest) }) : null);
+    !version.isLatest ? button(tr('Naar Versie {n}', { n: latest.number }), { size: 'sm', onClick: () => showVersion(latest) }) : null);
 
   // ---- Ronde, deadline en wat er is aangepast (bij precies deze versie) ----
   const open = version.isLatest && ['in_review', 'changes_requested'].includes(version.status) && !info.archived;
   const r = version.round;
-  const roundCard = r || version.changeNote ? h('section', { class: 'r-round', 'aria-label': 'Reviewronde' },
-    r ? h('div', { class: 'r-round-head' }, icon('history'), h('strong', {}, `Reviewronde ${r.number}`),
-      r.deadline && open ? h('span', { class: isPast(r.deadline) ? 'r-deadline is-past' : 'r-deadline' }, `· graag je reactie vóór ${formatDeadline(r.deadline)}`) : null) : null,
-    r?.deadline && open && isPast(r.deadline) ? h('p', { class: 'small' }, 'Deze datum is verstreken. Je kunt nog steeds reageren en feedback versturen.') : null,
+  const roundCard = r || version.changeNote ? h('section', { class: 'r-round', 'aria-label': tr('Reviewronde') },
+    r ? h('div', { class: 'r-round-head' }, icon('history'), h('strong', {}, tr('Reviewronde {n}', { n: r.number })),
+      r.deadline && open ? h('span', { class: isPast(r.deadline) ? 'r-deadline is-past' : 'r-deadline' }, tr('· graag je reactie vóór {date}', { date: formatDeadline(r.deadline) })) : null) : null,
+    r?.deadline && open && isPast(r.deadline) ? h('p', { class: 'small' }, tr('Deze datum is verstreken. Je kunt nog steeds reageren en feedback versturen.')) : null,
     r?.note ? h('p', { class: 'r-round-note' }, r.note) : null,
-    version.changeNote ? h('div', { class: 'r-change' }, h('strong', {}, `Aangepast in versie ${version.number}`), h('p', {}, version.changeNote)) : null) : null;
+    version.changeNote ? h('div', { class: 'r-change' }, h('strong', {}, tr('Aangepast in versie {n}', { n: version.number })), h('p', {}, version.changeNote)) : null) : null;
 
   // ---- Identiteit ----
   let identity;
   if (isApprover()) {
     identity = h('div', { class: 'identity is-verified' }, icon('shield'),
-      h('div', {}, h('div', {}, 'Je reviewt als ', h('strong', {}, info.identity.name)), h('div', { class: 'small' }, 'Aangewezen akkoordgever · bevestigd via je persoonlijke link')));
+      h('div', {}, h('div', {}, tr('Je reviewt als '), h('strong', {}, info.identity.name)), h('div', { class: 'small' }, tr('Aangewezen akkoordgever · bevestigd via je persoonlijke link'))));
   } else {
     nameInput = h('input', {
-      type: 'text', id: 'reviewer-name', autocomplete: 'name', maxlength: '80', placeholder: 'Bijv. Eva Jansen',
+      type: 'text', id: 'reviewer-name', autocomplete: 'name', maxlength: '80', placeholder: tr('Bijv. Eva Jansen'),
       value: store.get('rt-reviewer-name') || '',
       onInput: (e) => { store.set('rt-reviewer-name', e.target.value.trim()); e.target.classList.remove('input-error'); },
     });
     identity = h('div', { class: 'identity' },
-      h('label', { for: 'reviewer-name', class: 'field-label' }, 'Je naam'),
+      h('label', { for: 'reviewer-name', class: 'field-label' }, tr('Je naam')),
       nameInput,
-      h('div', { class: 'field-hint' }, 'Zichtbaar bij je reacties, als “opgegeven naam” (niet geverifieerd).'));
+      h('div', { class: 'field-hint' }, tr('Zichtbaar bij je reacties, als “opgegeven naam” (niet geverifieerd).')));
   }
 
   // ---- Reacties ----
   const composer = createComposer({
     player,
     draftKey: `review-draft-${token}-${version.id}`,
-    placeholder: 'Pauzeer op het juiste moment en typ hier je opmerking…',
+    placeholder: tr('Pauzeer op het juiste moment en typ hier je opmerking…'),
     onSubmit: async (body, timecode, { timecodeEnd, annotation } = {}) => {
       const authorName = reviewerName();
       if (authorName === null) return false;
@@ -196,10 +252,10 @@ function render() {
         await apiWithRetry('POST', `${base}/versions/${version.id}/comments`, { body, timecode, timecodeEnd, annotation, authorName, requestId: composerRequest }, keyHeader);
         composerRequest = null;
         await refreshComments();
-        toast('Reactie geplaatst. Hij is nog niet verstuurd: klik op “Feedback versturen” als je klaar bent.', 'success');
+        toast(tr('Reactie geplaatst. Hij is nog niet verstuurd: klik op “Feedback versturen” als je klaar bent.'), 'success');
         return true;
       } catch (err) {
-        toast(`${err.message} Je tekst is bewaard.`, 'error');
+        toast(`${err.message} ${tr('Je tekst is bewaard.')}`, 'error');
         return false;
       }
     },
@@ -207,16 +263,16 @@ function render() {
   state.composer = composer;
 
   commentsEl = h('div', { class: 'r-comments' });
-  actionsEl = h('div', { class: 'r-actions', role: 'region', 'aria-label': 'Feedback versturen of goedkeuren' });
+  actionsEl = h('div', { class: 'r-actions', role: 'region', 'aria-label': tr('Feedback versturen of goedkeuren') });
 
   const howTo = howToCard();
   const compareBtn = info.versions.length > 1
-    ? button('Versies vergelijken', { icon: 'compare', size: 'sm', variant: 'ghost', onClick: () => showCompare(version) })
+    ? button(tr('Versies vergelijken'), { icon: 'compare', size: 'sm', variant: 'ghost', onClick: () => showCompare(version) })
     : null;
-  const exportLinks = !preview ? h('span', { class: 'r-export small' }, icon('fileDown'), 'Feedback downloaden:',
+  const exportLinks = !preview ? h('span', { class: 'r-export small' }, icon('fileDown'), tr('Feedback downloaden:'),
     h('a', { href: `${base}/export.pdf` }, 'PDF'), h('a', { href: `${base}/export.csv` }, 'CSV')) : null;
   const download = info.allowDownload
-    ? h('a', { class: 'btn btn-sm btn-ghost', href: `${base}/versions/${version.id}/download` }, icon('download'), h('span', { class: 'btn-label' }, 'Download'))
+    ? h('a', { class: 'btn btn-sm btn-ghost', href: `${base}/versions/${version.id}/download` }, icon('download'), h('span', { class: 'btn-label' }, tr('Download')))
     : null;
 
   mount(root,
@@ -227,16 +283,18 @@ function render() {
     h('main', { class: 'r-main' },
       h('section', { class: 'r-stage', 'aria-label': 'Video' }, player.el,
         h('div', { class: 'r-stage-foot small muted' },
-          h('span', {}, `Je bekijkt Versie ${version.number} van ${latest.number}`, version.sharedAt ? ` · gedeeld ${formatDate(version.sharedAt)}` : ''),
-          h('span', { class: 'r-stage-actions' }, compareBtn, exportLinks, download))),
-      h('aside', { class: 'r-panel', 'aria-label': 'Reacties' },
+          h('span', {}, tr('Je bekijkt Versie {n} van {total}', { n: version.number, total: latest.number }), version.sharedAt ? ` · ${tr('gedeeld {date}', { date: formatDate(version.sharedAt) })}` : ''),
+          h('span', { class: 'r-stage-actions' }, compareBtn, exportLinks, download)),
+        preview ? null : expiryNote(info.linkExpiresAt)),
+      h('aside', { class: 'r-panel', 'aria-label': tr('Reacties') },
         statusCard,
+        revokedApprovalNote(version),
         roundCard,
         state.justSent ? sentConfirmation() : null,
         canAct() ? howTo : null,
         canAct() ? identity : null,
         canAct() ? composer.el : null,
-        h('div', { class: 'r-comments-head' }, h('h2', {}, 'Reacties'), h('span', { class: 'small muted', id: 'comment-count' })),
+        h('div', { class: 'r-comments-head' }, h('h2', {}, tr('Reacties')), h('span', { class: 'small muted', id: 'comment-count' })),
         commentsEl)),
     canAct() ? actionsEl : null);
   drawComments();
@@ -254,13 +312,13 @@ function reportPlayback(versionId) {
 function howToCard() {
   const collapsed = store.get('rt-howto-collapsed') === '1';
   const details = h('details', { class: 'howto', open: !collapsed },
-    h('summary', {}, icon('info'), 'Zo werkt het'),
+    h('summary', {}, icon('info'), tr('Zo werkt het')),
     h('ol', {},
-      h('li', {}, h('strong', {}, 'Reageer op het juiste moment. '), 'Pauzeer de video en typ je opmerking; het tijdstip wordt automatisch gekoppeld.'),
-      h('li', {}, h('strong', {}, 'Verstuur je feedback. '), 'Je reacties zijn pas definitief voor het team als je op “Feedback versturen” klikt.'),
+      h('li', {}, h('strong', {}, tr('Reageer op het juiste moment. ')), tr('Pauzeer de video en typ je opmerking; het tijdstip wordt automatisch gekoppeld.')),
+      h('li', {}, h('strong', {}, tr('Verstuur je feedback. ')), tr('Je reacties zijn pas definitief voor het team als je op “Feedback versturen” klikt.')),
       isApprover()
-        ? h('li', {}, h('strong', {}, 'Akkoord? '), 'Klik op “Deze versie goedkeuren”. Je goedkeuring geldt alleen voor deze versie.')
-        : h('li', {}, h('strong', {}, 'Goedkeuren '), `doet ${state.info.approver ? state.info.approver.name : 'de aangewezen akkoordgever'} via een persoonlijke link.`)));
+        ? h('li', {}, h('strong', {}, tr('Akkoord? ')), tr('Klik op “Deze versie goedkeuren”. Je goedkeuring geldt alleen voor deze versie.'))
+        : h('li', {}, state.info.approver ? tr('Goedkeuren doet {name} via een persoonlijke link.', { name: state.info.approver.name }) : tr('Goedkeuren doet de aangewezen akkoordgever via een persoonlijke link.'))));
   details.addEventListener('toggle', () => store.set('rt-howto-collapsed', details.open ? '0' : '1'));
   return details;
 }
@@ -268,8 +326,8 @@ function howToCard() {
 function sentConfirmation() {
   const s = state.justSent;
   return h('div', { class: 'notice notice-ok', role: 'status' }, icon('checkCircle'),
-    h('div', {}, h('strong', {}, s.type === 'approved' ? `Versie ${s.number} is goedgekeurd.` : 'Je feedback is verstuurd.'),
-      h('div', { class: 'small' }, s.type === 'approved' ? 'Het team ziet je goedkeuring direct. Dank je wel!' : `${plural(s.count, 'reactie', 'reacties')} verstuurd op ${formatDate(s.at)}. Het team gaat ermee aan de slag.`)));
+    h('div', {}, h('strong', {}, s.type === 'approved' ? tr('Versie {n} is goedgekeurd.', { n: s.number }) : tr('Je feedback is verstuurd.')),
+      h('div', { class: 'small' }, s.type === 'approved' ? tr('Het team ziet je goedkeuring direct. Dank je wel!') : tr('{count} verstuurd op {date}. Het team gaat ermee aan de slag.', { count: plural(s.count, tr('reactie'), tr('reacties')), date: formatDate(s.at) }))));
 }
 
 function reviewerName() {
@@ -278,7 +336,7 @@ function reviewerName() {
   if (!name) {
     nameInput.classList.add('input-error');
     nameInput.focus();
-    toast('Vul eerst je naam in, zodat het team weet van wie de feedback komt.', 'error');
+    toast(tr('Vul eerst je naam in, zodat het team weet van wie de feedback komt.'), 'error');
     return null;
   }
   return name;
@@ -297,21 +355,21 @@ function drawComments() {
       try {
         await apiWithRetry('POST', `${base}/versions/${state.version.id}/comments`, { body, parentId, authorName, requestId: newRequestId() }, keyHeader);
         await refreshComments();
-        toast('Antwoord geplaatst', 'success');
+        toast(tr('Antwoord geplaatst'), 'success');
         return true;
-      } catch (err) { toast(`${err.message} Je tekst is bewaard.`, 'error'); return false; }
+      } catch (err) { toast(`${err.message} ${tr('Je tekst is bewaard.')}`, 'error'); return false; }
     },
     onDelete: async (id) => {
       try {
         await api('DELETE', `${base}/comments/${id}`, undefined, keyHeader);
         await refreshComments();
-        toast('Reactie verwijderd');
+        toast(tr('Reactie verwijderd'));
       } catch (err) { toast(err.message, 'error'); drawComments(); }
     },
   });
   state.player.setMarkers(markersFrom(state.comments, state.activeId));
   const countEl = document.getElementById('comment-count');
-  if (countEl) countEl.textContent = state.comments.length ? plural(state.comments.length, 'reactie', 'reacties') : '';
+  if (countEl) countEl.textContent = state.comments.length ? plural(state.comments.length, tr('reactie'), tr('reacties')) : '';
   drawActions();
 }
 
@@ -319,11 +377,11 @@ function drawComments() {
 function drawActions() {
   if (!actionsEl || !canAct()) return;
   const n = myPending();
-  const feedbackBtn = button(n ? `Feedback versturen (${n})` : 'Feedback versturen', { icon: 'send', variant: isApprover() ? 'secondary' : 'primary', size: 'lg', onClick: submitFeedback });
-  const approveBtn = isApprover() ? button('Deze versie goedkeuren', { icon: 'checkCircle', variant: 'approve', size: 'lg', onClick: approve }) : null;
+  const feedbackBtn = button(n ? tr('Feedback versturen ({n})', { n }) : tr('Feedback versturen'), { icon: 'send', variant: isApprover() ? 'secondary' : 'primary', size: 'lg', onClick: submitFeedback });
+  const approveBtn = isApprover() ? button(tr('Deze versie goedkeuren'), { icon: 'checkCircle', variant: 'approve', size: 'lg', onClick: approve }) : null;
   const hint = n
-    ? h('span', { class: 'r-actions-hint is-pending' }, icon('clock'), `${plural(n, 'reactie', 'reacties')} nog niet verstuurd`)
-    : h('span', { class: 'r-actions-hint' }, icon('info'), isApprover() ? 'Klaar met kijken? Verstuur feedback of keur goed.' : `Goedkeuren gebeurt door ${state.info.approver ? state.info.approver.name : 'de akkoordgever'}.`);
+    ? h('span', { class: 'r-actions-hint is-pending' }, icon('clock'), tr('{count} nog niet verstuurd', { count: plural(n, tr('reactie'), tr('reacties')) }))
+    : h('span', { class: 'r-actions-hint' }, icon('info'), isApprover() ? tr('Klaar met kijken? Verstuur feedback of keur goed.') : state.info.approver ? tr('Goedkeuren gebeurt door {name}.', { name: state.info.approver.name }) : tr('Goedkeuren gebeurt door de akkoordgever.'));
   mount(actionsEl, h('div', { class: 'r-actions-inner' }, hint, h('div', { class: 'r-actions-buttons' }, feedbackBtn, approveBtn)));
 }
 
@@ -334,19 +392,19 @@ function showCompare(current) {
   state.player?.destroy();
   state.composer?.destroy();
   const versions = info.versions.map((v) => ({
-    id: v.id, number: v.number, label: `Versie ${v.number}`,
-    sub: `${v.isLatest ? 'nieuwste · ' : ''}${clientStatusText(v.status)}`,
+    id: v.id, number: v.number, label: tr('Versie {n}', { n: v.number }),
+    sub: `${v.isLatest ? `${tr('nieuwste')} · ` : ''}${clientStatusText(v.status)}`,
     src: urls.media(v.id), poster: v.hasPoster ? urls.poster(v.id) : undefined, duration: v.duration,
   }));
   const other = info.versions.find((v) => v.id !== current.id);
   compareView = createCompare({ versions, a: other.id, b: current.id });
   mount(root,
     h('header', { class: 'r-header' }, h('div', { class: 'r-header-inner' },
-      h('div', { class: 'r-titles' }, h('div', { class: 'r-brand' }, brandMark(info.brand, { size: 'sm' })), h('h1', {}, `Versies vergelijken · ${info.title}`)),
-      button('Terug naar de video', { icon: 'arrowLeft', onClick: () => { compareView.destroy(); compareView = null; showVersion(current); } }))),
-    h('main', { class: 'r-compare' }, compareView.el, h('p', { class: 'small muted' }, 'Alleen-lezen. Reageren en feedback versturen doe je op de nieuwste versie.')));
+      h('div', { class: 'r-titles' }, h('div', { class: 'r-brand' }, brandMark(info.brand, { size: 'sm' })), h('h1', {}, `${tr('Versies vergelijken')} · ${info.title}`)),
+      button(tr('Terug naar de video'), { icon: 'arrowLeft', onClick: () => { compareView.destroy(); compareView = null; showVersion(current); } }))),
+    h('main', { class: 'r-compare' }, compareView.el, h('p', { class: 'small muted' }, tr('Alleen-lezen. Reageren en feedback versturen doe je op de nieuwste versie.'))));
 }
-const clientStatusText = (s) => ({ in_review: 'klaar voor review', changes_requested: 'feedback verstuurd', approved: 'goedgekeurd' }[s] || 'gesloten');
+const clientStatusText = (s) => tr({ in_review: 'klaar voor review', changes_requested: 'feedback verstuurd', approved: 'goedgekeurd' }[s] || 'gesloten');
 
 function showDrawing(c) {
   state.player.pause();
@@ -365,27 +423,27 @@ async function submitFeedback() {
   const v = state.version;
   const n = myPending();
   const draftKey = `review-feedback-${token}-${v.id}`;
-  const message = h('textarea', { rows: '3', placeholder: n ? 'Optioneel: algemene toelichting voor het team' : 'Wat moet er veranderen?', maxlength: '5000', value: draftStore.get(draftKey) });
+  const message = h('textarea', { rows: '3', placeholder: n ? tr('Optioneel: algemene toelichting voor het team') : tr('Wat moet er veranderen?'), maxlength: '5000', value: draftStore.get(draftKey) });
   message.addEventListener('input', () => draftStore.set(draftKey, message.value));
   // Eén request-id per verzendactie: ook als je opnieuw klikt na een fout, telt de server hem maar één keer.
   const requestId = newRequestId();
   let result = null;
   await openDialog({
-    title: `Feedback versturen op Versie ${v.number}`,
+    title: tr('Feedback versturen op Versie {n}', { n: v.number }),
     body: [
       h('p', {}, n
-        ? ['Je verstuurt ', h('strong', {}, plural(n, 'reactie', 'reacties')), ' naar het team. Daarna gaat de video terug naar het team voor aanpassingen.']
-        : 'Je hebt nog geen eigen reacties geplaatst. Schrijf hieronder wat er moet veranderen, of annuleer en plaats eerst reacties op de juiste momenten.'),
-      field(n ? 'Toelichting (optioneel)' : 'Toelichting', message),
+        ? [tr('Je verstuurt '), h('strong', {}, plural(n, tr('reactie'), tr('reacties'))), tr(' naar het team. Daarna gaat de video terug naar het team voor aanpassingen.')]
+        : tr('Je hebt nog geen eigen reacties geplaatst. Schrijf hieronder wat er moet veranderen, of annuleer en plaats eerst reacties op de juiste momenten.')),
+      field(n ? tr('Toelichting (optioneel)') : tr('Toelichting'), message),
     ],
-    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'),
-      h('button', { class: 'btn btn-primary', value: 'ok' }, icon('send'), h('span', { class: 'btn-label' }, 'Feedback versturen'))],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, tr('Annuleren')),
+      h('button', { class: 'btn btn-primary', value: 'ok' }, icon('send'), h('span', { class: 'btn-label' }, tr('Feedback versturen')))],
     onSubmit: async () => {
       if (!n && !message.value.trim()) { message.classList.add('input-error'); message.focus(); return false; }
       try {
         result = await apiWithRetry('POST', `${base}/versions/${v.id}/feedback`, { authorName, message: message.value, requestId }, keyHeader);
       } catch (err) {
-        toast(`${err.message} Je tekst is bewaard; probeer het opnieuw.`, 'error');
+        toast(`${err.message} ${tr('Je tekst is bewaard; probeer het opnieuw.')}`, 'error');
         return false;
       }
     },
@@ -393,7 +451,7 @@ async function submitFeedback() {
   if (!result) return;
   draftStore.set(draftKey, '');
   state.justSent = { type: 'feedback', count: result.commentCount, at: new Date().toISOString() };
-  toast('Je feedback is verstuurd naar het team.', 'success');
+  toast(tr('Je feedback is verstuurd naar het team.'), 'success');
   await load(v.id);
 }
 
@@ -402,19 +460,17 @@ async function approve() {
   const requestId = newRequestId();
   let result = null;
   const pendingNote = myPending()
-    ? h('div', { class: 'notice notice-warn' }, icon('clock'), h('span', {}, `Je hebt ${plural(myPending(), 'reactie', 'reacties')} die nog niet als feedback zijn verstuurd. Die blijven zichtbaar voor het team, maar keuren deze versie niet af.`))
+    ? h('div', { class: 'notice notice-warn' }, icon('clock'), h('span', {}, tr('Je hebt {count} die nog niet als feedback zijn verstuurd. Die blijven zichtbaar voor het team, maar keuren deze versie niet af.', { count: plural(myPending(), tr('reactie'), tr('reacties')) })))
     : null;
   await openDialog({
-    title: `Versie ${v.number} goedkeuren?`,
+    title: tr('Versie {n} goedkeuren?', { n: v.number }),
     body: [
-      h('p', {}, 'Je keurt ', h('strong', {}, `Versie ${v.number}`), ' van ', h('strong', {}, state.info.title), ' goed.'),
-      h('ul', { class: 'facts' },
-        h('li', {}, icon('shield'), h('span', {}, `Vastgelegd met je naam (${state.info.identity.name}), datum en tijd.`)),
-        h('li', {}, icon('layers'), h('span', {}, 'Geldt alleen voor deze versie. Een eventuele nieuwe versie moet opnieuw worden goedgekeurd.'))),
+      h('p', { class: 'approve-what' }, h('strong', {}, state.info.title), h('span', { class: 'approve-version' }, tr('Versie {n}', { n: v.number }))),
+      h('p', { class: 'small muted' }, tr('Je goedkeuring wordt vastgelegd met je naam ({name}), datum en tijd, en geldt alleen voor deze versie.', { name: state.info.identity.name })),
       pendingNote,
     ],
-    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'),
-      h('button', { class: 'btn btn-approve', value: 'ok' }, icon('checkCircle'), h('span', { class: 'btn-label' }, `Ja, keur Versie ${v.number} goed`))],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, tr('Annuleren')),
+      h('button', { class: 'btn btn-approve', value: 'ok' }, icon('checkCircle'), h('span', { class: 'btn-label' }, tr('Ja, keur Versie {n} goed', { n: v.number })))],
     onSubmit: async () => {
       try {
         result = await apiWithRetry('POST', `${base}/versions/${v.id}/approve`, { confirm: true, versionNumber: v.number, requestId }, keyHeader);
@@ -427,7 +483,7 @@ async function approve() {
   });
   if (!result) return;
   state.justSent = { type: 'approved', number: v.number };
-  toast(`Versie ${v.number} is goedgekeurd. Dank je wel!`, 'success');
+  toast(tr('Versie {n} is goedgekeurd. Dank je wel!', { n: v.number }), 'success');
   await load(v.id);
 }
 

@@ -2,6 +2,7 @@
 // loszetten, geluid van één versie, handmatige uitlijning (verschuiving) en verschillende lengtes.
 // Gekoppelde tijdcodes zijn géén inhoudelijke vergelijking: beide video's staan alleen op
 // hetzelfde (verschoven) tijdstip. Alleen-lezen: hier kun je niet reageren.
+import { tr } from './i18n.js';
 import { h, icon, timecode, mount } from './util.js';
 
 const FPS = 25;
@@ -28,8 +29,8 @@ export function createCompare({ versions, a, b, onChange = () => {} }) {
     const label = h('div', { class: 'cmp-label' });
     const state = h('div', { class: 'cmp-state', hidden: true });
     const time = h('div', { class: 'cmp-time mono' });
-    const select = h('select', { class: 'cmp-select', 'aria-label': `Versie ${key}` }, versions.map((v) => h('option', { value: v.id }, `${v.label}${v.sub ? ` · ${v.sub}` : ''}`)));
-    const el = h('section', { class: 'cmp-pane', 'aria-label': `Versie ${key}` },
+    const select = h('select', { class: 'cmp-select', 'aria-label': tr('Versie {n}', { n: key }) }, versions.map((v) => h('option', { value: v.id }, `${v.label}${v.sub ? ` · ${v.sub}` : ''}`)));
+    const el = h('section', { class: 'cmp-pane', 'aria-label': tr('Versie {n}', { n: key }) },
       h('div', { class: 'cmp-pane-head' }, h('span', { class: 'cmp-key' }, key), select),
       h('div', { class: 'cmp-stage' }, video, state, label), time);
     return { key, video, label, state, time, select, el };
@@ -46,30 +47,30 @@ export function createCompare({ versions, a, b, onChange = () => {} }) {
   };
 
   // ---- Bediening ----
-  const playBtn = h('button', { type: 'button', class: 'pc-btn', 'aria-label': 'Afspelen' }, icon('play'));
-  const scrub = h('input', { type: 'range', min: '0', max: '100', step: '0.01', value: '0', class: 'cmp-scrub', 'aria-label': 'Gekoppelde tijdlijn' });
+  const playBtn = h('button', { type: 'button', class: 'pc-btn', 'aria-label': tr('Afspelen') }, icon('play'));
+  const scrub = h('input', { type: 'range', min: '0', max: '100', step: '0.01', value: '0', class: 'cmp-scrub', 'aria-label': tr('Gekoppelde tijdlijn') });
   const timeEl = h('span', { class: 'pc-time' });
   const linkBtn = h('button', { type: 'button', class: 'btn btn-sm btn-secondary' });
-  const audioSeg = h('div', { class: 'segmented segmented-sm', role: 'group', 'aria-label': 'Geluid van' });
-  const viewSeg = h('div', { class: 'segmented segmented-sm cmp-view', role: 'group', 'aria-label': 'Weergave' });
+  const audioSeg = h('div', { class: 'segmented segmented-sm', role: 'group', 'aria-label': tr('Geluid van') });
+  const viewSeg = h('div', { class: 'segmented segmented-sm cmp-view', role: 'group', 'aria-label': tr('Weergave') });
   const offsetEl = h('div', { class: 'cmp-offset' });
 
   function drawControls() {
     mount(playBtn, icon(playing ? 'pause' : 'play'));
-    playBtn.setAttribute('aria-label', playing ? 'Pauzeren' : 'Afspelen');
-    mount(linkBtn, icon(linked ? 'link2' : 'unlink'), h('span', { class: 'btn-label' }, linked ? 'Gekoppeld' : 'Los'));
-    linkBtn.title = linked ? 'Klik om A en B los van elkaar te bedienen' : 'Klik om A en B weer gekoppeld af te spelen (met de huidige posities als uitlijning)';
-    mount(audioSeg, h('span', { class: 'cmp-seg-label' }, 'Geluid'), ['A', 'B'].map((k) => h('button', { type: 'button', 'aria-pressed': String(audio === k), onClick: () => { audio = k; applyAudio(); drawControls(); } }, k)));
-    mount(viewSeg, [['both', 'A en B'], ['A', 'Alleen A'], ['B', 'Alleen B']].map(([k, l]) => h('button', { type: 'button', 'aria-pressed': String(view === k), onClick: () => { view = k; root.dataset.view = k; drawControls(); } }, l)));
+    playBtn.setAttribute('aria-label', playing ? tr('Pauzeren') : tr('Afspelen'));
+    mount(linkBtn, icon(linked ? 'link2' : 'unlink'), h('span', { class: 'btn-label' }, linked ? tr('Gekoppeld') : tr('Los')));
+    linkBtn.title = linked ? tr('Klik om A en B los van elkaar te bedienen') : tr('Klik om A en B weer gekoppeld af te spelen (met de huidige posities als uitlijning)');
+    mount(audioSeg, h('span', { class: 'cmp-seg-label' }, tr('Geluid')), ['A', 'B'].map((k) => h('button', { type: 'button', 'aria-pressed': String(audio === k), onClick: () => { audio = k; applyAudio(); drawControls(); } }, k)));
+    mount(viewSeg, [['both', tr('A en B')], ['A', tr('Alleen A')], ['B', tr('Alleen B')]].map(([k, l]) => h('button', { type: 'button', 'aria-pressed': String(view === k), onClick: () => { view = k; root.dataset.view = k; drawControls(); } }, l)));
     const sign = offset > 0 ? '+' : offset < 0 ? '−' : '±';
     mount(offsetEl,
-      h('span', { class: 'small muted' }, 'Uitlijning B'),
-      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => shift(-1), title: 'B één seconde eerder' }, '−1 s'),
-      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => shift(-1 / FPS), title: 'B één beeld eerder' }, '−1 beeld'),
-      h('strong', { class: 'mono cmp-offset-value', title: 'Hoeveel B verschoven is ten opzichte van A' }, `${sign}${Math.abs(offset).toFixed(2)} s`),
-      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => shift(1 / FPS), title: 'B één beeld later' }, '+1 beeld'),
-      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => shift(1), title: 'B één seconde later' }, '+1 s'),
-      offset ? h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => { offset = 0; sync(true); drawControls(); } }, 'Herstellen') : null);
+      h('span', { class: 'small muted' }, tr('Uitlijning B')),
+      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => shift(-1), title: tr('B één seconde eerder') }, '−1 s'),
+      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => shift(-1 / FPS), title: tr('B één beeld eerder') }, tr('−1 beeld')),
+      h('strong', { class: 'mono cmp-offset-value', title: tr('Hoeveel B verschoven is ten opzichte van A') }, `${sign}${Math.abs(offset).toFixed(2)} s`),
+      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => shift(1 / FPS), title: tr('B één beeld later') }, tr('+1 beeld')),
+      h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => shift(1), title: tr('B één seconde later') }, '+1 s'),
+      offset ? h('button', { type: 'button', class: 'btn btn-sm btn-ghost', onClick: () => { offset = 0; sync(true); drawControls(); } }, tr('Herstellen')) : null);
     scrub.disabled = !linked;
     playBtn.disabled = !linked;
     for (const [p] of panes()) p.video.controls = !linked;
@@ -95,8 +96,8 @@ export function createCompare({ versions, a, b, onChange = () => {} }) {
       const d = dur(p, v);
       const want = T + off;
       let note = '';
-      if (want < 0) note = `Begint over ${timecode(-want)}`;
-      else if (d && want > d) note = 'Einde van deze versie';
+      if (want < 0) note = tr('Begint over {t}', { t: timecode(-want) });
+      else if (d && want > d) note = tr('Einde van deze versie');
       const target = Math.min(d || want, Math.max(0, want));
       const inRange = !note;
       if (force || Math.abs(p.video.currentTime - target) > (playing && inRange ? 0.15 : 0.03)) {
@@ -166,8 +167,8 @@ export function createCompare({ versions, a, b, onChange = () => {} }) {
 
   const root = h('div', { class: 'cmp', dataset: { view } },
     h('div', { class: 'notice notice-info cmp-note' }, icon('info'), h('span', {},
-      h('strong', {}, 'Gekoppelde tijdcodes zijn geen inhoudelijke vergelijking. '),
-      'Beide video’s staan op hetzelfde tijdstip (plus de uitlijning hieronder). Is de montage anders, schuif B dan met de knoppen tot de beelden gelijk lopen, of zet de koppeling los en zoek per video het juiste moment.')),
+      h('strong', {}, tr('Gekoppelde tijdcodes zijn geen inhoudelijke vergelijking. ')),
+      tr('Beide video’s staan op hetzelfde tijdstip (plus de uitlijning hieronder). Is de montage anders, schuif B dan met de knoppen tot de beelden gelijk lopen, of zet de koppeling los en zoek per video het juiste moment.'))),
     h('div', { class: 'cmp-panes' }, pA.el, pB.el),
     h('div', { class: 'cmp-controls' },
       h('div', { class: 'cmp-row' }, playBtn, scrub, timeEl),

@@ -22,9 +22,12 @@ const EVENTS = {
 const OPEN_FOR_CLIENT = new Set(['in_review', 'changes_requested']);
 
 class HttpError extends Error {
-  constructor(status, message) {
+  /** code: vaste aanduiding voor de klantpagina's (bijv. 'password_required'), zodat die de melding kunnen vertalen. */
+  constructor(status, message, code = null, extra = null) {
     super(message);
     this.status = status;
+    if (code) this.code = code;
+    if (extra) this.extra = extra;
   }
 }
 

@@ -20,6 +20,7 @@ const { deliveryClientRoutes, deliveryTeamRoutes } = require('./routes/deliverie
 const { activityRoutes, activityClientRoutes } = require('./routes/activity');
 const { purgeOldActivity } = require('./activity');
 const { meRoutes } = require('./routes/me');
+const { clientPortalRoutes, clientTeamRoutes } = require('./routes/clients');
 const { FORMATS, toolStatus } = require('./media');
 const { createLocalStorage } = require('./storage');
 const { createAccess } = require('./access');
@@ -173,6 +174,7 @@ function createApp(overrides = {}) {
   // ---------- Klant (deel-link) ----------
   reviewRoutes(api, db, config, { storage });
   portalRoutes(api, db, config, { storage });
+  clientPortalRoutes(api, db, config, { storage });
   brandLogoRoute(api, db, config, { storage });
   exportRoutes(api, db, config, { storage, mode: 'client' });
   deliveryClientRoutes(api, db, config, { storage });
@@ -191,6 +193,7 @@ function createApp(overrides = {}) {
   exportRoutes(team, db, config, { access, storage, mode: 'team' });
   deliveryTeamRoutes(team, db, config, { access, storage });
   activityRoutes(team, db, config, { access });
+  clientTeamRoutes(team, db, config, { access });
   // Taken van wie inmiddels geen toegang meer heeft, losmaken (ook bij het starten).
   reconcileAssignees(db, access);
 
@@ -256,8 +259,9 @@ function createApp(overrides = {}) {
   app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
   app.get('/r/:token', sendPage('review/index.html'));
   app.get('/p/:token', sendPage('review/portal.html'));
+  app.get('/k/:token', sendPage('review/portal.html'));
   // Definitieve opleveringen: via de opleverlink, via het klantportaal en als teamvoorbeeld.
-  app.get(['/o/:token', '/p/:token/oplevering', '/voorbeeld/oplevering/:id'], sendPage('review/delivery.html'));
+  app.get(['/o/:token', '/p/:token/oplevering', '/k/:token/oplevering/:projectId', '/voorbeeld/oplevering/:id'], sendPage('review/delivery.html'));
   // Voorbeeldweergave voor het team: dezelfde klantpagina's, gevuld via het teamaccount.
   app.get('/voorbeeld/project/:id', sendPage('review/portal.html'));
   app.get('/voorbeeld/video/:id', sendPage('review/index.html'));
@@ -271,7 +275,9 @@ function createApp(overrides = {}) {
     if (res.headersSent) return res.end();
     const message = err.type === 'entity.too.large' ? 'Het bestand is te groot.'
       : status >= 500 && !expected ? 'Er ging iets mis op de server' : err.message;
-    if (req.path.startsWith('/api')) res.status(status).json({ error: message, ...(expected && err.details ? { details: err.details } : {}) });
+    if (req.path.startsWith('/api')) {
+      res.status(status).json({ error: message, ...(expected && err.code ? { code: err.code } : {}), ...(expected && err.extra ? err.extra : {}), ...(expected && err.details ? { details: err.details } : {}) });
+    }
     else res.status(status).send(message);
   });
 

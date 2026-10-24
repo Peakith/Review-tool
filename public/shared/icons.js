@@ -25,6 +25,7 @@ const P = {
   chevronDown: '<path d="m6.5 9.5 5.5 5.5 5.5-5.5"/>',
   chevronRight: '<path d="m9.5 6.5 5.5 5.5-5.5 5.5"/>',
   arrowLeft: '<path d="M11 6.5 5.5 12l5.5 5.5M6 12h13"/>',
+  arrowRight: '<path d="M13 6.5 18.5 12 13 17.5M18 12H5"/>',
   more: '<circle cx="5.5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="18.5" cy="12" r="1.2" fill="currentColor"/>',
   edit: '<path d="M14.5 5.5l4 4L8 20H4v-4z"/><path d="M12.5 7.5l4 4"/>',
   trash: '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5"/>',

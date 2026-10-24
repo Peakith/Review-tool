@@ -7,6 +7,8 @@ const { safeFileHeaders } = require('../files');
 const { posterKey } = require('../views');
 const { recordActivity, portalSource } = require('../activity');
 const { activeDeliveries } = require('../deliveries');
+const linkguard = require('../linkguard');
+const { assertClientAccess, clientLanguage } = require('../clientportal');
 
 const TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
 
@@ -38,10 +40,11 @@ function portalRoutes(router, db, config, { storage }) {
   router.use('/portal/:token', (req, res, next) => {
     const token = String(req.params.token || '');
     const link = TOKEN.test(token) ? db.prepare('SELECT * FROM project_links WHERE token = ?').get(token) : null;
-    if (!link) return next(new HttpError(404, 'Deze projectlink bestaat niet.'));
-    if (link.revoked_at) return next(new HttpError(410, 'Deze projectlink is ingetrokken. Vraag het team om een nieuwe link.'));
+    linkguard.guard(db, req, 'project', link);
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(link.project_id);
-    if (!project || project.trashed_at) return next(new HttpError(410, 'Dit project is niet meer beschikbaar. Neem contact op met het productieteam.'));
+    if (!project || project.trashed_at) return next(new HttpError(410, 'Dit project is niet meer beschikbaar. Neem contact op met het productieteam.', 'gone'));
+    // Klanttoegang uit: het portaal en alles daaronder is geblokkeerd.
+    assertClientAccess(project);
     req.projectLink = link;
     req.project = project;
     if (!link.last_used_at || Date.now() - Date.parse(link.last_used_at) > 60_000) {
@@ -61,7 +64,7 @@ function portalRoutes(router, db, config, { storage }) {
       fileUrl: (b) => `${base}/briefing/${b.id}/file`,
     });
     recordActivity(db, req, { projectId: req.project.id, type: 'portal_opened', src: portalSource(req.projectLink) });
-    res.json({ ...dto, delivery: deliverySummary(db, req.project, `/p/${req.projectLink.token}/oplevering`) });
+    res.json({ ...dto, language: clientLanguage(db, req.project), linkExpiresAt: req.projectLink.expires_at || null, delivery: deliverySummary(db, req.project, `/p/${req.projectLink.token}/oplevering`) });
   });
 
   // Alleen de thumbnail van de gepubliceerde versie; nooit van een intern concept.

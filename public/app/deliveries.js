@@ -1,5 +1,6 @@
 // Definitieve opleveringen (teamkant): bewust vrijgeven van exacte, door de klant goedgekeurde
 // versies, terugnemen en vervangen met geschiedenis, oplevertekst en de afzonderlijke opleverlink.
+import { protectionBadges, protectionButton } from './linkprotect.js';
 import {
   h, mount, icon, button, busy, api, apiWithRetry, toast, openDialog, confirmDialog, field, emptyState, errorState,
   formatDate, relativeDate, formatBytes, plural, skeletonRows, copyText, newRequestId, draftStore,
@@ -140,13 +141,13 @@ export async function viewDeliveries({ project, host, onCount }) {
       } });
       body = [
         h('div', { class: 'link-row' },
-          h('div', { class: 'link-row-head' }, h('strong', {}, 'Opleverlink'), h('span', { class: 'small muted link-used' }, l.lastUsedAt ? `geopend ${relativeDate(l.lastUsedAt)}` : 'nog niet geopend')),
+          h('div', { class: 'link-row-head' }, h('strong', {}, 'Opleverlink'), protectionBadges(l.protection), h('span', { class: 'small muted link-used' }, l.lastUsedAt ? `geopend ${relativeDate(l.lastUsedAt)}` : 'nog niet geopend')),
           h('div', { class: 'link-copy' },
             h('input', { type: 'text', readonly: true, value: l.url, class: 'link-url', 'aria-label': 'Opleverlink', onFocus: (e) => e.target.select() }),
             button('Kopiëren', { icon: 'copy', size: 'sm', onClick: async () => { await copyText(l.url); toast('Opleverlink gekopieerd', 'success'); } }),
             h('a', { class: 'btn btn-sm btn-ghost', href: l.url, target: '_blank', rel: 'noopener', title: 'Openen (nieuw tabblad). Als ingelogd teamlid telt dit niet als klantactiviteit.' }, icon('external'), h('span', { class: 'visually-hidden' }, 'Openen')))),
         localNote,
-        h('div', { class: 'portal-actions' }, h('span', { class: 'small muted' }, `Gemaakt ${formatDate(l.createdAt)}.`), h('span', { class: 'spacer' }), replace, revoke),
+        h('div', { class: 'portal-actions' }, h('span', { class: 'small muted' }, `Gemaakt ${formatDate(l.createdAt)}.`), h('span', { class: 'spacer' }), protectionButton('delivery', l, load), replace, revoke),
       ];
     }
     return h('section', { class: 'dl-section', 'aria-labelledby': 'dl-link' },

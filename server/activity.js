@@ -30,11 +30,16 @@ const RETENTION_RANGE = [7, 730];
 
 /** Bron van een reviewlink (gewone reviewlink, persoonlijke akkoordlink of via het klantportaal). */
 function shareLinkSource(link) {
+  if (link.client_link_id && link.role === 'approver') return { source: 'approver_link', linkKey: `client:${link.client_link_id}`, label: `Via persoonlijk klantportaal van ${link.approver_name}` };
+  if (link.client_link_id) return { source: 'portal', linkKey: `client:${link.client_link_id}`, label: 'Via klantportaal (klant)' };
   if (link.project_link_id) return { source: 'portal', linkKey: `portal:${link.project_link_id}`, label: 'Via klantportaal (projectlink)' };
   if (link.role === 'approver') return { source: 'approver_link', linkKey: `share:${link.id}`, label: `Via akkoordlink van ${link.approver_name}` };
   return { source: 'review_link', linkKey: `share:${link.id}`, label: link.label && link.label !== 'Reviewlink' ? `Via reviewlink “${link.label}”` : 'Via reviewlink' };
 }
 const portalSource = (link) => ({ source: 'portal', linkKey: `portal:${link.id}`, label: 'Via klantportaal (projectlink)' });
+const clientSource = (link) => (link.approver_email
+  ? { source: 'approver_link', linkKey: `client:${link.id}`, label: `Via persoonlijk klantportaal van ${link.approver_name}` }
+  : { source: 'portal', linkKey: `client:${link.id}`, label: 'Via klantportaal (klant)' });
 const deliverySource = (link) => ({ source: 'delivery_link', linkKey: `delivery:${link.id}`, label: 'Via opleverlink' });
 
 /** Is dit een eerste (deel van een) download, en niet een vervolgverzoek of HEAD? */
@@ -82,5 +87,5 @@ function purgeOldActivity(db, { days = retentionDays(db), at = Date.now() } = {}
 
 module.exports = {
   TYPES, WINDOW_MINUTES, DEFAULT_RETENTION_DAYS, RETENTION_RANGE,
-  shareLinkSource, portalSource, deliverySource, isFirstRequest, recordActivity, retentionDays, purgeOldActivity,
+  shareLinkSource, portalSource, clientSource, deliverySource, isFirstRequest, recordActivity, retentionDays, purgeOldActivity,
 };

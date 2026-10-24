@@ -32,7 +32,7 @@ const { gb, ask, yes, positional, fail } = require('./lib/cli');
   if (flag && !['ongeldig', 'herstellen'].includes(flag)) fail('Gebruik --links=ongeldig (standaard) of --links=herstellen.');
   let links = flag === 'herstellen' ? 'keep' : 'invalidate';
   console.log(`\nKlantlinks in deze back-up die nog geldig waren: ${counts.total}`);
-  console.log(`  reviewlinks ${counts.reviewLinks} · akkoordlinks ${counts.approverLinks} · projectlinks (klantportaal) ${counts.projectLinks} · opleverlinks ${counts.deliveryLinks}`);
+  console.log(`  reviewlinks ${counts.reviewLinks} · akkoordlinks ${counts.approverLinks} · projectlinks (klantportaal) ${counts.projectLinks} · opleverlinks ${counts.deliveryLinks} · klantportaallinks ${counts.clientLinks ?? 0}`);
   console.log('\nEen back-up weet niet welke links je ná het maken ervan hebt ingetrokken. Kies wat er met de links gebeurt:');
   console.log('  1. Veilig (standaard): alle klantlinks ongeldig maken.');
   console.log('     Klanten met een oude link zien "ingetrokken". Je maakt daarna nieuwe links aan en deelt die opnieuw');

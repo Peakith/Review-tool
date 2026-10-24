@@ -18,7 +18,7 @@ const { VERSION } = require('./build');
  * dus ook grote video's passen niet in één keer in het werkgeheugen.
  */
 const FORMAT = 1;
-const COUNT_TABLES = ['users', 'projects', 'videos', 'versions', 'comments', 'share_links', 'feedback_rounds', 'approvals', 'briefing_items', 'project_links', 'brands', 'review_rounds', 'comment_tasks', 'deliveries', 'delivery_links', 'client_activity'];
+const COUNT_TABLES = ['users', 'projects', 'videos', 'versions', 'comments', 'share_links', 'feedback_rounds', 'approvals', 'briefing_items', 'project_links', 'brands', 'review_rounds', 'comment_tasks', 'deliveries', 'delivery_links', 'client_activity', 'clients', 'client_links'];
 
 const stamp = (d = new Date()) => {
   const p = (n) => String(n).padStart(2, '0');
@@ -240,7 +240,8 @@ async function verifyBackup(dir, { deep = true } = {}) {
 
 /**
  * Klantlinks (externe toegang met een token): reviewlinks en akkoordlinks (share_links, ook die via
- * het klantportaal zijn ontstaan), projectlinks (klantportaal) en opleverlinks. Oudere back-ups
+ * het klantportaal zijn ontstaan), projectlinks (klantportaal per project), opleverlinks en
+ * klantportaallinks (per klant, ook persoonlijke links van akkoordgevers). Oudere back-ups
  * hebben nog niet alle tabellen.
  */
 const LINK_KINDS = [
@@ -248,8 +249,9 @@ const LINK_KINDS = [
   ['approverLinks', "SELECT COUNT(*) AS n FROM share_links WHERE revoked_at IS NULL AND role = 'approver'", 'share_links'],
   ['projectLinks', 'SELECT COUNT(*) AS n FROM project_links WHERE revoked_at IS NULL', 'project_links'],
   ['deliveryLinks', 'SELECT COUNT(*) AS n FROM delivery_links WHERE revoked_at IS NULL', 'delivery_links'],
+  ['clientLinks', 'SELECT COUNT(*) AS n FROM client_links WHERE revoked_at IS NULL', 'client_links'],
 ];
-const LINK_TABLES = ['share_links', 'project_links', 'delivery_links'];
+const LINK_TABLES = ['share_links', 'project_links', 'delivery_links', 'client_links'];
 const RESTORE_LINK_MODES = ['invalidate', 'keep'];
 
 /** Hoeveel klantlinks in deze database (of back-up) nog geldig zijn, per soort. */
@@ -259,7 +261,7 @@ function activeLinkCounts(dbFile) {
     const has = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
     const counts = {};
     for (const [key, sql, table] of LINK_KINDS) counts[key] = has(table) ? db.prepare(sql).get().n : 0;
-    counts.total = counts.reviewLinks + counts.approverLinks + counts.projectLinks + counts.deliveryLinks;
+    counts.total = counts.reviewLinks + counts.approverLinks + counts.projectLinks + counts.deliveryLinks + counts.clientLinks;
     return counts;
   } finally {
     db.close();

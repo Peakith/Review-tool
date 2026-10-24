@@ -298,6 +298,41 @@ CREATE TABLE IF NOT EXISTS client_links (
   last_used_at TEXT
 );
 
+-- Persoonlijke inbox (bouwronde 5, fase C). Eén rij per ontvanger; dedupe_key voorkomt dubbele meldingen
+-- bij herhaalpogingen. Titel en tekst zijn een momentopname; bij tonen en openen wordt opnieuw
+-- gecontroleerd of de ontvanger nog toegang heeft (zo niet: de melding wordt niet getoond).
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  project_id INTEGER,
+  video_id INTEGER,
+  version_id INTEGER,
+  comment_id INTEGER,
+  task_id INTEGER,
+  delivery_id INTEGER,
+  actor_label TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  dedupe_key TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  read_at TEXT,
+  UNIQUE (user_id, dedupe_key)
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, id);
+
+-- Volgen: projecten (feedback, goedkeuringen, opleveringen) en gesprekken (antwoorden op een reactie).
+-- state 'on' = volgen, 'off' = bewust niet (wordt dan ook niet automatisch weer aangezet).
+CREATE TABLE IF NOT EXISTS follows (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  state TEXT NOT NULL DEFAULT 'on',
+  auto INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, kind, target_id)
+);
+
 -- Opgeslagen zoekopdrachten per gebruiker (alleen de zoekvraag; resultaten worden altijd opnieuw
 -- en met de actuele rechten berekend).
 CREATE TABLE IF NOT EXISTS saved_searches (
@@ -398,6 +433,8 @@ const COLUMNS = [
   ['delivery_links', 'password_hash', 'TEXT'],
   ['delivery_links', 'password_set_at', 'TEXT'],
   ['delivery_links', 'expires_at', 'TEXT'],
+  // Bezoek van een ingelogd teamlid via een klantlink (eigen testbezoek): apart gemarkeerd.
+  ['client_activity', 'team', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 
 const DEFAULT_BRANDS = [

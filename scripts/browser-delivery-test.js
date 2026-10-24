@@ -51,7 +51,7 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
     p.on('console', (m) => { if (m.type() === 'error' && !/40[0134]|409|410|net::ERR_(ABORTED|FAILED)/.test(m.text())) errors.push(`${label}: ${m.text()}`); });
   };
   const H = { 'x-requested-with': 'review-tool' };
-  const activityCount = () => server.db.prepare('SELECT COUNT(*) AS n FROM client_activity').get().n;
+  const activityCount = () => server.db.prepare('SELECT COUNT(*) AS n FROM client_activity WHERE team = 0').get().n;
   const noHorizontalScroll = (p) => p.evaluate(() => document.scrollingElement.scrollWidth <= window.innerWidth + 1);
 
   // ---------- Team ----------
@@ -332,11 +332,12 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   await cp.click('.p-delivery-card');
   await cp.waitForSelector('.d-item');
   check('portaal: verwijst naar de opleverpagina, met weg terug', cp.url().endsWith('/oplevering') && await cp.isVisible('.r-back'));
-  // Ingelogd teamlid opent de klantlink: telt niet
+  // Ingelogd teamlid opent de klantlink: telt niet als klantactiviteit (bouwronde 5: wel apart als teambezoek)
   const n1 = activityCount();
+  const t1 = server.db.prepare('SELECT COUNT(*) AS n FROM client_activity WHERE team = 1').get().n;
   await page.goto(portalUrl);
   await page.waitForSelector('.p-delivery-card');
-  check('ingelogd teamlid op een klantlink telt niet als klantactiviteit', activityCount() === n1);
+  check('ingelogd teamlid op een klantlink telt niet als klantactiviteit (wel apart als teambezoek)', activityCount() === n1 && server.db.prepare('SELECT COUNT(*) AS n FROM client_activity WHERE team = 1').get().n === t1 + 1);
 
   // Prullenbak: waarschuwing bij een opgeleverde video
   await page.goto(`${BASE}/video/${main.videoId}`);

@@ -20,6 +20,7 @@
     "test:browser:oplevering": "node --disable-warning=ExperimentalWarning scripts/browser-delivery-test.js",
     "test:browser:ui": "node --disable-warning=ExperimentalWarning scripts/browser-ui-test.js",
     "test:browser:klanten": "node --disable-warning=ExperimentalWarning scripts/browser-clients-test.js",
+    "test:browser:inbox": "node --disable-warning=ExperimentalWarning scripts/browser-inbox-test.js",
     "test:update-zip": "WORKTREE=1 node --disable-warning=ExperimentalWarning scripts/zip-update-test.js",
     "test:upgrade": "node --disable-warning=ExperimentalWarning scripts/upgrade-test.js",
     "test:offline-update": "node --disable-warning=ExperimentalWarning scripts/offline-update-test.js",

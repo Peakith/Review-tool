@@ -69,7 +69,7 @@ function reconcileAssignees(db, access) {
   return changed;
 }
 
-function taskRoutes(router, db, config, { access }) {
+function taskRoutes(router, db, config, { access, notifier }) {
   const getComment = (req, need, opts) => {
     const c = db.prepare('SELECT * FROM comments WHERE id = ?').get(intParam(req.params.id));
     if (!c) throw new HttpError(404, 'Reactie niet gevonden');
@@ -136,6 +136,7 @@ function taskRoutes(router, db, config, { access }) {
       setResolved(db, comment.id, status === 'done', req.user.id);
       return { task: db.prepare('SELECT * FROM comment_tasks WHERE id = ?').get(Number(info.lastInsertRowid)), existing: false };
     });
+    if (!result.existing) notifier.emit('taskAssigned', { task: result.task, actorUserId: req.user.id, actorLabel: req.user.name });
     res.status(result.existing ? 200 : 201).json({ task: taskDto(db, result.task), existing: result.existing });
   });
 
@@ -157,7 +158,9 @@ function taskRoutes(router, db, config, { access }) {
         body.assigneeId !== undefined ? null : task.unassigned_note, now(), req.user.id, task.id);
       if (status !== task.status) setResolved(db, comment.id, status === 'done', req.user.id);
     });
-    res.json({ task: taskDto(db, db.prepare('SELECT * FROM comment_tasks WHERE id = ?').get(task.id)) });
+    const updated = db.prepare('SELECT * FROM comment_tasks WHERE id = ?').get(task.id);
+    if (updated.assignee_id && updated.assignee_id !== task.assignee_id) notifier.emit('taskAssigned', { task: updated, actorUserId: req.user.id, actorLabel: req.user.name });
+    res.json({ task: taskDto(db, updated) });
   });
 
   // Taak weghalen: de reactie blijft, met haar huidige afhandelstatus.

@@ -132,7 +132,7 @@ function meRoutes(router, db, config, { access, storage, feedbackItems }) {
       const ids = levels ? [...levels].filter(([, l]) => atLeast(l, 'publish')).map(([id]) => id) : null;
       const rows = db.prepare(`SELECT a.*, p.name AS project_name, v.title AS video_title, ver.number AS version_number FROM client_activity a
         JOIN projects p ON p.id = a.project_id LEFT JOIN videos v ON v.id = a.video_id LEFT JOIN versions ver ON ver.id = a.version_id
-        WHERE p.trashed_at IS NULL AND ${inList('p.id', ids)} ORDER BY a.id DESC LIMIT 8`).all(...(ids || []));
+        WHERE p.trashed_at IS NULL AND a.team = 0 AND ${inList('p.id', ids)} ORDER BY a.id DESC LIMIT 8`).all(...(ids || []));
       return {
         items: rows.map((a) => ({ type: a.type, label: ACTIVITY_TYPES[a.type], at: a.created_at, projectId: a.project_id, projectName: a.project_name,
           videoId: a.video_id, videoTitle: a.video_title, versionNumber: a.version_number, sourceLabel: a.source_label })),

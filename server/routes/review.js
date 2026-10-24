@@ -13,7 +13,7 @@ const { assertClientAccess, effectiveClientShare, clientLanguage, clientReviewTo
  * Klant-API. Iedere aanvraag controleert opnieuw of de link bestaat en niet is
  * ingetrokken, en of de gevraagde versie bij deze video hoort en gedeeld is.
  */
-function reviewRoutes(router, db, config, { storage }) {
+function reviewRoutes(router, db, config, { storage, notifier }) {
   router.use('/review/:token', (req, res, next) => {
     const token = String(req.params.token || '');
     const link = /^[A-Za-z0-9_-]{20,64}$/.test(token)
@@ -154,6 +154,8 @@ function reviewRoutes(router, db, config, { storage }) {
     const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, timecode_end, annotation, author_name, author_type, share_link_id, reviewer_key, request_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(ver.id, parentId, body.slice(0, 5000), timecode, timecodeEnd, annotation, who.name, who.type, req.link.id, key, reqId, now());
+    // Een klantantwoord in een gesprek: de teamleden die het gesprek volgen krijgen een melding.
+    if (parentId) notifier.emit('commentPosted', { commentId: Number(info.lastInsertRowid) });
     res.status(201).json({ id: Number(info.lastInsertRowid) });
   });
 
@@ -203,6 +205,7 @@ function reviewRoutes(router, db, config, { storage }) {
       });
       return { roundId, commentCount: pending.length, replayed: false };
     });
+    if (!result.replayed) notifier.emit('feedbackSent', { roundId: result.roundId });
     res.json({ ok: true, ...result, status: currentStatus(ver.id) });
   });
 
@@ -232,6 +235,10 @@ function reviewRoutes(router, db, config, { storage }) {
       });
       return false;
     });
+    if (!replayed) {
+      const a = db.prepare('SELECT id FROM approvals WHERE share_link_id = ? AND request_id = ?').get(req.link.id, requestId(req, true));
+      if (a) notifier.emit('approvalGiven', { approvalId: a.id });
+    }
     res.json({ ok: true, replayed, status: currentStatus(ver.id) });
   });
 

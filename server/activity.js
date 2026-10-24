@@ -8,7 +8,8 @@ const auth = require('./auth');
  * - Labels beschrijven de waargenomen gebeurtenis, niet meer: “Afspelen gestart” is niet
  *   “volledig bekeken”, “Download aangevraagd” is niet “bestand opgeslagen”.
  * - Thumbnails, videodeelverzoeken (Range), voorladen en de voorbeeldweergave van het team tellen
- *   niet mee. Een ingelogd teamlid dat een klantlink opent, telt ook niet mee.
+ *   niet mee. Een ingelogd teamlid dat een klantlink opent (eigen testbezoek), wordt apart gemarkeerd
+ *   als teambezoek en telt niet mee als klantactiviteit; het team kan die bezoeken wel tonen.
  * - Herhalingen worden begrensd: per link, soort en bron hooguit één gebeurtenis per venster, en een
  *   herhaald verzoek met dezelfde request-id wordt herkend.
  * - Er worden geen tokens, IP-adressen of apparaatkenmerken bewaard.
@@ -60,7 +61,9 @@ const cleanName = (value) => {
  */
 function recordActivity(db, req, { projectId, type, videoId = null, versionId = null, deliveryId = null, src, visitorName = null, requestId = null }) {
   if (!TYPES[type]) throw new Error(`Onbekende activiteit: ${type}`);
-  if (auth.sessionUser(db, req)) return { recorded: false, reason: 'team' };
+  const team = auth.sessionUser(db, req) ? 1 : 0;
+  // Teambezoeken los ontdubbelen, zodat een testbezoek een echt klantbezoek nooit wegdrukt.
+  if (team) src = { ...src, linkKey: `team:${src.linkKey}` };
   if (requestId && db.prepare('SELECT 1 FROM client_activity WHERE link_key = ? AND request_id = ?').get(src.linkKey, requestId)) {
     return { recorded: false, reason: 'replayed' };
   }
@@ -68,10 +71,10 @@ function recordActivity(db, req, { projectId, type, videoId = null, versionId = 
   const recent = db.prepare(`SELECT 1 FROM client_activity WHERE link_key = ? AND type = ? AND created_at >= ?
     AND video_id IS ? AND version_id IS ? AND delivery_id IS ? LIMIT 1`).get(src.linkKey, type, since, videoId, versionId, deliveryId);
   if (recent) return { recorded: false, reason: 'recent' };
-  db.prepare(`INSERT INTO client_activity (project_id, video_id, version_id, delivery_id, type, source, link_key, source_label, visitor_name, request_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(projectId, videoId, versionId, deliveryId, type, src.source, src.linkKey, src.label.slice(0, 200), src.source === 'approver_link' ? null : cleanName(visitorName), requestId, now());
-  return { recorded: true, reason: null };
+  db.prepare(`INSERT INTO client_activity (project_id, video_id, version_id, delivery_id, type, source, link_key, source_label, visitor_name, request_id, created_at, team)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(projectId, videoId, versionId, deliveryId, type, src.source, src.linkKey, src.label.slice(0, 200), src.source === 'approver_link' || team ? null : cleanName(visitorName), requestId, now(), team);
+  return { recorded: true, reason: team ? 'team' : null, team: !!team };
 }
 
 function retentionDays(db) {

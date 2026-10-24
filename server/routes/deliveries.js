@@ -88,7 +88,7 @@ function deliveryClientRoutes(router, db, config, { storage }) {
 }
 
 /** Teamkant: vrijgeven, terugnemen, vervangen, opleverlink en voorbeeld. */
-function deliveryTeamRoutes(router, db, config, { access, storage }) {
+function deliveryTeamRoutes(router, db, config, { access, storage, notifier }) {
   const origin = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
   const activeLink = (projectId) => db.prepare('SELECT * FROM delivery_links WHERE project_id = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT 1').get(projectId);
   const linkDto = (req, l) => (l ? { id: l.id, url: `${origin(req)}/o/${l.token}`, createdAt: l.created_at, lastUsedAt: l.last_used_at, protection: linkguard.protectionDto(l) } : null);
@@ -252,6 +252,7 @@ function deliveryTeamRoutes(router, db, config, { access, storage }) {
       }
       return { replayed: false, released, unchanged };
     });
+    if (!result.replayed) for (const id of result.released) notifier.emit('deliveryChanged', { deliveryId: id, action: 'released', actorUserId: req.user.id, actorLabel: req.user.name });
     res.status(result.replayed ? 200 : 201).json({ ok: true, ...result });
   });
 
@@ -265,6 +266,7 @@ function deliveryTeamRoutes(router, db, config, { access, storage }) {
     if (!reason) throw new HttpError(400, 'Geef een reden; die wordt in de oplevergeschiedenis bewaard.');
     if (d.withdrawn_at) return res.json({ ok: true, already: true });
     db.prepare('UPDATE deliveries SET withdrawn_at = ?, withdrawn_by = ?, withdrawn_reason = ? WHERE id = ? AND withdrawn_at IS NULL').run(now(), req.user.id, reason, d.id);
+    notifier.emit('deliveryChanged', { deliveryId: d.id, action: 'withdrawn', actorUserId: req.user.id, actorLabel: req.user.name });
     res.json({ ok: true });
   });
 

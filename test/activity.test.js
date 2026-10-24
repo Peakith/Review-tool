@@ -93,13 +93,24 @@ test('geen dubbele of technische schijngebeurtenissen; teamvoorbeeld en ingelogd
   await guest.get(dl);
   assert.equal(rows(p.projectId).filter((x) => x.type === 'download_requested').length, 1);
   assert.deepEqual(rows(p.projectId).map((x) => x.type).sort(), ['download_requested', 'playback_started', 'review_opened']);
-  // Teamvoorbeeld en een ingelogd teamlid dat de klantlink opent: niets
-  const n = rows(p.projectId).length;
+  // Teamvoorbeeld: niets. Een ingelogd teamlid dat de klantlink opent (eigen testbezoek): apart
+  // gemarkeerd als teambezoek (bouwronde 5), niet als klantactiviteit.
+  const clientRows = () => rows(p.projectId).filter((x) => !x.team);
+  const n = clientRows().length;
   await admin.get(`/api/preview/videos/${p.videoId}`);
   await admin.get(`/api/projects/${p.projectId}/portal-preview`);
+  assert.equal(rows(p.projectId).length, n, 'voorbeeldweergave registreert niets');
   await admin.get(`/api/review/${p.approver}`);
-  assert.equal((await admin.post(`/api/review/${p.approver}/activity`, { type: 'playback_started', versionId: p.versionId, requestId: rid() })).data.recorded, false);
-  assert.equal(rows(p.projectId).length, n);
+  const teamPlay = (await admin.post(`/api/review/${p.approver}/activity`, { type: 'playback_started', versionId: p.versionId, requestId: rid() })).data;
+  assert.equal(teamPlay.recorded, true);
+  assert.equal(clientRows().length, n, 'telt niet als klantactiviteit');
+  assert.deepEqual(rows(p.projectId).filter((x) => x.team).map((x) => x.type), ['review_opened', 'playback_started']);
+  const ov = (await admin.get(`/api/projects/${p.projectId}/activity`)).data;
+  assert.equal(ov.items.some((i) => i.team), false, 'standaard verborgen');
+  assert.equal(ov.teamVisits, 2);
+  const withTeam = (await admin.get(`/api/projects/${p.projectId}/activity?team=1`)).data;
+  assert.equal(withTeam.items.filter((i) => i.team).length, 2);
+  assert.match(withTeam.items.find((i) => i.team).sourceLabel, /Ingelogd teamlid/);
   // Andere soorten via de client worden geweigerd
   assert.equal((await client(srv.base).post(`/api/review/${p.reviewer}/activity`, { type: 'download_requested', versionId: p.versionId })).status, 400);
 });
@@ -173,4 +184,34 @@ test('opruimen van oude activiteit zonder verlies van formele geschiedenis; inst
   assert.equal((await admin.get('/api/settings/activity')).data.retentionDays, 30);
   assert.deepEqual(formal(), before);
   assert.equal((await admin.get(`/api/projects/${p.projectId}/activity`)).data.retentionDays, 30);
+});
+
+test('tijdlijn (bouwronde 5): formele feedback en goedkeuring uit hun eigen registratie, met bron en filters', async () => {
+  const p = await project('Tijdlijn');
+  const guest = client(srv.base);
+  await guest.get(`/api/review/${p.reviewer}`);
+  await guest.post(`/api/review/${p.reviewer}/versions/${p.versionId}/comments`, { body: 'Graag korter', timecode: 1, authorName: 'Eva', requestId: rid() }, key);
+  await guest.post(`/api/review/${p.reviewer}/versions/${p.versionId}/feedback`, { authorName: 'Eva', requestId: rid() }, key);
+  await admin.post(`/api/versions/${p.versionId}/status`, { status: 'in_review', note: 'Opnieuw' });
+  await guest.post(`/api/review/${p.approver}/versions/${p.versionId}/approve`, { confirm: true, versionNumber: 1, requestId: rid() }, key);
+  const ov = (await admin.get(`/api/projects/${p.projectId}/activity`)).data;
+  assert.deepEqual(ov.items.map((i) => i.type), ['approval_given', 'feedback_sent', 'review_opened']);
+  const fb = ov.items[1];
+  assert.equal(fb.label, 'Feedback verstuurd (formeel)');
+  assert.equal(fb.sourceLabel, 'Via reviewlink');
+  assert.equal(fb.visitorName, 'Eva');
+  assert.equal(fb.visitorNameVerified, false);
+  assert.equal(fb.detail, '1 reactie(s)');
+  assert.equal(fb.href, `/video/${p.videoId}?v=${p.versionId}`);
+  const ap = ov.items[0];
+  assert.equal(ap.sourceLabel, 'Via akkoordlink van Joris');
+  assert.equal(ap.visitorNameVerified, true);
+  assert.equal(ap.versionNumber, 1);
+  assert.equal(ov.counts.feedback_sent, 1);
+  assert.equal(ov.counts.approval_given, 1);
+  assert.deepEqual((await admin.get(`/api/projects/${p.projectId}/activity?type=approval_given`)).data.items.map((i) => i.type), ['approval_given']);
+  assert.deepEqual((await admin.get(`/api/projects/${p.projectId}/activity?before=${encodeURIComponent(fb.at)}`)).data.items.map((i) => i.type), ['review_opened']);
+  // Opruimen van passieve activiteit raakt formele acties niet
+  purgeOldActivity(srv.db, { days: 7, at: Date.now() + 30 * 86_400_000 });
+  assert.deepEqual((await admin.get(`/api/projects/${p.projectId}/activity`)).data.items.map((i) => i.type), ['approval_given', 'feedback_sent']);
 });

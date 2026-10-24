@@ -16,7 +16,7 @@ const { clientLanguage } = require('../clientportal');
 // een item in de prullenbak of ingetrokken toegang direct effect heeft.
 const MEDIA_CACHE = 'private, no-cache';
 
-function teamRoutes(router, db, config, { finalize, access, storage }) {
+function teamRoutes(router, db, config, { finalize, access, storage, notifier }) {
   const actor = (req) => ({ actorType: 'team', actorLabel: req.user.name, userId: req.user.id });
 
   // Actieve (niet-weggegooide) versies; nummering telt weggegooide versies wel mee.
@@ -120,6 +120,8 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     const intro = String(req.body?.portalIntro || '').trim().slice(0, 2000);
     const info = db.prepare('INSERT INTO projects (name, client_name, brand_id, portal_intro, rounds_included, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(name, clientName, brandId, intro, parseRounds(req.body?.roundsIncluded), req.user.id, now());
+    // Wie een project maakt, volgt het (feedback, goedkeuringen, opleveringen in de inbox).
+    notifier.setFollow(req.user.id, 'project', Number(info.lastInsertRowid), true, { auto: true });
     res.status(201).json({ id: Number(info.lastInsertRowid) });
   });
 
@@ -219,6 +221,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       const info = db.prepare('INSERT INTO videos (project_id, title, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
         .run(p.id, title, req.user.id, now(), now());
       const videoId = Number(info.lastInsertRowid);
+      notifier.setFollow(req.user.id, 'project', p.id, true, { auto: true });
       return { videoId, ...insertVersion(videoId, file, req.user) };
     });
     res.status(201).json(result);
@@ -229,6 +232,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     const file = await finalize(req.body?.uploadId, req.user, { videoId: video.id, projectId: video.project_id });
     // Nieuwe versie: titel, deel-links en akkoordgever blijven bij de video.
     const result = db.tx(() => insertVersion(video.id, file, req.user));
+    notifier.setFollow(req.user.id, 'project', video.project_id, true, { auto: true });
     res.status(201).json(result);
   });
 
@@ -412,6 +416,8 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
         createdLink = createLink(ver.video_id, { role: 'reviewer', label: 'Reviewlink' }, req.user);
       }
     });
+    // Wie publiceert, volgt het project (om klantfeedback en goedkeuring te zien).
+    notifier.setFollow(req.user.id, 'project', db.prepare('SELECT project_id FROM videos WHERE id = ?').get(ver.video_id).project_id, true, { auto: true });
     res.json({ ok: true, createdLink: !!createdLink, roundNumber });
   });
 
@@ -450,7 +456,12 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     if (status === ver.status) throw new HttpError(409, 'De versie heeft deze status al');
     const note = String(req.body?.note || '').trim().slice(0, 500);
     if (!note) throw new HttpError(400, 'Geef een reden voor de handmatige correctie; die wordt in de geschiedenis bewaard.');
+    const hadApproval = ver.status === 'approved' && !!db.prepare('SELECT 1 FROM approvals WHERE version_id = ?').get(ver.id);
     db.tx(() => changeStatus(db, ver.id, status, { event: 'manual', note, ...actor(req) }));
+    if (hadApproval) {
+      const ev = db.prepare('SELECT id FROM status_events WHERE version_id = ? ORDER BY id DESC LIMIT 1').get(ver.id);
+      notifier.emit('approvalRevoked', { versionId: ver.id, eventId: ev.id, actorUserId: req.user.id, actorLabel: req.user.name, note });
+    }
     res.json({ ok: true });
   });
 
@@ -525,6 +536,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
     }
     const info = db.prepare(`INSERT INTO comments (version_id, parent_id, body, timecode, timecode_end, annotation, author_name, author_type, user_id, internal, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'team', ?, ?, ?)`).run(ver.id, parentId, body.slice(0, 5000), timecode, timecodeEnd, annotation, req.user.name, req.user.id, internal ? 1 : 0, now());
+    notifier.emit('commentPosted', { commentId: Number(info.lastInsertRowid), actorUserId: req.user.id });
     res.status(201).json({ id: Number(info.lastInsertRowid), internal });
   });
 

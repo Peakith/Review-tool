@@ -57,6 +57,22 @@ Uitgangspunt: alle bestaande functies blijven bestaan en bereikbaar. Oude adress
 
 Bestaande project-, review-, akkoord- en opleverlinks houden hun bereik; een losse reviewlink krijgt geen vorige/volgende.
 
+## Fase C: waar staat wat
+| Functie | Plek |
+|---|---|
+| Inbox (taken, @vermeldingen, antwoorden, klantfeedback, goedkeuringen, opleveringen) | **Inbox** in het hoofdmenu, met teller ongelezen |
+| Meldingsvoorkeuren en browsermeldingen | Onderaan de inbox, kaart **Meldingen** |
+| Project volgen | Knop **Volgen** in de projectkop (automatisch na project maken, uploaden of publiceren) |
+| Gesprek niet meer volgen | Knop bij de melding in de inbox |
+| Klantactiviteit als tijdlijn (signalen + formele feedback/goedkeuring) | Project → **Activiteit**; teambezoeken via “Eigen teambezoeken tonen” |
+
+### Onderzoek klantactiviteit (onderdeel 12)
+- **Vastleggen**: de server legt geopend (portaal, review, oplevering), downloadverzoek en (via de browser) afspelen gestart vast. Werkt zoals bedoeld.
+- **Waarom het team soms “niets” zag**: een bezoek van een ingelogd teamlid via een klantlink werd tot nu toe helemaal niet vastgelegd. Wie zelf testte in dezelfde browser waarin hij is ingelogd, zag dus een leeg overzicht. Nu: vastgelegd als *teambezoek*, apart gemarkeerd en standaard verborgen, met teller en uitleg.
+- **Ontdubbelen**: per link, soort, video en versie telt een gebeurtenis binnen 30 minuten (download 5) één keer. Twee echte klanten die dezelfde link binnen dat venster gebruiken, worden zo samengevoegd; dat staat nu expliciet in de uitleg. Teambezoeken worden apart ontdubbeld en drukken nooit een klantbezoek weg.
+- **Formele acties** (feedback verstuurd, goedkeuring) stonden niet in het overzicht. Nu wel, rechtstreeks uit hun eigen registratie (niets nagemaakt), en ze vallen niet onder de bewaartermijn van signalen.
+- **Zichtbaarheid**: het overzicht ververst elke 30 seconden zolang het openstaat; actieve filters staan als chips boven de lijst.
+
 ## Nieuw per fase
 - **A**: dashboard (persoonlijk, aanpasbaar), globaal zoeken met opgeslagen zoekopdrachten, thema, originele bestandsnamen bij downloads, handmatige thumbnail.
 - **B**: klanten en klantportaal, eenvoudiger goedkeuren via persoonlijke portaallink, NL/EN, vorige/volgende, wachtwoord en vervaldatum op links.

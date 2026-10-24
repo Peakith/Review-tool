@@ -21,6 +21,7 @@ import { viewActivity } from './activity.js';
 import { protectionBadges, protectionButton } from './linkprotect.js';
 import { viewClients, viewClient, clientSection } from './clients.js';
 import { brandChip } from './brandchip.js';
+import { viewInbox, startInboxPolling, refreshInboxCount } from './inbox.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -72,6 +73,7 @@ async function route() {
     [/^\/projecten\/(\d+)\/activiteit$/, (id) => viewProject(Number(id), 'activity'), 'projects'],
     [/^\/taken$/, () => viewMyTasks(ctx()), 'tasks'],
     [/^\/klanten$/, () => viewClients(ctx()), 'clients'],
+    [/^\/inbox$/, () => viewInbox(ctx()), 'inbox'],
     [/^\/klanten\/(\d+)$/, (id) => viewClient(ctx(), Number(id)), 'clients'],
     [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
     [/^\/video\/(\d+)\/vergelijk$/, (id) => viewCompare(Number(id)), 'projects'],
@@ -119,7 +121,8 @@ function ensureShell() {
       h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
         navLink('/', 'dashboard', 'grid', 'Dashboard'),
         navLink('/projecten', 'projects', 'folder', 'Projecten'),
-        navLink('/klanten', 'clients', 'users', 'Klanten')),
+        navLink('/klanten', 'clients', 'users', 'Klanten'),
+        navLink('/inbox', 'inbox', 'inbox', 'Inbox', h('span', { class: 'side-count', id: 'inbox-count', hidden: true, 'aria-label': 'ongelezen' }))),
       h('nav', { class: 'side-nav side-nav-secondary', 'aria-label': 'Snel naar' },
         navLink('/taken', 'tasks', 'tasks', 'Mijn taken', h('span', { class: 'side-count', id: 'my-task-count', hidden: true })))),
     h('div', { class: 'side-foot' },
@@ -136,6 +139,7 @@ function ensureShell() {
   shellEl.addEventListener('click', (e) => { if (e.target.closest('.side-nav a, .suggest-item')) shellEl.classList.remove('nav-open'); });
   mount(root, shellEl);
   refreshSidebar();
+  startInboxPolling();
 }
 
 /** Profielmenu: thema (klein), instellingen en uitloggen. */
@@ -186,6 +190,7 @@ function setActiveNav(section) {
 }
 
 async function refreshSidebar() {
+  refreshInboxCount();
   api('GET', '/api/my/tasks').then((r) => {
     const el = document.getElementById('my-task-count');
     if (el) { el.textContent = String(r.items.length); el.hidden = !r.items.length; }
@@ -665,6 +670,7 @@ async function viewProject(id, tab = 'videos') {
         brandChip(project.brand),
       ],
       actions: [
+        followButton(project),
         mayUpload && isVideos ? button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }) : null,
         can(project.myLevel, 'publish') ? menuButton([
           ['Klantportaal (projectlink)…', () => portalDialog(project), { icon: 'globe' }],
@@ -1592,6 +1598,25 @@ async function portalDialog(project) {
   }
   draw();
   await done;
+}
+
+/** Project volgen: klantfeedback, goedkeuringen en opleveringen in je inbox. */
+function followButton(project) {
+  const btn = h('button', { type: 'button', class: 'btn btn-ghost btn-sm follow-btn', 'aria-pressed': 'false', title: 'Meldingen in je inbox over klantfeedback, goedkeuringen en opleveringen in dit project' }, icon('bell'), h('span', { class: 'btn-label' }, 'Volgen'));
+  let following = false;
+  const draw = () => {
+    btn.setAttribute('aria-pressed', String(following));
+    btn.querySelector('.btn-label').textContent = following ? 'Volgend' : 'Volgen';
+  };
+  api('GET', `/api/follows/project/${project.id}`).then((r) => { following = r.following; draw(); }).catch(() => { btn.hidden = true; });
+  btn.addEventListener('click', async () => {
+    try {
+      following = (await api('PUT', `/api/follows/project/${project.id}`, { follow: !following })).following;
+      draw();
+      toast(following ? 'Je volgt dit project: meldingen komen in je inbox.' : 'Je volgt dit project niet meer.', 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  });
+  return btn;
 }
 
 const previewLink = (project) => h('a', { class: 'btn btn-sm btn-secondary', href: `/voorbeeld/project/${project.id}`, target: '_blank', rel: 'noopener' }, icon('eye'), h('span', { class: 'btn-label' }, 'Bekijk als klant'));

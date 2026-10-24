@@ -74,7 +74,7 @@ const mp4 = (name, size = '1280x720', sec = 4) => {
   // ---------- A. Team: klanten ----------
   await page.goto(`${BASE}/klanten`);
   await page.waitForSelector('.empty');
-  check('hoofdmenu: Dashboard, Projecten, Klanten', JSON.stringify(await page.$$eval('.side-nav[aria-label="Hoofdmenu"] a', (els) => els.map((e) => e.textContent.trim()))) === JSON.stringify(['Dashboard', 'Projecten', 'Klanten']));
+  check('hoofdmenu bevat Klanten', (await page.$$eval('.side-nav[aria-label="Hoofdmenu"] .nav-label', (els) => els.map((e) => e.textContent))).includes('Klanten'));
   await page.click('button:has-text("Nieuwe klant")');
   await page.fill('dialog input[type=text]', 'Bakkerij Jansen');
   await page.click('dialog button:has-text("Klant maken")');

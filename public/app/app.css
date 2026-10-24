@@ -811,3 +811,35 @@ a.dash-row:hover { background: var(--surface-2); border-radius: 6px; }
 .radio-card:has(input:checked) { border-color: var(--accent); }
 .radio-card.is-danger:has(input:checked) { border-color: var(--danger); }
 .danger-zone { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* Inbox (bouwronde 5, fase C) */
+.follow-btn[aria-pressed="true"] { color: var(--accent-strong); }
+.inbox-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.inbox-filters select { width: auto; }
+.inbox-list { display: grid; gap: 8px; }
+.inbox-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.inbox-item.is-unread { border-left: 3px solid var(--accent); }
+.inbox-item.is-unread .inbox-title { font-weight: 600; }
+.inbox-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-3); color: var(--text-2); }
+.inbox-icon.is-approval { color: var(--st-approved); }
+.inbox-icon.is-approval_revoked, .inbox-icon.is-feedback { color: var(--st-changes); }
+.inbox-main { display: grid; gap: 3px; min-width: 0; }
+.inbox-title { color: var(--text); overflow-wrap: anywhere; }
+.inbox-body { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.inbox-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.inbox-settings { margin-top: 20px; display: grid; gap: 10px; }
+.inbox-prefs { display: grid; gap: 6px; }
+.inbox-subhead { font-size: 14px; margin-top: 6px; }
+@media (max-width: 640px) {
+  .inbox-item { grid-template-columns: auto minmax(0, 1fr); }
+  .inbox-actions { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
+}
+
+/* Klantactiviteit als tijdlijn (bouwronde 5, fase C) */
+.act-active { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.act-active:empty { display: none; }
+.act-badge { margin-left: 6px; font-size: 11px; }
+.act-row.is-formal .act-icon { color: var(--st-approved); }
+.act-row.is-feedback_sent .act-icon { color: var(--st-changes); }
+.act-row.is-team { opacity: .75; }
+.act-team { flex-direction: row; align-items: center; gap: 8px; align-self: end; min-height: 40px; }

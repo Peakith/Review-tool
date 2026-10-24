@@ -21,6 +21,8 @@ const { activityRoutes, activityClientRoutes } = require('./routes/activity');
 const { purgeOldActivity } = require('./activity');
 const { meRoutes } = require('./routes/me');
 const { clientPortalRoutes, clientTeamRoutes } = require('./routes/clients');
+const { createNotifier } = require('./notify');
+const { inboxRoutes } = require('./routes/inbox');
 const { FORMATS, toolStatus } = require('./media');
 const { createLocalStorage } = require('./storage');
 const { createAccess } = require('./access');
@@ -172,7 +174,8 @@ function createApp(overrides = {}) {
   });
 
   // ---------- Klant (deel-link) ----------
-  reviewRoutes(api, db, config, { storage });
+  const notifier = createNotifier(db, access);
+  reviewRoutes(api, db, config, { storage, notifier });
   portalRoutes(api, db, config, { storage });
   clientPortalRoutes(api, db, config, { storage });
   brandLogoRoute(api, db, config, { storage });
@@ -184,14 +187,15 @@ function createApp(overrides = {}) {
   const team = asyncRouter();
   team.use(auth.requireTeam(db));
   const uploads = uploadRoutes(team, db, config, { access, storage });
-  teamRoutes(team, db, config, { ...uploads, access, storage });
+  teamRoutes(team, db, config, { ...uploads, access, storage, notifier });
   adminRoutes(team, db, config, { access, storage, uploads });
   briefingRoutes(team, db, config, { access, storage, uploads });
   brandRoutes(team, db, config, { access, storage });
-  const { feedbackItems } = taskRoutes(team, db, config, { access });
+  const { feedbackItems } = taskRoutes(team, db, config, { access, notifier });
   meRoutes(team, db, config, { access, storage, feedbackItems });
   exportRoutes(team, db, config, { access, storage, mode: 'team' });
-  deliveryTeamRoutes(team, db, config, { access, storage });
+  deliveryTeamRoutes(team, db, config, { access, storage, notifier });
+  inboxRoutes(team, db, config, { access, notifier });
   activityRoutes(team, db, config, { access });
   clientTeamRoutes(team, db, config, { access });
   // Taken van wie inmiddels geen toegang meer heeft, losmaken (ook bij het starten).

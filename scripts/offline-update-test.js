@@ -1,10 +1,10 @@
-// Ontwikkeltest: ZIP-update vanaf 0.4.0 zonder internet, met de echte startknop (Start Studio Review.command).
-//  0. 0.4.0 (a0d99e8) wordt "geïnstalleerd" zoals op de Mac: eerste start met internet (npm install vult
+// Ontwikkeltest: ZIP-update vanaf een vorige versie (standaard 0.5.1, f247164) zonder internet, met de echte startknop (Start Studio Review.command).
+//  0. De vorige versie wordt "geïnstalleerd" zoals op de Mac: eerste start met internet (npm install vult
 //     de npm-cache), daarna gegevens: account, project, gedeelde video, reviewlink, akkoordlink, goedkeuring.
 //  1. Nieuwe versie vers uitgepakt (zonder node_modules), netwerk geblokkeerd, npm-cache van stap 0:
 //     de startknop installeert uit de cache en start; gegevens en bestaande links werken.
 //  2. Zelfde, maar met een lege npm-cache: de startknop stopt met een duidelijke melding; gegevens onaangeroerd.
-//  3. Lege npm-cache, maar node_modules gekopieerd uit de 0.4.0-map: de startknop start zonder internet.
+//  3. Lege npm-cache, maar node_modules gekopieerd uit de map van de vorige versie: de startknop start zonder internet.
 // Het netwerk wordt echt geblokkeerd met een eigen netwerknamespace (unshare -rn, alleen loopback).
 // Vereist Linux met unshare en python3. Gebruik: npm run test:offline-update [-- <oude-commit>]
 'use strict';
@@ -60,7 +60,7 @@ if (process.argv[2] === '--binnen') {
 }
 
 // ---- Buiten: voorbereiden en de drie situaties draaien ----
-const OLD_REV = process.argv[2] || 'a0d99e8';
+const OLD_REV = process.argv[2] || 'f247164';
 const { client, upload, makeVideo, rid } = require(path.join(REPO, 'test/helpers'));
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'offline-update-'));
 const DL = path.join(T, 'Downloads');
@@ -86,11 +86,11 @@ const inside = (dir, cache, home, check) => {
   const emptyCache = path.join(T, 'npm-cache-leeg');
   const home = path.join(T, 'Studio Review');
 
-  // 0. 0.4.0: eerste start met internet (npm install vult de cache), daarna gegevens aanmaken
-  const OLD = path.join(DL, 'Review-tool-0.4.0');
+  // 0. Vorige versie: eerste start met internet (npm install vult de cache), daarna gegevens aanmaken
+  const OLD = path.join(DL, 'Review-tool-vorige');
   unzip(OLD_REV, OLD);
   const inst = spawnSync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], { cwd: OLD, env: { ...process.env, npm_config_cache: cache }, encoding: 'utf8' });
-  ok(`0.4.0 (${OLD_REV}): eerste installatie met internet`, inst.status === 0, inst.stderr.slice(-200));
+  ok(`vorige versie (${OLD_REV}): eerste installatie met internet`, inst.status === 0, inst.stderr.slice(-200));
   const env = { ...process.env, PORT: port, DATA_DIR: '', STUDIO_REVIEW_HOME: home, SETUP_TOKEN: 'offline-test-code-123' };
   const srv = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server/index.js'], { cwd: OLD, env, stdio: 'ignore' });
   const base = `http://127.0.0.1:${port}`;
@@ -106,7 +106,7 @@ const inside = (dir, cache, home, check) => {
   const approver = new URL((await team.post(`/api/videos/${created.videoId}/links`, { role: 'approver' })).data.url).pathname.split('/').pop();
   const reviewer = new URL((await team.get(`/api/videos/${created.videoId}`)).data.links.find((l) => l.role === 'reviewer').url).pathname.split('/').pop();
   const appr = await client(base).post(`/api/review/${approver}/versions/${created.versionId}/approve`, { confirm: true, versionNumber: 1, requestId: rid() }, { 'x-reviewer-key': 'offline-reviewer-key-01' });
-  ok('0.4.0: gegevens met reviewlink, akkoordlink en goedkeuring', appr.status === 200);
+  ok('vorige versie: gegevens met reviewlink, akkoordlink en goedkeuring', appr.status === 200);
   srv.kill('SIGTERM');
   await new Promise((r) => srv.once('exit', r));
   const check = { videoId: created.videoId, reviewer, approver };
@@ -136,9 +136,9 @@ const inside = (dir, cache, home, check) => {
   unzip('HEAD', C);
   fs.cpSync(path.join(OLD, 'node_modules'), path.join(C, 'node_modules'), { recursive: true });
   const c = inside(C, emptyCache, home, check);
-  ok(`3. node_modules uit de 0.4.0-map gekopieerd: start zonder internet en zonder cache (${c.seconds} s)`, c.up && c.login === 200 && c.reviewLink === 200, c.log.slice(-400));
+  ok(`3. node_modules uit de vorige map gekopieerd: start zonder internet en zonder cache (${c.seconds} s)`, c.up && c.login === 200 && c.reviewLink === 200, c.log.slice(-400));
 
-  ok('de gegevens van 0.4.0 zijn tijdens de test gebruikt (geen lege installatie)', dbBefore > 0);
+  ok('de gegevens van de vorige versie zijn tijdens de test gebruikt (geen lege installatie)', dbBefore > 0);
   fs.rmSync(T, { recursive: true, force: true });
   console.log(fails ? `\n${fails} FOUT(EN)` : '\nAlle controles geslaagd');
   process.exit(fails ? 1 : 0);

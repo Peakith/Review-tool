@@ -66,8 +66,15 @@ async function waitUp(base, child) { for (let i = 0; i < 100 && child.exitCode =
   ok('bestaande reviewlink werkt nog', info.status === 200, `status ${info.status}`);
   const comments = (await g2.get(`/api/review/${token}/versions/${ver.id}/comments`)).data;
   ok('klantreactie bewaard', Array.isArray(comments) && comments.some((x) => x.body === 'Logo te klein'));
+  // Bouwronde 5: zonder downloadrecht speelt de klant via de afspeelversies (na de update alsnog gemaakt),
+  // nooit via het origineel.
+  let master = 0;
+  for (let i = 0; i < 300 && master !== 200; i++) {
+    master = (await fetch(`${base}/api/review/${token}/versions/${ver.id}/hls/master.m3u8`)).status;
+    if (master !== 200) await new Promise((r) => setTimeout(r, 200));
+  }
   const cm = await fetch(`${base}/api/review/${token}/versions/${ver.id}/media`);
-  ok('klant kan video afspelen via de link', cm.status === 200);
+  ok('klant kan video afspelen via de link (afspeelversie; origineel afgeschermd)', master === 200 && cm.status === 403, `${master}/${cm.status}`);
   ok('oude map onaangeroerd (database nog aanwezig)', fs.existsSync(path.join(OLD, 'data', 'review.db')));
   ok('gegevens staan nu buiten de programmamap', fs.existsSync(path.join(HOME, 'gegevens', 'review.db')) && !fs.existsSync(path.join(NEW, 'data')));
   execFileSync(process.execPath, ['--disable-warning=ExperimentalWarning', 'scripts/stop.js'], { cwd: NEW, env });

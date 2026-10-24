@@ -6,7 +6,7 @@ import { h, mount, icon, api, emptyState, timecode, formatDateZone, formatBytes 
 import { tr } from '/shared/i18n.js';
 import { applyBrand, brandMark } from '/shared/brand.js';
 import { metaLine } from '/shared/client.js';
-import { initLang, langToggle, linkError, fatal as showFatal, expiryNote } from '/review/gate.js';
+import { initLang, viewerControls, linkError, fatal as showFatal, expiryNote } from '/review/gate.js';
 
 const root = document.getElementById('root');
 const parts = location.pathname.split('/').filter(Boolean);
@@ -43,7 +43,7 @@ function render(data) {
     h('div', { class: 'r-header-inner' },
       brandMark(data.brand),
       data.project.clientName ? h('span', { class: 'p-client small muted truncate' }, tr('Voor {name}', { name: data.project.clientName })) : null,
-      mode === 'preview' ? null : langToggle(() => render(current))));
+      mode === 'preview' ? null : viewerControls(() => render(current))));
 
   const hero = h('section', { class: 'p-hero' },
     data.portal ? h('a', { class: 'r-back', href: data.portal.url }, icon('arrowLeft'), mode === 'preview' ? 'Terug naar het portaalvoorbeeld' : mode === 'client' ? tr('Naar het overzicht') : tr('Terug naar het projectoverzicht')) : null,

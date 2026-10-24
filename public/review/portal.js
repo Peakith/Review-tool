@@ -9,7 +9,7 @@ import { h, mount, icon, api, emptyState, plural, timecode, formatDateZone, form
 import { tr } from '/shared/i18n.js';
 import { applyBrand, brandMark } from '/shared/brand.js';
 import { clientPill, clientStatusOf, metaLine, fileLabel, fileIcon } from '/shared/client.js';
-import { initLang, langToggle, linkError, fatal as showFatal, expiryNote } from '/review/gate.js';
+import { initLang, viewerControls, linkError, fatal as showFatal, expiryNote } from '/review/gate.js';
 
 const root = document.getElementById('root');
 const parts = location.pathname.split('/').filter(Boolean);
@@ -49,7 +49,7 @@ function header(brand, clientName) {
     h('div', { class: 'r-header-inner' },
       brandMark(brand),
       clientName ? h('span', { class: 'p-client small muted truncate' }, tr('Voor {name}', { name: clientName })) : null,
-      langToggle(draw)));
+      viewerControls(draw)));
 }
 
 /** Video's van één project, gegroepeerd naar wat er van de klant wordt verwacht. */

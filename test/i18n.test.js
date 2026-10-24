@@ -26,7 +26,7 @@ const files = [
 const DYNAMIC = ['Hoofdvideo', 'Teaser', 'Cutdown', 'Social', 'Overig', 'Klaar voor jouw review', 'Wacht op jou', 'Feedback verstuurd', 'Team past aan', 'Goedgekeurd',
   'Tijdelijk gesloten', 'Gesloten', 'klaar voor review', 'feedback verstuurd', 'goedgekeurd', 'gesloten', 'Rood', 'Geel', 'Blauw', 'Wit', 'Pen', 'Pijl', 'Rechthoek',
   'Wacht op jouw review', 'Bekijk deze video’s, plaats je opmerkingen en verstuur je feedback.', 'Het team verwerkt je feedback. Je ziet hier de nieuwe versie zodra die klaarstaat.',
-  'Afgerond of tijdelijk gesloten', 'Nog te bekijken, maar reageren is hier nu niet mogelijk.'];
+  'Afgerond of tijdelijk gesloten', 'Nog te bekijken, maar reageren is hier nu niet mogelijk.', 'Licht', 'Donker', 'Systeem'];
 
 test('elke tekst op de klantpagina’s heeft een Engelse vertaling', () => {
   const missing = [];

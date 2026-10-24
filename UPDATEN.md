@@ -5,6 +5,30 @@ Vanaf versie 0.2.0 staan programma en gegevens los van elkaar:
 - **Programma**: de uitgepakte map. Bij elke update komt er een nieuwe.
 - **Gegevens**: `~/Studio Review/` met daarin `gegevens/`, `backups/` en `instellingen.env`. Deze map blijft gewoon staan.
 
+## Van 0.5.1 naar 0.6.0 (bouwronde 5: rustiger indeling, klanten, inbox, kwaliteit, ZIP)
+
+Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` blijven staan en je klantlinks blijven werken.
+
+1. **Maak eerst een back-up:** **Opslag & back-ups › Nu back-up maken** (in 0.6.0 staat dat onder **Instellingen**). Wacht tot er “compleet en gecontroleerd” staat.
+2. **Stop de app:** dubbelklik `Stop Studio Review.command`.
+3. **Pak de nieuwe ZIP uit** in een nieuwe map. Laat de oude map nog staan.
+4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.** Er zijn **geen nieuwe npm-onderdelen**: de startknop haalt express en pdfkit uit de npm-cache op je Mac, zonder internet. *Getest zonder netwerk vanaf 0.5.1: start in ongeveer 1 seconde.* Is de cache leeg en is er geen internet, kopieer dan `node_modules` uit de map van 0.5.1 (zelfde onderdelen). De nieuwe videospeler (hls.js) zit al in de ZIP.
+5. **Ververs een openstaand tabblad.** Onderin de zijbalk staat **Studio Review 0.6.0**.
+
+**Wat je direct merkt**
+- Nieuwe indeling: **Dashboard, Projecten, Klanten, Inbox** en **Mijn taken**. Team, Merken, Opslag, Archief en Prullenbak staan onder **Instellingen**. Oude adressen (zoals `/opslag`) werken nog. Waar elke functie nu staat: [docs/HERINRICHTING.md](docs/HERINRICHTING.md).
+- **Afspeelversies worden op de achtergrond gemaakt**, ook voor al je bestaande video’s. Dat gebeurt één video tegelijk (gepubliceerde versies eerst) en kost tijd en ruimte (zie hieronder). De Mac blijft bruikbaar, maar de ventilator kan hoorbaar zijn.
+- **Klantlinks zonder downloadrecht krijgen het originele bestand niet meer**, alleen de afspeelversies. Tot de eerste afspeelversie van een video klaar is, ziet de klant daar “wordt voorbereid”. Wil je dat een klant het origineel kan downloaden, maak dan een reviewlink met “Klant mag het bestand downloaden” (standaard uit). Opleverlinks blijven gewoon downloaden.
+- Je eigen bezoeken aan klantlinks (ingelogd) staan nu als **teambezoek** in de activiteit, standaard verborgen.
+
+**Ruimte en tijd voor afspeelversies (vuistregels, geen garantie)**
+- Per video komen er bestanden bij: 720p ± 1,5–3,5 Mbit/s, 1080p ± 3–6, 1440p ± 6–10, 4K ± 10–20 Mbit/s (afhankelijk van het beeld). Een 4K-video van 1 minuut kost zo ± 150–300 MB extra; een 1080p-video van 1 minuut ± 35–70 MB.
+- Rekentijd hangt af van je Mac: reken op een paar keer de speelduur voor 4K, minder voor lagere bronnen. Instellen in `instellingen.env`: `VARIANT_CONCURRENCY` (hoeveel tegelijk, standaard 1) en `VARIANT_PRESET` (`veryfast` standaard; `ultrafast` = sneller maar groter).
+- Vóór elk niveau controleert de app de vrije ruimte (met `MIN_FREE_GB` als ondergrens). Is er te weinig, dan staat dat bij de versie onder **Info**, met **Opnieuw proberen**.
+- Afspeelversies tellen mee in **Opslag & back-ups** (apart vermeld) en in back-ups, en verdwijnen bij definitief verwijderen.
+
+**Terug naar 0.5.1?** Zet de back-up van stap 1 terug met `npm run herstel` in de **nieuwe** map (veilige standaard: klantlinks uit de back-up worden ongeldig) en start daarna de oude map. Start de oude versie **niet** zomaar op de gegevens van 0.6.0: dat is niet getest, en 0.5.1 kent geen wachtwoorden, vervaldatums of “Klanttoegang uit” op links, dus die bescherming zou dan niet meer werken.
+
 ## Van 0.4.0 naar 0.5.1 (bouwronde 4: definitieve opleveringen en klantactiviteit)
 
 Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` blijven staan, en je klantlinks blijven werken.

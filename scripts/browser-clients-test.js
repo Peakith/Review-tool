@@ -133,6 +133,14 @@ const mp4 = (name, size = '1280x720', sec = 4) => {
   await c.waitForSelector('.k-project');
   check('EN-keuze blijft bewaard in deze browser', (await c.getAttribute('html', 'lang')) === 'en');
   await shot(c, '63-klantportaal-en');
+  // Thema voor bezoekers zonder account (alleen in deze browser onthouden)
+  await c.selectOption('.theme-select', 'light');
+  await c.waitForSelector('html[data-theme=light]');
+  await c.reload();
+  await c.waitForSelector('.k-project');
+  check('bezoeker: themakeuze (Light) direct toegepast en onthouden', (await c.getAttribute('html', 'data-theme')) === 'light' && (await c.inputValue('.theme-select')) === 'light');
+  await shot(c, '63b-klantportaal-licht');
+  await c.selectOption('.theme-select', 'dark');
   await c.click('.k-completed summary');
   check('afgerond project openklappen toont de video', await c.isVisible('.p-card:has-text("Kerstfilm")'));
 

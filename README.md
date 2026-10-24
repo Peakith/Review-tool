@@ -10,8 +10,8 @@ Eigen reviewplatform voor de filmagency: video's delen met klanten, feedback op 
 | Database | SQLite via het ingebouwde `node:sqlite` | Echte, transactionele opslag zonder aparte databaseserver of native build. Eén bestand, makkelijk te back-uppen. Overstap naar PostgreSQL kan later. |
 | Bestanden | Lokale schijf (`~/Studio Review/gegevens/media`, of een externe schijf) achter een eigen opslaglaag | Werkt direct; online opslag kan later als tweede laag. Bestanden krijgen een willekeurige, permanente naam; die staat los van de titel. |
 | Uploads | Eigen hervatbare upload in blokken van 8 MB | Grote bestanden hoeven niet in één keer te slagen. Bij een fout volgen automatische herhaalpogingen, en de voortgang is zichtbaar. |
-| Video-controle | `ffprobe`/`ffmpeg` | Controleert of een upload echt een video is en leest duur en resolutie uit. Maakt een voorvertoning. |
-| Frontend | Vanilla JS-modules, geen build-stap | Licht en snel op mobiel. Alle tekst gaat via `textContent`, dus geen XSS via titels of reacties. |
+| Video-controle | `ffprobe`/`ffmpeg` | Controleert of een upload echt een video is en leest duur en resolutie uit. Maakt een voorvertoning en (op de achtergrond) afspeelversies in meerdere kwaliteiten. |
+| Frontend | Vanilla JS-modules, geen build-stap; hls.js 1.7.3 meegeleverd (Apache-2.0, `public/shared/vendor`) | Licht en snel op mobiel. Alle tekst gaat via `textContent`, dus geen XSS via titels of reacties. hls.js zit in de ZIP: geen extra installatie, ook offline. |
 | Beveiliging | Accounts (scrypt-wachtwoorden, httpOnly-sessiecookie), CSRF-header, strikte CSP, `Referrer-Policy: no-referrer` | Elke klant-aanvraag (ook voor videobestanden) controleert op de server of de link geldig en niet ingetrokken is. |
 
 ### Datamodel (kort)
@@ -49,7 +49,7 @@ brew install node ffmpeg
 
 **Bijwerken naar een nieuwe versie:** zie **[UPDATEN.md](UPDATEN.md)**.
 
-**ffprobe wordt niet gevonden?** De app zoekt ffprobe en ffmpeg zelf, ook in `/opt/homebrew/bin` (Apple silicon) en `/usr/local/bin` (Intel). Staan ze ergens anders, zet dan `FFPROBE_PATH` en `FFMPEG_PATH` in het instellingenbestand (zie hieronder). Onder **Team & rechten › Systeem** zie je welke paden gebruikt worden.
+**ffprobe wordt niet gevonden?** De app zoekt ffprobe en ffmpeg zelf, ook in `/opt/homebrew/bin` (Apple silicon) en `/usr/local/bin` (Intel). Staan ze ergens anders, zet dan `FFPROBE_PATH` en `FFMPEG_PATH` in het instellingenbestand (zie hieronder). Onder **Instellingen › Team & rechten › Systeem** zie je welke paden gebruikt worden.
 
 ## Gegevens, back-ups en opslag
 
@@ -57,7 +57,7 @@ brew install node ffmpeg
 
 | Wat | Standaardlocatie | Bij een update |
 |---|---|---|
-| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.5.1` | vervangen |
+| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.6.0` | vervangen |
 | Gegevens (database met accounts, projecten, reacties, links en rechten; video's in `media/`) | `~/Studio Review/gegevens` | blijft staan |
 | Back-ups | `~/Studio Review/backups` | blijft staan |
 | Instellingen | `~/Studio Review/instellingen.env` | blijft staan |
@@ -322,6 +322,44 @@ brew install node ffmpeg
 - Zonder tekeningen gaat de iPhone direct naar de ingebouwde schermvullende weergave, zoals voorheen.
 - Dit is getest met een nagebootste iPhone-omgeving in Chrome, **niet op een echte iPhone**.
 
+## Bouwronde 5: rustiger werken, klanten, inbox, kwaliteit en ZIP
+
+### Indeling, dashboard, zoeken en thema
+- **Dashboard** per account: standaard vier blokken (Mijn taken, Nieuwe feedback, Wacht op klant, Recente projecten). Met **Dashboard aanpassen** voeg je blokken toe, verberg, verplaats (ook met het toetsenbord) en maak je ze breed; alleen dan zie je bewerkknoppen. Klantactiviteit en Opslag zijn er alleen voor wie de rechten heeft. Alles wordt op de server beperkt tot je eigen projecten.
+- **Zoeken** (veld in de zijbalk, sneltoets `/`): projecten en klanten, videotitels, oorspronkelijke bestandsnamen, briefings en reacties, gegroepeerd. Een reactie opent de juiste video, versie en het juiste tijdstip. Zoekopdrachten bewaar je per account. Elke zoekopdracht (ook suggesties en aantallen) houdt rekening met je rechten.
+- **Thema**: Licht, Donker of Systeem in het profielmenu (per account). Klanten zonder account hebben dezelfde kleine keuze rechtsboven op hun pagina’s (onthouden in hun browser).
+- **Eigen thumbnail** per versie: Info › *Huidig frame gebruiken*; *Automatisch* zet hem terug. Het videobestand blijft ongewijzigd en een interne versie lekt niet via klantweergaven.
+
+### Klanten en klantportaal
+- **Klanten** (hoofdmenu): projecten koppel je expliciet aan een klant (nooit op basis van een gelijke naam). Per project kies je **Actief**, **Afgerond** (in het portaal ingeklapt) of **Klanttoegang uit** (verborgen en geblokkeerd voor álle klantlinks en directe bestanden). Weer aanzetten heropent geen links die je los had ingetrokken.
+- **Klantportaal** `/k/…`: klant → projecten → gepubliceerde video’s en opleveringen. Een **algemene** link kan nooit goedkeuren. Een **persoonlijke** link (met het e-mailadres van een akkoordgever) kan goedkeuren bij precies de video’s waar die persoon de aangewezen akkoordgever is: bekijken → *Deze versie goedkeuren* → één korte bevestiging met titel en exacte versie. Bestaande project-, review-, akkoord- en opleverlinks werken zoals voorheen, met hun eigen bereik.
+- Wordt een goedkeuring later door het team ingetrokken (statuscorrectie), dan ziet de klant wie wanneer goedkeurde, dat het is ingetrokken, en wat er nu nodig is.
+- **Taal**: klantpagina’s in het Nederlands of Engels (standaard per klant, schakelaar rechtsboven voor de kijker). Titels, reacties en briefing worden niet vertaald. Datums met tijdzone.
+- **Vorige/volgende** video binnen het portaal waaruit je kwam, met een waarschuwing als er nog niet geplaatste of niet verstuurde reacties zijn.
+- **Wachtwoord en vervaldatum** op review-, akkoord-, project-, oplever- en klantportaallinks (knop *Beveiliging*). Wachtwoorden worden gehasht opgeslagen, staan nooit in een URL of log, en gokpogingen worden beperkt (8 per kwartier per link). Een nieuw wachtwoord of intrekken maakt eerdere ontgrendelingen ongeldig. Geldt ook voor video’s, afspeelbestanden, exports en ZIP’s. Een verlopen link verandert niets aan goedkeuringen. Herstel van een back-up maakt ook klantportaallinks standaard ongeldig.
+
+### Inbox en meldingen
+- **Inbox** per account: taak toegewezen, @vermelding (`@Volledige Naam` of `@naam` vóór de @ van het e-mailadres), antwoord in een gesprek dat je volgt, klantfeedback, goedkeuring (en intrekking), vrijgave en terugnemen van opleveringen in projecten die je volgt. Gelezen/ongelezen per persoon; geen dubbele meldingen bij herhaalpogingen; een melding opent de juiste video, versie, reactie of oplevering.
+- Een project volg je met **Volgen** in de projectkop (automatisch als je het maakt, erin uploadt of publiceert). Een gesprek volg je zodra je erin schrijft of de taak hebt.
+- Rechten worden gecontroleerd bij maken, tonen en openen: wie de toegang tot een project verliest, ziet de meldingen daarvan niet meer.
+- **Browsermeldingen** alleen na *Meldingen inschakelen*, en alleen zolang de app in een tabblad openstaat. Er wordt niets gemaild. Draait de app alleen op deze Mac, dan kunnen teamleden op andere computers hun inbox nog niet gebruiken.
+- **Klantactiviteit** is één tijdlijn: signalen (geopend, afspelen gestart, download aangevraagd) én formele acties (feedback verstuurd, goedkeuring), met datum, tijd, tijdzone, video, versie en link. Eigen bezoeken als ingelogd teamlid staan apart als *teambezoek* (standaard verborgen). Het overzicht ververst elke 30 seconden.
+
+### Kwaliteit, afspeelversies en downloadrechten
+- Na elke upload maakt de app **afspeelversies**: 4K, 1440p, 1080p en 720p, maar alleen wat de bron heeft (gemeten aan de korte zijde, dus ook staande video’s; rotatie en niet-vierkante pixels worden rechtgezet). Een bron kleiner dan 720p krijgt één versie op eigen formaat. Eerst 720p, zodat afspelen snel kan.
+- Formaat: H.264 (High) + AAC stereo 48 kHz, fragmented MP4 met HLS-afspeellijsten, één bestand per kwaliteit, sleutelbeeld elke 2 seconden.
+- **Speler**: tandwiel met **Auto** (hoogste kwaliteit die de verbinding aankan, zonder te blijven wisselen) of een vaste kwaliteit; het label toont wat er echt speelt. Wisselen behoudt tijdcode, geluid, fragmenten en tekeningen. In Chrome speelt dit via hls.js (getest); Edge en Firefox gebruiken dezelfde route (niet apart getest); Safari gebruikt zijn eigen HLS-ondersteuning (**niet getest**). Zonder HLS-ondersteuning speelt één afspeelversie als gewoon bestand.
+- **Beperkingen**: HDR-bronnen (PQ/HLG) worden zonder kleuromzetting naar 8-bit SDR gecodeerd en kunnen fletser ogen; het origineel blijft de referentie (de werkplek meldt het). 10-bit en 4:2:2 worden 8-bit 4:2:0. Meer dan twee audiokanalen worden stereo.
+- **Verwerking** op de achtergrond, één tegelijk (instelbaar), gepubliceerde versies eerst, met voortgang in *Info › Afspeelversies*, automatisch één nieuwe poging en *Opnieuw proberen*. Vóór elk niveau wordt de vrije ruimte gecontroleerd. Afspeelversies tellen mee in het opslagoverzicht (apart vermeld), zitten in back-ups en verdwijnen bij definitief verwijderen.
+- **Extra opslag (vuistregel)**: per minuut video ± 150–300 MB voor een 4K-bron (alle vier de niveaus samen), ± 35–70 MB voor een 1080p-bron.
+- **Downloadrechten**: nieuwe reviewlinks hebben standaard géén download. Zonder downloadrecht levert de server het origineel via geen enkel adres (403); afspelen gaat alleen via de afspeelversies, met dezelfde controles op link, wachtwoord, vervaldatum, intrekken en klanttoegang. Het contextmenu en de downloadknop van de video zijn uit. **Dit is geen kopieerbeveiliging**: wat iemand kan afspelen, kan hij opnemen. Bestaande links houden hun instelling; opleverlinks downloaden gewoon de vrijgegeven bestanden.
+
+### Opleverpakket (ZIP)
+- *Alles downloaden (ZIP)* op de opleverpagina (en *Alles als ZIP* voor het team) bij twee of meer beschikbare bestanden.
+- Alleen exacte versies met een geldige vrijgave en goedkeuring, onder hun oorspronkelijke naam. Dubbele namen komen elk in een map met de videotitel. Plus `Overzicht.txt` (in de taal van de klant) met video, versie, goedkeuring en vrijgave. De ZIP heet naar het project.
+- De ZIP wordt **rechtstreeks gestreamd, zonder compressie** (video’s worden daar niet kleiner van) en zonder tijdelijk bestand: de grootte is vooraf bekend, zodat de browser de voortgang toont; er is geen extra schijfruimte nodig en er blijft niets achter dat later via een adres op te halen is. Bestanden boven 4 GB: ZIP64.
+- Toegang wordt bij het starten én vóór elk bestand opnieuw gecontroleerd. Wordt de link intussen ingetrokken, verloopt hij of wordt een oplevering teruggenomen, dan breekt de download af (geen pakket dat compleet lijkt).
+
 ## Rechten per project
 
 Er zijn twee soorten accounts:
@@ -343,7 +381,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 - Klantlinks en de akkoordgever werken los van accounts, net als voorheen.
 
 ## Versie en cache
-- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.5.1 (build 1a2b3c4d)`. Het werkt ook zonder Git:
+- Het versienummer staat onderin de zijbalk, in het profielmenu en onder **Instellingen › Opslag & back-ups**, bijvoorbeeld `0.6.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
   - de versie komt uit `package.json`;
   - de build is een vingerafdruk van de interfacebestanden.
 - Na een update is gewoon verversen genoeg. De pagina zelf wordt altijd gecontroleerd, en alle scripts en stijlen (ook geïmporteerde modules) komen van een adres per build.
@@ -351,7 +389,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 ## Functionaliteit
 
 **Teamomgeving (inloggen verplicht)**
-- **Vaste zijbalk** met Projecten, Team, recente projecten (met een stip als er feedback ligt) en de systeemstatus.
+- **Vaste zijbalk** met zoeken, **Dashboard, Projecten, Klanten, Inbox**, **Mijn taken**, onderaan **Instellingen** (team, merken, opslag, archief, prullenbak), de systeemstatus en het profielmenu (thema, account, uitloggen). Waar elke functie staat: [docs/HERINRICHTING.md](docs/HERINRICHTING.md).
 - **Projectoverzicht:**
   - zoeken op project of klant, filters (*Actie nodig*, *Wacht op klant*, *Goedgekeurd*) en sorteren;
   - per project: thumbnails, het aantal video's, de laatste activiteit, statuslabels en één zin met de volgende actie (bijv. "Feedback binnen · 1 video aanpassen");
@@ -362,13 +400,13 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
   - per video: thumbnail, duur, een inline bewerkbare titel, en "Intern vN" naast "Klant ziet vM", met open reacties.
 - **"Nieuwe video" en "Nieuwe versie" zijn gescheiden.** Een nieuwe video maak je op de projectpagina. Een nieuwe versie upload je vanaf de video, via een venster dat uitlegt dat de versie intern blijft tot je publiceert.
 - **Reviewwerkplek:**
-  - de speler krijgt de meeste ruimte, met daarnaast een paneel met de tabs *Reacties*, *Versies* en *Geschiedenis*;
+  - de speler krijgt de meeste ruimte, met daarnaast een paneel met de tabs *Reacties*, *Versies* en *Info* (eigenschappen, thumbnail, afspeelversies, rondes en geschiedenis);
   - een vaste statusbalk zegt waar de versie staat en wat de volgende stap is (*Klaar voor review* → *Publiceren naar klant*);
-  - een versiekeuze, *Nieuwe versie* en *Delen* staan altijd op dezelfde plek.
+  - een versiekeuze, de volgende stap en *Delen* staan altijd op dezelfde plek; minder gebruikte acties staan onder **⋯**.
 - **Reacties** filter je op open, afgehandeld of alles. Je kunt ze beantwoorden en afhandelen. Het invoerveld toont live op welk moment de reactie komt, en een klik maakt er een algemene reactie van.
 - **Deelvenster** met een duidelijk verschil tussen de **reviewlink** (bekijken, reageren, feedback; kan niet goedkeuren) en de **akkoordlink** (persoonlijk; alleen hiermee kan worden goedgekeurd). Links kopieer je en trek je in vanuit dit venster.
 - **Status van Versie N corrigeren** kan alleen met een verplichte reden, die in de geschiedenis van precies die versie wordt bewaard. Andere versies en hun goedkeuringen veranderen niet; het venster toont wat de correctie betekent voor de goedkeuring en een eventuele oplevering.
-- **Downloaden** geeft `Titel - vN.<echte extensie>`, bijvoorbeeld `Campagnefilm — Hoofdvideo - v2.mp4`.
+- **Downloaden** geeft de **oorspronkelijke uploadnaam**, ook als je de titel wijzigt (team, reviewlinks met download, opleverlinks en ZIP). Ontbreekt een bruikbare naam (alleen bij oude of vreemde uploads), dan valt hij terug op `Titel - vN.<extensie>`; er wordt geen naam verzonnen.
 - **Team & rechten:** teamleden en freelancers toevoegen, toegang per project, en zien of ffprobe en ffmpeg gevonden zijn (met paden). Zie *Rechten per project*.
 
 **Klantpagina (via link, zonder account)**
@@ -399,7 +437,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 Feedback en goedkeuring zijn alleen mogelijk op de nieuwste gedeelde versie met status *In review* of *Aanpassingen nodig*.
 
 ### Ondersteunde videoformaten (eerste versie)
-`.mp4`, `.m4v`, `.mov` en `.webm`, standaard tot 20 GB (instelbaar). Er wordt **niet getranscodeerd**: wat de browser van de klant niet kan afspelen (bijv. ProRes in `.mov`), krijgt een duidelijke melding. **Aanbevolen: H.264/AAC in MP4.** Die speelt in alle gangbare browsers, ook op iPhone en Android.
+`.mp4`, `.m4v`, `.mov` en `.webm`, standaard tot 20 GB (instelbaar). Het **origineel blijft altijd ongewijzigd**. Voor het afspelen maakt de app op de achtergrond **afspeelversies** (H.264/AAC, zie *Bouwronde 5*); daardoor speelt ook een ProRes- of HEVC-bron af in de browser zodra die klaar zijn. **Aanbevolen blijft: H.264/AAC in MP4.**
 
 ## Installatie (lokaal)
 
@@ -420,7 +458,7 @@ Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan
 ### Tests
 Alle tests gebruiken eigen, tijdelijke mappen en raken je echte gegevens in `~/Studio Review` niet aan.
 ```bash
-npm test                                                   # 117 servertests (vereist ffmpeg)
+npm test                                                   # 162 servertests (vereist ffmpeg en unzip)
 CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (52 controles)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rechten, opslag, back-ups, prullenbak, archief (23)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal, merk, opleveringen, briefing, desktop + mobiel (51)
@@ -428,8 +466,12 @@ CHROME_PATH=/pad/naar/chrome npm run test:browser:feedback # taken, rondes, teke
 CHROME_PATH=/pad/naar/chrome npm run test:browser:oplevering # opleveringen, klantactiviteit, statuscorrectie per versie, iPhone-uitleg (nagebootst), desktop + mobiel (52)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:update   # update met de vorige interface in de browsercache (7)
 npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (13)
-npm run test:upgrade                                       # bijwerken vanaf 0.4.0 met echte gegevens + oude back-up terugzetten (28)
-npm run test:offline-update                                # ZIP-update vanaf 0.4.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (11)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:ui      # dashboard, zoeken, thema, bestandsnamen, thumbnail, desktop + mobiel (38)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:klanten # klanten, klantportaal NL/EN, goedkeuren, vorige/volgende, wachtwoord, bezoekersthema, desktop + mobiel (45)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:inbox   # inbox, browsermeldingen (nagebootst), activiteitentijdlijn (24)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:kwaliteit # kwaliteitskeuze met hls.js, vertraagd netwerk, 4K/staand, geen origineel (23)
+npm run test:upgrade                                       # bijwerken vanaf 0.5.1 met echte gegevens + oude back-up terugzetten (34)
+npm run test:offline-update                                # ZIP-update vanaf 0.5.1 met de echte startknop, zonder netwerk (Linux: unshare + python3) (10)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;
@@ -477,6 +519,8 @@ Zet instellingen in **`~/Studio Review/instellingen.env`**. Die blijft bij updat
 | `ALLOW_UNVERIFIED_UPLOADS` | `false` | Alleen voor ontwikkeling: uploads accepteren zonder ffprobe. **Nooit in productie.** |
 | `UPLOAD_EXPIRY_HOURS` | `24` | Afgebroken uploads zonder activiteit worden na deze tijd verwijderd |
 | `UPLOAD_CLEANUP_INTERVAL_MINUTES` | `60` | Hoe vaak de opruiming draait (ook direct bij het starten) |
+| `VARIANT_CONCURRENCY` | `1` | Hoeveel afspeelversies tegelijk worden gemaakt (1–4) |
+| `VARIANT_PRESET` | `veryfast` | Snelheid van het maken van afspeelversies (`ultrafast` … `medium`): sneller = grotere bestanden |
 
 ### Lettertype in PDF-exports
 PDF's gebruiken het meegeleverde lettertype DejaVu Sans (`server/fonts/`, vrije licentie in `LICENSE-DejaVu.txt`), zodat €, ë, — en andere tekens overal goed staan. De PDF-bibliotheek `pdfkit` (MIT) wordt bij de eerste start automatisch geïnstalleerd.
@@ -494,9 +538,10 @@ Zie **[DEPLOY.md](DEPLOY.md)** voor een afgeschermde testomgeving met Docker en 
 ### Nog nodig voor livegebruik
 1. **Hosting**: een server of VPS met Docker, een domein (DNS A-record) en een persistente schijf (zie DEPLOY.md). Pas dan zijn project-, review- en akkoordlinks bereikbaar voor klanten; lokaal beginnen ze met `localhost` en werken ze alleen op je eigen Mac. Zet dan ook `PUBLIC_URL`.
 2. **Back-ups**: lokaal ingebouwd (zie *Gegevens, back-ups en opslag*). Zet de back-upmap bij voorkeur op een andere schijf, of kopieer hem regelmatig naar een externe schijf. Voor objectopslag (S3, R2) is nog een opslagadapter nodig.
-3. **E-mail (niet gebouwd)**: links worden nu gekopieerd en zelf verstuurd. Voor uitnodigingen en meldingen is een SMTP-dienst nodig.
-4. **Verificatie van de akkoordgever**: nu via het bezit van een persoonlijke, intrekbare link. Een sterkere controle (eenmalige code per e-mail) vraagt om punt 3.
-5. **Handmatige browsertest** in Safari (macOS en iOS) en op echte Android-toestellen: die zijn niet automatisch getest.
-6. **De start- en stopknop op een echte Mac**: de knoppen zijn getest op Linux (zelfde bash- en Node-code). Wat alleen macOS doet, is niet getest: dubbelklikken in Finder, Gatekeeper, het openen van de browser met `open` en de Homebrew-paden.
+3. **E-mail (niet gebouwd)**: links worden nu gekopieerd en zelf verstuurd. De inbox en browsermeldingen werken alleen in de app zelf (met een open tabblad). Voor uitnodigingen en meldingen per e-mail is een SMTP-dienst nodig.
+4. **Teamleden buiten deze Mac**: inboxen, taken en meldingen zijn per account gebouwd, maar zolang de app op `localhost` draait, kunnen collega’s en freelancers op andere computers er niet bij.
+5. **Verificatie van de akkoordgever**: nu via het bezit van een persoonlijke, intrekbare link. Een sterkere controle (eenmalige code per e-mail) vraagt om punt 3.
+6. **Handmatige browsertest** in Safari (macOS en iOS) en op echte Android-toestellen: die zijn niet automatisch getest.
+7. **De start- en stopknop op een echte Mac**: de knoppen zijn getest op Linux (zelfde bash- en Node-code). Wat alleen macOS doet, is niet getest: dubbelklikken in Finder, Gatekeeper, het openen van de browser met `open` en de Homebrew-paden.
 
 Bewust buiten deze versie gelaten: facturatie, videobewerking/transcoding, integraties en annotaties op het beeld.

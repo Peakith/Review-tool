@@ -2,6 +2,7 @@
 // (ingetrokken, verlopen, klanttoegang uit) en het wachtwoordscherm van een beveiligde link.
 import { h, mount, icon, button, api, emptyState, formatDateZone } from '/shared/util.js';
 import { tr, setLang, getLang } from '/shared/i18n.js';
+import { THEMES, applyTheme, themePref } from '/shared/theme.js';
 
 const store = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -31,6 +32,23 @@ export function langToggle(onChange) {
   }, label)));
   draw();
   return wrap;
+}
+
+/**
+ * Kleine themakeuze voor bezoekers zonder account (Licht, Donker, Systeem), alleen in deze browser
+ * onthouden. Zelfde keuze als het team in het profielmenu heeft.
+ */
+export function themeToggle() {
+  const select = h('select', { class: 'theme-select', 'aria-label': tr('Thema'), title: tr('Thema') },
+    THEMES.map(([key, label]) => h('option', { value: key }, tr(label))));
+  select.value = themePref();
+  select.addEventListener('change', () => applyTheme(select.value));
+  return select;
+}
+
+/** Taal- en themakeuze naast elkaar (rechtsboven op klantpagina's). */
+export function viewerControls(onLang) {
+  return h('div', { class: 'viewer-controls' }, langToggle(onLang), themeToggle());
 }
 
 /** "Deze link is geldig tot …" (met tijdzone), alleen als er een vervaldatum is. */
@@ -114,6 +132,6 @@ function passwordScreen(root, { kind, token, onUnlocked }) {
       h('div', { class: 'gate-head' }, icon('lock'), h('h1', {}, tr('Deze link is beveiligd'))),
       h('p', { class: 'muted' }, tr('Vul het wachtwoord in dat je van het productieteam hebt gekregen.')),
       form,
-      h('div', { class: 'gate-lang' }, langToggle(() => passwordScreen(root, { kind, token, onUnlocked }))))));
+      h('div', { class: 'gate-lang' }, viewerControls(() => passwordScreen(root, { kind, token, onUnlocked }))))));
   input.focus();
 }

@@ -3,7 +3,7 @@ import {
   formatDate, formatDateZone, plural, draftStore, formatDeadline, isPast,
 } from '/shared/util.js';
 import { tr } from '/shared/i18n.js';
-import { initLang, langToggle, linkError, fatal as showFatal, expiryNote } from '/review/gate.js';
+import { initLang, viewerControls, linkError, fatal as showFatal, expiryNote } from '/review/gate.js';
 import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
@@ -237,7 +237,7 @@ function render() {
         h('span', { class: 'version-chip' }, h('strong', {}, tr('Versie {n}', { n: version.number })), version.isLatest ? h('span', { class: 'version-latest' }, tr('nieuwste')) : h('span', { class: 'version-old' }, tr('van {n}', { n: latest.number }))),
         versionPicker,
         clientPill(version.status),
-        preview ? null : langToggle(() => { const t = state.player?.video.currentTime || 0; render(); if (t) state.player.seek(t); }))),
+        preview ? null : viewerControls(() => { const t = state.player?.video.currentTime || 0; render(); if (t) state.player.seek(t); }))),
     navBar(info.nav));
 
   // ---- Statusuitleg ----

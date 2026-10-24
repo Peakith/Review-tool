@@ -1,4 +1,4 @@
-// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard a0d99e8 = 0.4.0, bouwronde 3) met echte gegevens.
+// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard f247164 = 0.5.1) met echte gegevens.
 //  1. vorige versie (zonder .git) maakt account, project, video met twee versies, reviewlink, klantreactie,
 //     feedback, teamnotitie en -antwoord, akkoordlink en goedkeuring, en een back-up;
 //  2. de nieuwe code start op dezelfde gegevens: alles werkt nog, teamnotities zijn intern, antwoorden aan
@@ -13,7 +13,7 @@ const path = require('path');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
 const REPO = path.resolve(__dirname, '..');
-const OLD_REV = process.argv[2] || 'a0d99e8';
+const OLD_REV = process.argv[2] || 'f247164';
 const { client, upload, makeVideo, rid } = require(path.join(REPO, 'test/helpers'));
 const { restoreBackup, listBackups } = require(path.join(REPO, 'server/backup'));
 
@@ -114,6 +114,23 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   const file2 = await fetch(`${base}${page.items[0].downloadUrl}`);
   ok('download van de opgeleverde versie werkt', file2.status === 200 && (await file2.arrayBuffer()).byteLength === fs.statSync(file).size);
   ok('klantactiviteit vastgelegd (opleverpagina + download)', (await t2.get(`/api/projects/${projectId}/activity`)).data.items.length >= 2);
+  // Bouwronde 5 op bestaande gegevens
+  let pb = null;
+  for (let i = 0; i < 300; i++) {
+    pb = (await t2.get(`/api/versions/${v2.versionId}/playback`)).data;
+    if (pb.status === 'done' || pb.status === 'failed') break;
+    await new Promise((r2) => setTimeout(r2, 200));
+  }
+  ok('afspeelversies worden na de update ook voor bestaande versies gemaakt', pb.status === 'done' && pb.levels.length >= 1, JSON.stringify(pb.levels.map((l) => l.label)));
+  ok('bestaande reviewlink (zonder downloadrecht): afspelen via afspeelversie, origineel geweigerd', (await fetch(`${base}/api/review/${token}/versions/${v2.versionId}/hls/master.m3u8`)).status === 200
+    && (await fetch(`${base}/api/review/${token}/versions/${v2.versionId}/media`)).status === 403);
+  ok('inbox, klanten en zoeken werken op bestaande gegevens', (await t2.get('/api/inbox')).status === 200 && (await t2.get('/api/clients')).status === 200
+    && (await t2.get('/api/search?q=logo')).data.groups.comments.total >= 1);
+  const tl = (await t2.get(`/api/projects/${projectId}/activity`)).data.items;
+  ok('tijdlijn toont feedback en goedkeuring van vóór de update (uit de vastgelegde gegevens)', tl.some((i) => i.type === 'feedback_sent') && tl.some((i) => i.type === 'approval_given'));
+  const zip = await fetch(`${base}/api/delivery/${dlToken}/package.zip`);
+  ok('opleverpakket (ZIP) van een bestaande oplevering', zip.status === 200 && zip.headers.get('content-type') === 'application/zip');
+  ok('bestaande projectlink houdt zijn bereik (geen vorige/volgende buiten het project)', (await client(base).get(new URL(link.url).pathname.replace('/p/', '/api/portal/'))).status === 200);
   const backups = await listBackups(env.BACKUP_DIR);
   ok('back-up van de vorige versie staat in de lijst als volledig', backups.some((b) => b.name === oldBackup.name && b.status === 'volledig'));
   await stop(srv);
@@ -132,7 +149,12 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   const teamMedia = await fetch(`${base}/api/versions/${v2.versionId}/media`, { headers: { cookie: t3.cookie() } });
   ok('na herstel: video speelt af voor het team; melding over de klantlinks', teamMedia.status === 200 && (await t3.get('/api/session')).data.system.restoreNotice?.links === 'invalidate');
   const freshLink = new URL((await t3.post(`/api/videos/${created.videoId}/links`, { role: 'reviewer' })).data.url).pathname.split('/').pop();
-  ok('na herstel: een nieuwe reviewlink werkt', (await fetch(`${base}/api/review/${freshLink}/versions/${v2.versionId}/media`)).status === 200);
+  let ready = false;
+  for (let i = 0; i < 300 && !ready; i++) {
+    ready = (await fetch(`${base}/api/review/${freshLink}/versions/${v2.versionId}/hls/master.m3u8`)).status === 200;
+    if (!ready) await new Promise((r2) => setTimeout(r2, 200));
+  }
+  ok('na herstel: een nieuwe reviewlink werkt (afspeelversies opnieuw gemaakt voor de oudere back-up)', (await client(base).get(`/api/review/${freshLink}`)).status === 200 && ready);
   ok('na herstel: projectlink van ná de back-up bestaat niet meer (zoals verwacht)', (await client(base).get(new URL(link.url).pathname.replace('/p/', '/api/portal/'))).status === 404);
   ok('na herstel: oplevering van ná de back-up bestaat niet (geen verzonnen gegevens)', (await t3.get(`/api/projects/${projectId}/deliveries`)).data.history.length === 0);
   await stop(srv);

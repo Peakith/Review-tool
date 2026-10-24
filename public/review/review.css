@@ -251,3 +251,7 @@ html[lang="en"] .howto[open] summary::after { content: "Hide"; }
   .r-nav-text .truncate { max-width: 18ch; }
 }
 .d-package { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; }
+.viewer-controls { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.viewer-controls .lang-toggle { margin-left: 0; }
+.theme-select { width: auto; padding: 5px 26px 5px 8px; font-size: 12.5px; }
+.r-version .viewer-controls { margin-left: 4px; }

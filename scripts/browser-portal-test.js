@@ -234,10 +234,12 @@ function logo() {
   await cp.waitForSelector('.p-card');
   const portalText = await cp.evaluate(() => document.body.innerText);
   check('portaal: merk (logo) en introductie', await cp.isVisible('.p-header img.brand-logo') && portalText.includes('Hier vind je alle video’s'));
-  const titles = await cp.locator('.p-card-title').allTextContents();
-  check('portaal: alleen gepubliceerde video’s', titles.length === 3 && !portalText.includes('Interne testmontage'), titles.join(', '));
+  // Bouwronde 6: eerst "Jouw acties" (één regel per video), daaronder de ingeklapte route naar alle video's.
+  const titles = await cp.locator('.p-group-todo .p-card-title').allTextContents();
+  const allTitles = await cp.locator('.p-all .p-card-title').allTextContents();
+  check('portaal: alleen gepubliceerde video’s', titles.length === 3 && allTitles.length === 3 && !portalText.includes('Interne testmontage'), titles.join(', '));
   check('portaal: hoofdvideo toont gepubliceerde Versie 1, niet de interne Versie 2', /Versie 1/.test(await cp.textContent('.p-card:has-text("Hoofdvideo")')));
-  check('portaal: “Wacht op jouw review” met 3 video’s', /Wacht op jouw review\s*3/.test(await cp.textContent('.p-group-todo h2')));
+  check('portaal: “Jouw acties” met 3 video’s en samenvatting bovenaan', /Jouw acties\s*3/.test(await cp.textContent('.p-group-todo h2')) && portalText.includes('Er staan 3 video’s voor je klaar.'));
   check('portaal: geen goedkeurknop, wel uitleg', !(await cp.isVisible('text=Deze versie goedkeuren')) && portalText.includes('Goedkeuren doet de aangewezen akkoordgever'));
   check('portaal: alleen gedeelde briefing', portalText.includes('Moodboard') && portalText.includes('referentie-kleuren') && !portalText.includes('Doelgroep') && !portalText.includes('Script v2'));
   const accent = await cp.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
@@ -327,6 +329,8 @@ function logo() {
   await mp.goto(portalUrl);
   await mp.waitForSelector('.p-group-done');
   check('portaal: goedgekeurde teaser onder “Goedgekeurd” met naam', /Teaser 15 sec[\s\S]*Goedgekeurd door Joris de Klant/.test(await mp.textContent('.p-group-done')));
+  check('portaal: “Goedgekeurd” standaard ingeklapt, na acties en “Bij …”', await mp.$eval('.p-group-done', (el) => el.tagName === 'DETAILS' && !el.open)
+    && await mp.evaluate(() => { const g = [...document.querySelectorAll('.p-main > .p-group')].map((e) => e.className.match(/p-group-(\w+)/)?.[1]); return g.indexOf('todo') < g.indexOf('done'); }));
   await shot(mp, '49-portaal-mobiel-goedgekeurd', { fullPage: true });
 
   // Akkoordgever wijzigen terwijl er al een akkoordlink is (oude link wordt ingetrokken)
@@ -347,8 +351,8 @@ function logo() {
   // ---------- Team: voorbeeldweergave ----------
   await page.goto(`${BASE}/voorbeeld/project/${projectId}`);
   await page.waitForSelector('.preview-bar');
-  const prevTitles = await page.locator('.p-card-title').allTextContents();
-  check('voorbeeld portaal: zelfde video’s als de klant', JSON.stringify(prevTitles.sort()) === JSON.stringify((await cp.locator('.p-card-title').allTextContents()).sort()), prevTitles.join(', '));
+  const prevTitles = await page.locator('.p-all .p-card-title').allTextContents();
+  check('voorbeeld portaal: zelfde video’s als de klant', JSON.stringify(prevTitles.sort()) === JSON.stringify((await cp.locator('.p-all .p-card-title').allTextContents()).sort()), prevTitles.join(', '));
   await shot(page, '50-voorbeeld-portaal-team', { fullPage: true });
   await page.click('.p-card:has-text("Hoofdvideo")');
   await page.waitForSelector('.preview-bar');

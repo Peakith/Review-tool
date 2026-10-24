@@ -91,6 +91,20 @@ export const EN = {
   'Vul het wachtwoord in dat je van het productieteam hebt gekregen.': 'Enter the password you received from the production team.',
   'Deze link is beveiligd. Ververs de pagina en vul het wachtwoord opnieuw in.': 'This link is protected. Refresh the page and enter the password again.',
 
+  // Portaal: startpagina (bouwronde 6)
+  'Jouw acties': 'Your actions',
+  'Bij {studio}': 'With {studio}',
+  'het team': 'the team',
+  'Er staat 1 video voor je klaar.': '1 video is ready for you.',
+  'Er staan {n} video’s voor je klaar.': '{n} videos are ready for you.',
+  'Er wacht nu niets op jou. Zodra er iets te bekijken is, staat het hier.': 'Nothing is waiting for you right now. As soon as there is something to review, it will appear here.',
+  'Je feedback is verstuurd. Het team is aan zet; de nieuwe versie verschijnt hier zodra die klaarstaat.': 'Your feedback has been sent. The team is on it; the new version will appear here when it is ready.',
+  'Alle projecten en video’s': 'All projects and videos',
+  'Alle video’s': 'All videos',
+  'Reactie gevraagd vóór {date} (verstreken; reageren kan nog)': 'Response requested by {date} (passed; you can still respond)',
+  'Reactie graag vóór {date}': 'Please respond by {date}',
+  'Goedkeuren kan bij de video’s waarvoor jij de akkoordgever bent.': 'You can approve the videos for which you are the approver.',
+
   // Portaal
   'Wacht op jouw review': 'Waiting for your review',
   'Bekijk deze video’s, plaats je opmerkingen en verstuur je feedback.': 'Watch these videos, add your comments and send your feedback.',

@@ -769,7 +769,8 @@ function videoRow(v, reload, { mayUpload, mayManage }) {
       titleWrap,
       meta ? h('div', { class: 'video-row-meta small muted' }, meta) : null,
       h('div', { class: 'video-versions' },
-        h('span', { class: 'ver-chip', title: 'Nieuwste versie intern' }, h('span', { class: 'muted' }, 'Intern'), ` v${lv?.number ?? '–'}`, lv ? statusPill(lv.status, { small: true }) : null),
+        lv ? statusPill(lv.status, { small: true }) : null,
+        h('span', { class: 'ver-chip', title: 'Nieuwste versie intern' }, `v${lv?.number ?? '–'}`),
         h('span', { class: `ver-chip${sv ? '' : ' is-none'}`, title: 'Versie die de klant via de link ziet' }, icon('eye'),
           sv ? [h('span', { class: 'muted' }, 'Klant ziet'), ` v${sv.number}`] : h('span', { class: 'muted' }, 'Nog niet gedeeld')))),
     h('div', { class: 'video-row-side' },
@@ -1207,7 +1208,7 @@ function publishBar(video, version, latest, clientVersion, refresh, may) {
     }
   }
   return h('section', { class: `publish-bar is-${version.status}${isLatest ? '' : ' is-old'}`, 'aria-label': 'Status en volgende stap' },
-    h('p', { class: 'publish-text' }, h('span', { class: 'publish-version' }, `Versie ${version.number}`), ' ', text),
+    h('p', { class: 'publish-text' }, text),
     actions.length ? h('div', { class: 'publish-actions' }, actions) : null);
 }
 

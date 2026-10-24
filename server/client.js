@@ -124,6 +124,13 @@ function sharedBriefing(db, projectId, fileUrl) {
  * van díe versie. Een nieuwe interne versie verandert hier niets aan tot het team publiceert.
  * videoLink(video) geeft het adres waarmee de klant de video opent; posterUrl(version) de thumbnail.
  */
+/** Naam van de studio zoals klanten die zien ("Bij Studio Brutaal"); aan te passen in Instellingen › Merken. */
+const DEFAULT_STUDIO = 'Studio Brutaal';
+function studioName(db) {
+  const v = db.prepare("SELECT value FROM settings WHERE key = 'studio_name'").get()?.value;
+  return (v && v.trim()) || DEFAULT_STUDIO;
+}
+
 function portalDto(db, project, { videoLink, posterUrl, fileUrl }) {
   const archivedProject = !!project.archived_at;
   const videos = [];
@@ -149,6 +156,7 @@ function portalDto(db, project, { videoLink, posterUrl, fileUrl }) {
   videos.sort((a, b) => (order[a.meta.kind] ?? 5) - (order[b.meta.kind] ?? 5) || a.id - b.id);
   return {
     project: { name: project.name, clientName: project.client_name, intro: project.portal_intro || '' },
+    studio: studioName(db),
     brand: brandDto(db, project.brand_id),
     archived: archivedProject,
     briefing: sharedBriefing(db, project.id, fileUrl),
@@ -156,4 +164,4 @@ function portalDto(db, project, { videoLink, posterUrl, fileUrl }) {
   };
 }
 
-module.exports = { clientRound, KINDS, ASPECTS, detectAspect, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions, HEX };
+module.exports = { studioName, DEFAULT_STUDIO, clientRound, KINDS, ASPECTS, detectAspect, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions, HEX };

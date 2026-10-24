@@ -2,7 +2,7 @@
 const { now } = require('./db');
 const auth = require('./auth');
 const { HttpError } = require('./status');
-const { portalDto, sharedVersions, brandDto } = require('./client');
+const { portalDto, sharedVersions, brandDto, studioName } = require('./client');
 const { activeDeliveries } = require('./deliveries');
 
 /**
@@ -104,6 +104,7 @@ function clientPortalDto(db, client, clientLink) {
   });
   return {
     client: { name: client.name },
+    studio: studioName(db),
     brand: brandDto(db, client.brand_id),
     language: LANGUAGES.includes(client.language) ? client.language : 'nl',
     identity: clientLink.approver_email ? { name: clientLink.approver_name, personal: true } : null,

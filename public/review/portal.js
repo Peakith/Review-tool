@@ -5,7 +5,7 @@
 //    persoon zelf mag goedkeuren.
 // Dezelfde pagina toont het team als voorbeeld (/voorbeeld/project/<id>), gevuld met
 // dezelfde serverfilters, zodat het team precies ziet wat de klant ziet.
-import { h, mount, icon, api, emptyState, plural, timecode, formatDateZone, formatDeadline, isPast } from '/shared/util.js';
+import { h, mount, icon, api, emptyState, timecode, formatDateZone, formatDeadline, isPast } from '/shared/util.js';
 import { tr } from '/shared/i18n.js';
 import { applyBrand, brandMark } from '/shared/brand.js';
 import { clientPill, clientStatusOf, metaLine, fileLabel, fileIcon } from '/shared/client.js';
@@ -36,13 +36,64 @@ async function load() {
 
 const draw = () => (clientMode ? renderClient(data) : render(data));
 
-// Volgorde en uitleg van de groepen, vanuit de klant gezien.
-const GROUPS = [
-  { key: 'todo', title: 'Wacht op jouw review', text: 'Bekijk deze video’s, plaats je opmerkingen en verstuur je feedback.', test: (v) => v.version.status === 'in_review' && !v.archived },
-  { key: 'busy', title: 'Feedback verstuurd', text: 'Het team verwerkt je feedback. Je ziet hier de nieuwe versie zodra die klaarstaat.', test: (v) => v.version.status === 'changes_requested' && !v.archived },
-  { key: 'done', title: 'Goedgekeurd', text: null, test: (v) => v.version.status === 'approved' },
-  { key: 'other', title: 'Afgerond of tijdelijk gesloten', text: 'Nog te bekijken, maar reageren is hier nu niet mogelijk.', test: () => true },
-];
+/*
+ * Startpagina van de klant, in vaste volgorde:
+ *   1. Jouw acties: reviewen, feedback geven, goedkeuren (alleen waar dat mag), vragen beantwoorden;
+ *   2. Bij <studio>: feedback is verstuurd, het team is aan zet;
+ *   3. Goedgekeurd: compact en standaard ingeklapt;
+ *   4. Definitieve bestanden: alleen wat echt is vrijgegeven.
+ * Daaronder een (ingeklapte) route naar alle projecten en video's. Eén actie per video: nooit
+ * "reageren" én "goedkeuren" als losse regels voor dezelfde video.
+ */
+const isOpen = (v) => !v.archived && v.version.status === 'in_review';
+const deadlineOf = (v) => (isOpen(v) && v.round?.deadline) || null;
+
+/** Volgorde van acties: verstreken deadlines eerst, dan de eerstvolgende deadline, dan de rest. */
+function byDeadline(a, b) {
+  const da = deadlineOf(a.video);
+  const db = deadlineOf(b.video);
+  if (da && db) return da.localeCompare(db);
+  if (da || db) return da ? -1 : 1;
+  return 0;
+}
+
+function summaryLine(n, nothingText) {
+  return h('p', { class: 'p-summary' }, n
+    ? h('strong', {}, tr(n === 1 ? 'Er staat 1 video voor je klaar.' : 'Er staan {n} video’s voor je klaar.', { n }))
+    : nothingText);
+}
+
+function section(key, title, count, text, body, { collapsed = false } = {}) {
+  const id = `sec-${key}`;
+  const head = h('div', { class: 'p-group-head' }, h('h2', { id }, title, h('span', { class: 'p-count' }, count)), text ? h('p', { class: 'small muted' }, text) : null);
+  if (collapsed) {
+    return h('details', { class: `p-group p-group-${key} p-collapsible` },
+      h('summary', {}, icon('chevronRight'), h('span', { class: 'p-collapsible-title', id }, title), h('span', { class: 'p-count' }, count)),
+      h('div', { class: 'p-list' }, body));
+  }
+  return h('section', { class: `p-group p-group-${key}`, 'aria-labelledby': id }, head, h('div', { class: 'p-list' }, body));
+}
+
+/** De vier blokken van de startpagina, voor één of meer projecten. */
+function startSections(items, deliveries, { studio, personal, multi }) {
+  const actions = items.filter((i) => isOpen(i.video)).sort(byDeadline);
+  const busy = items.filter((i) => !i.video.archived && i.video.version.status === 'changes_requested' && !i.project.completed);
+  const done = items.filter((i) => i.video.version.status === 'approved' && !i.project.completed);
+  const out = [];
+  out.push(section('todo', tr('Jouw acties'), actions.length,
+    actions.length ? null : tr('Er wacht nu niets op jou. Zodra er iets te bekijken is, staat het hier.'),
+    actions.map((i) => actionRow(i, { personal, multi }))));
+  if (busy.length) {
+    out.push(section('busy', tr('Bij {studio}', { studio }), busy.length, tr('Je feedback is verstuurd. Het team is aan zet; de nieuwe versie verschijnt hier zodra die klaarstaat.'),
+      busy.map((i) => compactRow(i, { multi }))));
+  }
+  if (done.length) out.push(section('done', tr('Goedgekeurd'), done.length, null, done.map((i) => compactRow(i, { multi })), { collapsed: true }));
+  if (deliveries.length) {
+    out.push(section('files', tr('Definitieve bestanden'), deliveries.reduce((n, d) => n + d.delivery.count, 0), null,
+      deliveries.map((d) => deliveryCard(d.delivery, multi ? d.name : null))));
+  }
+  return { out, actionCount: actions.length };
+}
 
 function header(brand, clientName) {
   return h('header', { class: 'r-header p-header' },
@@ -52,53 +103,36 @@ function header(brand, clientName) {
       viewerControls(draw)));
 }
 
-/** Video's van één project, gegroepeerd naar wat er van de klant wordt verwacht. */
-function videoGroups(videos, idPrefix, { personal = false, level = 2 } = {}) {
-  const groups = new Map(GROUPS.map((g) => [g.key, []]));
-  for (const v of videos) groups.get(GROUPS.find((g) => g.test(v)).key).push(v);
-  return GROUPS.filter((g) => groups.get(g.key).length).map((g) => {
-    const list = groups.get(g.key);
-    return h('section', { class: `p-group p-group-${g.key}`, 'aria-labelledby': `${idPrefix}-${g.key}` },
-      h('div', { class: 'p-group-head' }, h(`h${level}`, { id: `${idPrefix}-${g.key}` }, tr(g.title), h('span', { class: 'p-count' }, list.length)), g.text ? h('p', { class: 'small muted' }, tr(g.text)) : null),
-      h('div', { class: 'p-grid' }, list.map((v) => card(v, { personal }))));
-  });
-}
-
-function summaryLine(videos) {
-  if (!videos.length) return null;
-  const todo = videos.filter((v) => v.version.status === 'in_review' && !v.archived).length;
-  const done = videos.filter((v) => v.version.status === 'approved').length;
-  return h('p', { class: 'p-summary' }, todo
-    ? [h('strong', {}, tr(todo === 1 ? '{n} video wacht' : '{n} video’s wachten', { n: todo })), tr(' op jouw review')]
-    : done === videos.length ? [icon('checkCircle'), tr(' Alle video’s zijn goedgekeurd. Dank je wel!')] : tr('Er wacht nu niets op jou.'));
-}
-
-function deliveryCard(delivery) {
+function deliveryCard(delivery, projectName) {
   return h('a', { class: 'p-delivery-card', href: delivery.url },
     h('div', { class: 'brief-icon' }, icon('package')),
-    h('div', {}, h('h2', {}, tr('Definitieve bestanden')), h('p', { class: 'small muted' }, tr(delivery.count === 1 ? '{n} bestand is definitief vrijgegeven en klaar om te downloaden.' : '{n} bestanden zijn definitief vrijgegeven en klaar om te downloaden.', { n: delivery.count }))),
-    h('span', { class: 'btn btn-sm btn-primary' }, icon('download'), h('span', { class: 'btn-label' }, tr('Naar de oplevering'))));
+    h('div', {}, h('h3', {}, projectName || tr('Definitieve bestanden')), h('p', { class: 'small muted' }, tr(delivery.count === 1 ? '{n} bestand is definitief vrijgegeven en klaar om te downloaden.' : '{n} bestanden zijn definitief vrijgegeven en klaar om te downloaden.', { n: delivery.count }))),
+    h('span', { class: 'btn btn-sm btn-secondary' }, icon('download'), h('span', { class: 'btn-label' }, tr('Naar de oplevering'))));
 }
 
 function render(d) {
   applyBrand(d.brand);
   const brandName = d.brand?.name;
   document.title = `${d.project.name}${brandName ? ` · ${brandName}` : ''}`;
+  const project = { id: 0, name: d.project.name, completed: false };
+  const items = d.videos.map((video) => ({ project, video }));
+  const { out, actionCount } = startSections(items, d.delivery ? [{ name: d.project.name, delivery: d.delivery }] : [], { studio: d.studio || tr('het team'), personal: false, multi: false });
 
   const hero = h('section', { class: 'p-hero' },
     h('h1', {}, d.project.name),
     d.project.intro ? h('p', { class: 'p-intro' }, d.project.intro) : null,
-    summaryLine(d.videos));
+    d.videos.length ? summaryLine(actionCount, tr('Er wacht nu niets op jou.')) : null);
 
   const sections = [];
-  if (d.delivery) sections.push(deliveryCard(d.delivery));
-  if (!d.videos.length) {
-    sections.push(h('div', { class: 'card' }, emptyState({
+  if (!d.videos.length && !d.delivery) {
+    sections.push(h('div', { class: 'p-empty' }, emptyState({
       icon: 'clock', title: tr('Er staan nog geen video’s voor je klaar'),
       text: tr('Bewaar deze link. Zodra het team een video publiceert, verschijnt die hier.'),
     })));
+  } else {
+    sections.push(...out);
+    if (d.videos.length) sections.push(allVideos([{ ...project, videos: d.videos }], { single: true }));
   }
-  sections.push(...videoGroups(d.videos, 'group'));
   if (d.briefing.length) sections.push(briefingSection(d.briefing, 'group-briefing'));
 
   mount(root,
@@ -112,50 +146,32 @@ function render(d) {
       preview ? null : expiryNote(d.linkExpiresAt)));
 }
 
-/** Klantportaal per klant: actieve projecten open, afgeronde projecten ingeklapt. */
+/** Klantportaal per klant: eerst wat er van jou gevraagd wordt, daarna de rest. */
 function renderClient(d) {
   applyBrand(d.brand);
   document.title = `${d.client.name}${d.brand?.name ? ` · ${d.brand.name}` : ''}`;
   const personal = !!d.identity?.personal;
-  const active = d.projects.filter((p) => !p.completed);
-  const completed = d.projects.filter((p) => p.completed);
-  const allVideos = active.flatMap((p) => p.videos);
-  const mine = allVideos.filter((v) => v.canApprove && v.version.status !== 'approved' && !v.archived);
+  const items = d.projects.flatMap((p) => p.videos.map((video) => ({ project: p, video })));
+  const deliveries = d.projects.filter((p) => p.delivery).map((p) => ({ name: p.name, delivery: p.delivery }));
+  const multi = d.projects.length > 1;
+  const { out, actionCount } = startSections(items, deliveries, { studio: d.studio || tr('het team'), personal, multi: true });
 
   const hero = h('section', { class: 'p-hero' },
     h('h1', {}, d.client.name),
     personal
-      ? h('div', { class: 'identity is-verified p-identity' }, icon('shield'),
-        h('div', {}, h('div', {}, tr('Persoonlijke link van '), h('strong', {}, d.identity.name)),
-          h('div', { class: 'small' }, tr('Je kunt reageren op alle video’s hieronder. Goedkeuren kan bij de video’s waarvoor jij de akkoordgever bent.'))))
+      ? h('p', { class: 'p-identity small' }, icon('shield'),
+        h('span', {}, tr('Persoonlijke link van '), h('strong', {}, d.identity.name), '. ', tr('Goedkeuren kan bij de video’s waarvoor jij de akkoordgever bent.')))
       : null,
-    personal && mine.length ? h('p', { class: 'p-summary' }, h('strong', {}, tr(mine.length === 1 ? '{n} video wacht op jouw goedkeuring' : '{n} video’s wachten op jouw goedkeuring', { n: mine.length }))) : summaryLine(allVideos));
-
-  const projectBlock = (p) => {
-    const id = `proj-${p.id}`;
-    return h('section', { class: 'k-project', 'aria-labelledby': id },
-      h('div', { class: 'k-project-head' },
-        h('h2', { id }, p.name),
-        p.brand && p.brand.id !== d.brand?.id ? h('span', { class: 'badge badge-neutral' }, p.brand.name) : null,
-        p.archived ? h('span', { class: 'badge badge-neutral' }, tr('gearchiveerd')) : null),
-      p.intro ? h('p', { class: 'p-intro' }, p.intro) : null,
-      p.delivery ? deliveryCard(p.delivery) : null,
-      p.videos.length ? videoGroups(p.videos, id, { personal, level: 3 }) : h('p', { class: 'small muted' }, tr('Er staan in dit project nog geen video’s voor je klaar.')),
-      p.briefing.length ? briefingSection(p.briefing, `${id}-briefing`, 3) : null);
-  };
+    d.projects.length ? summaryLine(actionCount, tr('Er wacht nu niets op jou.')) : null);
 
   const sections = [];
   if (!d.projects.length) {
-    sections.push(h('div', { class: 'card' }, emptyState({
+    sections.push(h('div', { class: 'p-empty' }, emptyState({
       icon: 'clock', title: tr('Er staan nog geen projecten voor je klaar'),
       text: tr('Bewaar deze link. Zodra het team een project met je deelt, verschijnt het hier.'),
     })));
-  }
-  sections.push(...active.map(projectBlock));
-  if (completed.length) {
-    sections.push(h('details', { class: 'k-completed' },
-      h('summary', {}, icon('history'), tr(completed.length === 1 ? 'Afgerond project ({n})' : 'Afgeronde projecten ({n})', { n: completed.length })),
-      h('div', { class: 'k-completed-body' }, completed.map(projectBlock))));
+  } else {
+    sections.push(...out, allVideos(d.projects, { multi, personal }));
   }
 
   mount(root,
@@ -168,6 +184,35 @@ function renderClient(d) {
       expiryNote(d.linkExpiresAt)));
 }
 
+/**
+ * Route naar alles wat deze link mag zien: per project alle gepubliceerde video's, met briefing.
+ * Afgeronde projecten staan apart en ingeklapt.
+ */
+function allVideos(projects, { single = false, multi = false } = {}) {
+  const active = projects.filter((p) => !p.completed);
+  const completed = projects.filter((p) => p.completed);
+  const total = projects.reduce((n, p) => n + p.videos.length, 0);
+  const projectBlock = (p) => {
+    const id = `proj-${p.id}`;
+    return h('section', { class: 'k-project', 'aria-labelledby': id },
+      single ? null : h('div', { class: 'k-project-head' },
+        h('h3', { id }, p.name),
+        p.brand && multi ? h('span', { class: 'small muted' }, p.brand.name) : null,
+        p.archived ? h('span', { class: 'badge badge-neutral' }, tr('gearchiveerd')) : null),
+      p.intro && !single ? h('p', { class: 'p-intro' }, p.intro) : null,
+      p.videos.length ? h('div', { class: 'p-list' }, p.videos.map((v) => compactRow({ project: p, video: v }, { multi: false })))
+        : h('p', { class: 'small muted' }, tr('Er staan in dit project nog geen video’s voor je klaar.')),
+      !single && p.briefing?.length ? briefingSection(p.briefing, `${id}-briefing`, 4) : null);
+  };
+  return h('details', { class: 'p-group p-all p-collapsible' },
+    h('summary', {}, icon('chevronRight'), h('span', { class: 'p-collapsible-title' }, single ? tr('Alle video’s') : tr('Alle projecten en video’s')), h('span', { class: 'p-count' }, total)),
+    h('div', { class: 'p-all-body' },
+      active.map(projectBlock),
+      completed.length ? h('details', { class: 'k-completed' },
+        h('summary', {}, icon('history'), tr(completed.length === 1 ? 'Afgerond project ({n})' : 'Afgeronde projecten ({n})', { n: completed.length })),
+        h('div', { class: 'k-completed-body' }, completed.map(projectBlock))) : null));
+}
+
 function previewBar(d) {
   return h('div', { class: 'preview-bar', role: 'note' },
     icon('eye'),
@@ -175,39 +220,53 @@ function previewBar(d) {
     h('a', { href: `/projecten/${d.preview.projectId}`, class: 'btn btn-sm btn-secondary' }, icon('arrowLeft'), h('span', { class: 'btn-label' }, 'Terug naar het project')));
 }
 
-function card(v, { personal = false } = {}) {
-  const s = clientStatusOf(v.version.status);
-  const open = ['in_review', 'changes_requested'].includes(v.version.status) && !v.archived;
+function thumbOf(v) {
   const orientation = v.meta.orientation === 'staand' ? ' is-portrait' : v.meta.orientation === 'vierkant' ? ' is-square' : '';
-  const thumb = h('div', { class: `p-thumb${orientation}` },
+  return h('div', { class: `p-thumb${orientation}` },
     v.posterUrl ? posterImg(v.posterUrl) : h('div', { class: 'poster-empty' }, icon('film')),
-    v.version.duration ? h('span', { class: 'thumb-duration' }, timecode(v.version.duration)) : null,
-    v.meta.kindLabel ? h('span', { class: 'p-kind' }, tr(v.meta.kindLabel)) : null);
-  const canApprove = personal && v.canApprove && open;
-  const action = canApprove ? tr('Bekijken en goedkeuren') : v.version.status === 'in_review' && !v.archived ? tr('Bekijken en reageren') : tr('Bekijken');
-  let approval = null;
-  if (v.approval && !v.approval.revoked && v.version.status === 'approved') {
-    approval = h('div', { class: 'p-note is-ok' }, icon('checkCircle'), tr('Goedgekeurd door {name} · {date}', { name: v.approval.name, date: formatDateZone(v.approval.at) }));
-  } else if (v.approval?.revoked && open) {
-    approval = h('div', { class: 'p-note is-warn' }, icon('alert'), tr('Eerdere goedkeuring ingetrokken: opnieuw goedkeuren nodig'));
-  } else if (canApprove) {
-    approval = h('div', { class: 'p-note is-mine' }, icon('shield'), tr('Jij bent de akkoordgever van deze video'));
-  } else if (open) {
-    approval = h('div', { class: 'p-note' }, icon('shield'), v.approverName ? tr('Goedkeuren: {name}, via een persoonlijke link', { name: v.approverName }) : tr('Goedkeuren gaat via een persoonlijke link van het team'));
-  }
+    v.version.duration ? h('span', { class: 'thumb-duration' }, timecode(v.version.duration)) : null);
+}
+
+/** Eén actie voor één video: precies welke versie, wat er gevraagd wordt en tot wanneer. */
+function actionRow({ project, video: v }, { personal = false, multi = false } = {}) {
+  const canApprove = personal && v.canApprove;
+  const action = canApprove ? tr('Bekijken en goedkeuren') : tr('Bekijken en reageren');
+  const deadline = deadlineOf(v);
+  const late = deadline && isPast(deadline);
+  let note = null;
+  if (v.approval?.revoked) note = h('div', { class: 'p-note is-warn' }, icon('alert'), tr('Eerdere goedkeuring ingetrokken: opnieuw goedkeuren nodig'));
+  else if (canApprove) note = h('div', { class: 'p-note is-mine' }, icon('shield'), tr('Jij bent de akkoordgever van deze video'));
+  else if (v.approverName) note = h('div', { class: 'p-note' }, icon('shield'), tr('Goedkeuren: {name}, via een persoonlijke link', { name: v.approverName }));
   const body = [
-    thumb,
+    thumbOf(v),
     h('div', { class: 'p-card-body' },
+      multi ? h('div', { class: 'p-card-kicker' }, project.name) : null,
       h('h3', { class: 'p-card-title', title: v.title }, v.title),
-      h('div', { class: 'p-card-meta small muted' }, [metaLine(v.meta), tr('Versie {n}', { n: v.version.number })].filter(Boolean).join(' · ')),
-      h('div', { class: 'p-card-status' }, clientPill(v.version.status, { small: true })),
-      v.round ? h('div', { class: 'p-note' }, icon('history'), tr('Ronde {n}', { n: v.round.number }), v.round.deadline && v.version.status === 'in_review' ? ` · ${tr('reactie graag vóór {date}', { date: formatDeadline(v.round.deadline) })}${isPast(v.round.deadline) ? ` ${tr('(verstreken; reageren kan nog)')}` : ''}` : '') : null,
-      approval),
-    h('div', { class: 'p-card-action' }, h('span', { class: `btn btn-sm ${canApprove ? 'btn-approve' : v.version.status === 'in_review' && !v.archived ? 'btn-primary' : 'btn-secondary'}` }, icon(canApprove ? 'checkCircle' : s.icon === 'eye' ? 'chat' : 'play'), h('span', { class: 'btn-label' }, action))),
+      h('div', { class: 'p-card-meta small muted' }, [tr('Versie {n}', { n: v.version.number }), metaLine(v.meta), v.round ? tr('Ronde {n}', { n: v.round.number }) : null].filter(Boolean).join(' · ')),
+      deadline ? h('div', { class: `p-due${late ? ' is-late' : ''}` }, icon('clock'),
+        late ? tr('Reactie gevraagd vóór {date} (verstreken; reageren kan nog)', { date: formatDeadline(deadline) }) : tr('Reactie graag vóór {date}', { date: formatDeadline(deadline) })) : null,
+      note),
+    h('div', { class: 'p-card-action' }, h('span', { class: `btn btn-sm ${canApprove ? 'btn-approve' : 'btn-primary'}` }, icon(canApprove ? 'checkCircle' : 'chat'), h('span', { class: 'btn-label' }, action))),
   ];
-  return v.href
-    ? h('a', { class: `p-card is-${s.cls}`, href: v.href, 'aria-label': `${v.title}, ${tr('Versie {n}', { n: v.version.number })}: ${s.label}. ${action}` }, body)
-    : h('div', { class: `p-card is-${s.cls}` }, body);
+  const label = `${v.title}, ${tr('Versie {n}', { n: v.version.number })}. ${action}${deadline ? `. ${tr('Reactie graag vóór {date}', { date: formatDeadline(deadline) })}` : ''}`;
+  return v.href ? h('a', { class: 'p-card p-action is-in_review', href: v.href, 'aria-label': label }, body) : h('div', { class: 'p-card p-action is-in_review' }, body);
+}
+
+/** Compacte regel: status, versie en (bij goedkeuring) wie en wanneer. */
+function compactRow({ project, video: v }, { multi = false } = {}) {
+  const s = clientStatusOf(v.version.status);
+  const approved = v.approval && !v.approval.revoked && v.version.status === 'approved';
+  const body = [
+    thumbOf(v),
+    h('div', { class: 'p-card-body' },
+      multi ? h('div', { class: 'p-card-kicker' }, project.name) : null,
+      h('h3', { class: 'p-card-title', title: v.title }, v.title),
+      h('div', { class: 'p-card-meta small muted' }, [tr('Versie {n}', { n: v.version.number }), metaLine(v.meta)].filter(Boolean).join(' · ')),
+      approved ? h('div', { class: 'p-note is-ok' }, icon('checkCircle'), tr('Goedgekeurd door {name} · {date}', { name: v.approval.name, date: formatDateZone(v.approval.at) })) : null),
+    h('div', { class: 'p-card-status' }, clientPill(v.version.status, { small: true })),
+  ];
+  const label = `${v.title}, ${tr('Versie {n}', { n: v.version.number })}: ${s.label}`;
+  return v.href ? h('a', { class: `p-card p-compact is-${s.cls}`, href: v.href, 'aria-label': label }, body) : h('div', { class: `p-card p-compact is-${s.cls}` }, body);
 }
 
 function posterImg(src) {

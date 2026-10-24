@@ -1,0 +1,11 @@
+/* ==========================================================================
+   Huisstijllaag (bouwronde 6)
+   Hier komen de echte huisstijlwaarden van Studio Brutaal zodra die zijn aangeleverd:
+   lettertypen (met de bijbehorende bestanden in /shared/fonts/) en eventueel een accentkleur.
+   Bewust leeg: er zijn geen huisstijlwaarden verzonnen. De neutrale zwart-witbasis staat in
+   styles.css; merkkleur en logo voor klantpagina's komen uit Instellingen › Merken.
+
+   Voorbeeld (pas in als de bestanden er zijn):
+   @font-face { font-family: "Merkfont"; src: url("/shared/fonts/merkfont-bold.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+   :root { --font-display: "Merkfont", var(--font); }
+   ========================================================================== */

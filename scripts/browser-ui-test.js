@@ -135,7 +135,7 @@ const mp4 = (name, size = '1920x1080', sec = 6, pat = 'testsrc2') => {
   await page.click('.profile-menu .menu-item:has-text("Licht")');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  check('licht thema direct toegepast', bodyBg === 'rgb(245, 245, 243)', bodyBg);
+  check('licht thema direct toegepast', bodyBg === 'rgb(246, 246, 244)', bodyBg);
   await page.keyboard.press('Escape');
   await page.reload();
   await page.waitForSelector('.dash-card');

@@ -219,6 +219,60 @@ CREATE TABLE IF NOT EXISTS comment_tasks (
   updated_by INTEGER REFERENCES users(id)
 );
 
+-- Definitieve oplevering: verwijst blijvend naar één exacte versie en de klantgoedkeuring die
+-- bij het vrijgeven gold. Geen kopie van het bestand. Per video hooguit één actieve oplevering;
+-- terugnemen en vervangen sluiten de rij af (withdrawn_*), zodat de geschiedenis blijft staan.
+CREATE TABLE IF NOT EXISTS deliveries (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  version_id INTEGER NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
+  approval_id INTEGER NOT NULL REFERENCES approvals(id) ON DELETE CASCADE,
+  released_by INTEGER REFERENCES users(id),
+  released_at TEXT NOT NULL,
+  request_id TEXT,
+  withdrawn_at TEXT,
+  withdrawn_by INTEGER REFERENCES users(id),
+  withdrawn_reason TEXT,
+  replaced_by INTEGER REFERENCES deliveries(id)
+);
+
+-- Afzonderlijke, intrekbare link die alleen de vrijgegeven opleveringen van één project toont.
+CREATE TABLE IF NOT EXISTS delivery_links (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revoked_by INTEGER REFERENCES users(id),
+  last_used_at TEXT
+);
+
+-- Passieve klantactiviteit (geopend, afspelen gestart, download aangevraagd). Alleen wat de
+-- server waarnam; geen tokens, IP-adressen of apparaatkenmerken. Wordt na de bewaartermijn
+-- opgeruimd en verandert nooit een status, taak of goedkeuring.
+CREATE TABLE IF NOT EXISTS client_activity (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  video_id INTEGER REFERENCES videos(id) ON DELETE CASCADE,
+  version_id INTEGER REFERENCES versions(id) ON DELETE CASCADE,
+  delivery_id INTEGER REFERENCES deliveries(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,          -- portal_opened | review_opened | playback_started | delivery_opened | download_requested
+  source TEXT NOT NULL,        -- review_link | approver_link | portal | delivery_link
+  link_key TEXT NOT NULL,      -- bijv. "share:12" (intern id, nooit het token)
+  source_label TEXT NOT NULL,  -- "Via akkoordlink van Joris"
+  visitor_name TEXT,           -- alleen door de bezoeker zelf opgegeven (niet geverifieerd)
+  request_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+-- Instellingen die een beheerder kan wijzigen (bijv. bewaartermijn klantactiviteit).
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 -- Eenmalige gegevensmigraties (zie migrate()).
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
@@ -231,6 +285,12 @@ CREATE INDEX IF NOT EXISTS idx_project_links_project ON project_links(project_id
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON comment_tasks(assignee_id);
 CREATE INDEX IF NOT EXISTS idx_rounds_video ON review_rounds(video_id);
 CREATE INDEX IF NOT EXISTS idx_versions_video ON versions(video_id);
+CREATE INDEX IF NOT EXISTS idx_deliveries_project ON deliveries(project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_deliveries_active ON deliveries(video_id) WHERE withdrawn_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_delivery_links_project ON delivery_links(project_id);
+CREATE INDEX IF NOT EXISTS idx_activity_project ON client_activity(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_dedupe ON client_activity(link_key, type, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_activity_request ON client_activity(link_key, request_id) WHERE request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_comments_version ON comments(version_id);
 CREATE INDEX IF NOT EXISTS idx_events_version ON status_events(version_id);
 `;
@@ -277,6 +337,8 @@ const COLUMNS = [
   ['versions', 'share_request_id', 'TEXT'],
   ['comments', 'timecode_end', 'REAL'],
   ['comments', 'annotation', 'TEXT'],
+  // Bouwronde 4: definitieve opleveringen.
+  ['projects', 'delivery_note', "TEXT NOT NULL DEFAULT ''"],
 ];
 
 const DEFAULT_BRANDS = [

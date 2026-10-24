@@ -5,6 +5,7 @@ const { downloadFilename, contentDisposition } = require('../media');
 const { commentDtos } = require('../views');
 const { clientVideoInfo, sharedVersions: listShared } = require('../client');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
+const { recordActivity, shareLinkSource, isFirstRequest } = require('../activity');
 
 /**
  * Klant-API. Iedere aanvraag controleert opnieuw of de link bestaat en niet is
@@ -87,6 +88,7 @@ function reviewRoutes(router, db, config, { storage }) {
   };
 
   router.get('/review/:token', (req, res) => {
+    recordActivity(db, req, { projectId: req.project.id, type: 'review_opened', videoId: req.video.id, src: shareLinkSource(req.link) });
     res.json(clientVideoInfo(db, {
       video: req.video,
       project: req.project,
@@ -232,6 +234,9 @@ function reviewRoutes(router, db, config, { storage }) {
   router.get('/review/:token/versions/:versionId/download', async (req, res) => {
     if (!req.link.allow_download) throw new HttpError(403, 'Downloaden is voor deze link niet ingeschakeld.');
     const ver = getSharedVersion(req);
+    if (isFirstRequest(req)) {
+      recordActivity(db, req, { projectId: req.project.id, type: 'download_requested', videoId: req.video.id, versionId: ver.id, src: shareLinkSource(req.link) });
+    }
     const name = downloadFilename(`${req.video.title} - v${ver.number}`, ver.extension);
     await storage.send(res, ver.stored_name, { 'Content-Type': ver.mime_type, 'Content-Disposition': contentDisposition(name), 'Cache-Control': 'private, no-store' });
   });

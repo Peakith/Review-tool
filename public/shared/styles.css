@@ -158,6 +158,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; m
 .badge-accent { background: var(--accent); color: var(--accent-ink); }
 .badge-neutral { background: var(--surface-3); color: var(--text-2); }
 .badge-warn { background: var(--st-review-bg); color: var(--st-review); }
+.badge-ok { background: var(--st-approved-bg); color: var(--st-approved); }
 .count-dot { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; }
 
 /* ---------- Meldingen ---------- */
@@ -414,3 +415,16 @@ input[type=date], input[type=time] { color-scheme: dark; }
 /* Met de knoppen Bereik/Tekenen is er geen ruimte voor de sneltoetshint. */
 .composer-tools ~ .composer-hint { display: none; }
 .composer-bar .btn-primary { margin-left: auto; }
+
+/* Groot in de pagina: de speler vult het venster (o.a. op iPhone, waar volledig scherm geen tekeningen toont). */
+.player.is-pagefull { position: fixed; inset: 0; z-index: 900; border-radius: 0; border: 0; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+.player.is-pagefull .player-stage { flex: 1; max-height: none !important; min-height: 0; aspect-ratio: auto; }
+html.has-pagefull-player, html.has-pagefull-player body { overflow: hidden; }
+.pc-fschoice { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(92%, 380px); display: grid; gap: 8px; padding: 12px 14px; background: rgba(16, 17, 20, .96); border: 1px solid var(--line-2); border-radius: var(--r-lg); color: var(--text); font-size: 13.5px; box-shadow: var(--shadow); }
+.pc-fschoice[hidden] { display: none; }
+.pc-fschoice-head { display: flex; align-items: center; gap: 8px; }
+.pc-fschoice-head strong { flex: 1; }
+.pc-fschoice-head > .icon { color: var(--accent-strong); --icon-size: 16px; }
+.pc-fschoice p { margin: 0; color: var(--text-2); line-height: 1.45; }
+.pc-fschoice-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.pc-fschoice-actions .btn { flex: 1 1 auto; justify-content: center; }

@@ -12,6 +12,8 @@ import { viewBriefing } from './briefing.js';
 import { taskDialog, taskChip, viewFeedback, viewMyTasks } from './tasks.js';
 import { createCompare } from '/shared/compare.js';
 import { exportDialog } from './export.js';
+import { viewDeliveries } from './deliveries.js';
+import { viewActivity } from './activity.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -54,6 +56,8 @@ async function route() {
     [/^\/projecten\/(\d+)$/, (id) => viewProject(Number(id)), 'projects'],
     [/^\/projecten\/(\d+)\/briefing$/, (id) => viewProject(Number(id), 'briefing'), 'projects'],
     [/^\/projecten\/(\d+)\/feedback$/, (id) => viewProject(Number(id), 'feedback'), 'projects'],
+    [/^\/projecten\/(\d+)\/oplevering$/, (id) => viewProject(Number(id), 'delivery'), 'projects'],
+    [/^\/projecten\/(\d+)\/activiteit$/, (id) => viewProject(Number(id), 'activity'), 'projects'],
     [/^\/taken$/, () => viewMyTasks(ctx()), 'tasks'],
     [/^\/merken$/, () => (session.user.isAdmin ? viewBrands(ctx()) : viewNotFound()), 'brands'],
     [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
@@ -504,10 +508,11 @@ const TRASH_URL = { project: (id) => `/api/projects/${id}`, video: (id) => `/api
 const TRASH_WHAT = { project: 'Het project', video: 'De video', version: 'Deze versie' };
 
 /** Naar de prullenbak, met bevestiging vooraf en "Ongedaan maken" achteraf. */
-async function moveToTrash(type, id, name, after) {
+async function moveToTrash(type, id, name, after, { deliveryWarning = null } = {}) {
   const ok = await confirmDialog({
     title: `“${name}” naar de prullenbak?`,
     body: h('div', {},
+      deliveryWarning ? h('div', { class: 'notice notice-warn' }, icon('package'), h('span', {}, h('strong', {}, 'Dit is een definitieve oplevering. '), deliveryWarning)) : null,
       h('p', {}, `${TRASH_WHAT[type]} verdwijnt uit de overzichten en is niet meer bereikbaar via klantlinks of directe links.`),
       h('p', { class: 'muted' }, 'De bestanden blijven bewaard tot een beheerder ze definitief verwijdert. Terugzetten kan via de prullenbak.')),
     confirmLabel: 'Naar prullenbak', danger: true,
@@ -601,7 +606,9 @@ async function viewProject(id, tab = 'videos') {
     tabLink('feedback', `/projecten/${project.id}/feedback`, 'tasks', 'Feedback & taken', project.openFeedback ? h('span', { class: 'seg-count' }, project.openFeedback) : null),
     h('a', { href: `/projecten/${project.id}/briefing`, 'data-nav': true, class: tab === 'briefing' ? 'is-active' : '', 'aria-current': tab === 'briefing' ? 'page' : null }, icon('clipboard'), 'Briefing & referenties',
       h('span', { class: 'seg-count', dataset: { count: 'briefing' } }, project.briefingCount),
-      h('span', { class: 'badge badge-visible', title: 'Onderdelen die de klant kan bekijken', dataset: { count: 'shared' }, hidden: !project.sharedBriefingCount }, icon('eye'), h('span', {}, project.sharedBriefingCount))));
+      h('span', { class: 'badge badge-visible', title: 'Onderdelen die de klant kan bekijken', dataset: { count: 'shared' }, hidden: !project.sharedBriefingCount }, icon('eye'), h('span', {}, project.sharedBriefingCount))),
+    tabLink('delivery', `/projecten/${project.id}/oplevering`, 'package', 'Oplevering', h('span', { class: 'seg-count', dataset: { count: 'delivery' } }, project.deliveryCount)),
+    can(project.myLevel, 'publish') ? tabLink('activity', `/projecten/${project.id}/activiteit`, 'activity', 'Klantactiviteit') : null);
   const briefingHost = h('div', {});
 
   const content = h('div', { class: 'page page-drop' },
@@ -618,7 +625,7 @@ async function viewProject(id, tab = 'videos') {
           ['Project bewerken…', () => editProject(project), { icon: 'edit' }],
           archived ? ['Uit archief halen', () => setArchived('project', project.id, project.name, false), { icon: 'refresh' }]
             : ['Archiveren', () => setArchived('project', project.id, project.name, true), { icon: 'history' }],
-          ['Naar prullenbak…', () => moveToTrash('project', project.id, project.name, () => navigate('/')), { icon: 'trash', danger: true }],
+          ['Naar prullenbak…', () => moveToTrash('project', project.id, project.name, () => navigate('/'), { deliveryWarning: project.deliveryCount ? `Dit project heeft ${plural(project.deliveryCount, 'vrijgegeven bestand', 'vrijgegeven bestanden')}. Zolang het in de prullenbak staat, werken de opleverlink en het klantportaal niet.` : null }), { icon: 'trash', danger: true }],
         ], 'Projectacties') : null,
         project.videos.length ? button('Exporteren', { icon: 'fileDown', onClick: () => exportDialog({ projectId: project.id, videos: project.videos }), title: 'Feedback als PDF of CSV' }) : null,
         h('a', { class: 'btn btn-secondary', href: `/voorbeeld/project/${project.id}`, target: '_blank', rel: 'noopener', title: 'Bekijk het portaal precies zoals de klant het ziet' }, icon('eye'), h('span', { class: 'btn-label' }, 'Klantweergave')),
@@ -643,6 +650,10 @@ async function viewProject(id, tab = 'videos') {
   if (isVideos) draw();
   else if (tab === 'feedback') {
     await viewFeedback({ project, host: briefingHost, session });
+  } else if (tab === 'delivery') {
+    await viewDeliveries({ project, host: briefingHost, onCount: (n) => { tabs.querySelector('[data-count=delivery]').textContent = String(n); } });
+  } else if (tab === 'activity') {
+    await viewActivity({ project, host: briefingHost });
   } else {
     // Aantallen in het tabblad actueel houden na toevoegen, delen of weggooien.
     const onCounts = (total, shared) => {
@@ -712,11 +723,12 @@ function videoRow(v, reload, { mayUpload, mayManage }) {
     h('div', { class: 'video-row-side' },
       v.archivedAt ? h('span', { class: 'badge badge-neutral' }, icon('history'), 'Gearchiveerd') : null,
       v.openComments ? h('span', { class: 'badge badge-warn', title: 'Open reacties van de klant' }, icon('chat'), `${v.openComments} open`) : null,
+      v.delivery ? h('span', { class: `badge ${v.delivery.available ? 'badge-ok' : 'badge-warn'}`, title: v.delivery.available ? 'Definitief vrijgegeven aan de klant' : v.delivery.reasonText }, icon(v.delivery.available ? 'package' : 'lock'), `Opgeleverd v${v.delivery.versionNumber}`) : null,
       h('span', { class: 'small muted', title: formatDate(v.lastActivityAt) }, relativeDate(v.lastActivityAt)),
       mayManage ? menuButton([
         v.archivedAt ? ['Uit archief halen', () => setArchived('video', v.id, v.title, false), { icon: 'refresh' }]
           : ['Archiveren', () => setArchived('video', v.id, v.title, true), { icon: 'history' }],
-        ['Naar prullenbak…', () => moveToTrash('video', v.id, v.title, reload), { icon: 'trash', danger: true }],
+        ['Naar prullenbak…', () => moveToTrash('video', v.id, v.title, reload, { deliveryWarning: v.delivery ? 'Zolang de video in de prullenbak staat, verdwijnt het bestand van de opleverpagina van de klant.' : null }), { icon: 'trash', danger: true }],
       ], `Acties voor ${v.title}`) : null,
       icon('chevronRight')));
 }
@@ -874,6 +886,8 @@ async function viewVideo(id) {
         deliveryMeta(video, may('upload')),
         h('span', { class: 'meta-item' }, h('span', { class: 'muted' }, 'Intern nieuwste: '), `Versie ${latest.number}`),
         h('span', { class: 'meta-item' }, icon('eye'), h('span', { class: 'muted' }, ' Klant ziet: '), clientVersion ? `Versie ${clientVersion.number}` : 'nog niets gedeeld'),
+        video.delivery ? h('a', { class: `meta-item delivery-chip${video.delivery.available ? '' : ' is-blocked'}`, href: `/projecten/${video.project.id}/oplevering`, 'data-nav': true, title: video.delivery.available ? 'Definitief vrijgegeven aan de klant' : video.delivery.reasonText },
+          icon(video.delivery.available ? 'package' : 'lock'), h('span', { class: 'muted' }, ' Opgeleverd: '), `Versie ${video.delivery.versionNumber}`, video.delivery.available ? '' : ' (geblokkeerd)') : null,
         roundIndicator(video),
       ],
       actions: [versionSelect, newVersionBtn,
@@ -1037,10 +1051,22 @@ function publishBar(video, version, latest, clientVersion, refresh, may) {
   } else if (version.status === 'changes_requested') {
     text = [h('strong', {}, 'Feedback ontvangen.'), round ? ` ${round.reviewerName}${round.verified ? ' (akkoordgever)' : ''} verstuurde ${plural(round.commentCount, 'reactie', 'reacties')} op ${formatDate(round.at)}.` : '', ' Verwerk de feedback en upload een nieuwe versie.'];
     actions = may('upload') ? [button('Nieuwe versie uploaden', { icon: 'layers', variant: 'primary', onClick: () => newVersionDialog(video) })] : [];
-  } else if (version.status === 'approved') {
-    text = version.approval
-      ? [h('strong', {}, `Goedgekeurd door ${version.approval.name}`), ` op ${formatDate(version.approval.at)}. Deze goedkeuring geldt alleen voor Versie ${version.number}.`]
-      : [h('strong', {}, 'Handmatig op Goedgekeurd gezet.'), ' Er is geen klantgoedkeuring vastgelegd voor deze versie.'];
+  }
+  if (version.status === 'approved') {
+    const delivered = video.delivery?.versionId === version.id;
+    text = version.releasable
+      ? [h('strong', {}, `Goedgekeurd door ${version.approval.name}`), ` op ${formatDate(version.approval.at)}. Deze goedkeuring geldt alleen voor Versie ${version.number}.`,
+        delivered ? (video.delivery.available ? ' Deze versie is definitief opgeleverd.' : ' De oplevering is geblokkeerd.') : ' Nog niet definitief vrijgegeven.']
+      : version.approval
+        ? [h('strong', {}, 'Goedkeuring niet meer geldig. '), version.releaseProblem]
+        : [h('strong', {}, 'Handmatig op Goedgekeurd gezet.'), ' Er is geen klantgoedkeuring vastgelegd voor deze versie, dus definitief vrijgeven kan niet.'];
+    actions = version.releasable && may('publish') && !(delivered && video.delivery.available)
+      ? [h('a', { class: 'btn btn-primary', href: `/projecten/${video.project.id}/oplevering?vrijgeven=${version.id}`, 'data-nav': true }, icon('package'), h('span', { class: 'btn-label' }, delivered ? 'Opnieuw vrijgeven…' : 'Definitief vrijgeven…'))]
+      : delivered ? [h('a', { class: 'btn btn-secondary', href: `/projecten/${video.project.id}/oplevering`, 'data-nav': true }, icon('package'), h('span', { class: 'btn-label' }, 'Naar oplevering'))] : [];
+    if (!isLatest) {
+      text = [h('span', {}, `Oudere versie (intern nieuwste: Versie ${latest.number}). `), ...text];
+      actions.push(button(`Naar Versie ${latest.number}`, { icon: 'arrowLeft', onClick: () => navigate(`/video/${video.id}`) }));
+    }
   }
   const correct = may('manage') ? h('button', { type: 'button', class: 'link-btn', onClick: () => statusDialog(version, refresh) }, icon('edit'), 'Status corrigeren') : null;
   return h('section', { class: `publish-bar is-${version.status}${isLatest ? '' : ' is-old'}`, 'aria-label': 'Status en volgende stap' },
@@ -1202,12 +1228,14 @@ function moreMenu(video, version, { level, archived }) {
     ['Feedback exporteren…', () => exportDialog({ projectId: video.project.id, videos: [{ id: video.id, title: video.title }] }), { icon: 'fileDown' }]];
   if (can(level, 'manage')) {
     if (video.versions.length > 1) {
-      items.push([`Versie ${version.number} naar prullenbak…`, () => moveToTrash('version', version.id, `${video.title} · versie ${version.number}`, () => navigate(`/video/${video.id}`)), { icon: 'layers', danger: true }]);
+      items.push([`Versie ${version.number} naar prullenbak…`, () => moveToTrash('version', version.id, `${video.title} · versie ${version.number}`, () => navigate(`/video/${video.id}`),
+        { deliveryWarning: video.delivery?.versionId === version.id ? 'Zolang deze versie in de prullenbak staat, kan de klant het bestand niet downloaden.' : null }), { icon: 'layers', danger: true }]);
     }
     items.push(archived
       ? ['Video uit archief halen', () => setArchived('video', video.id, video.title, false), { icon: 'refresh' }]
       : ['Video archiveren', () => setArchived('video', video.id, video.title, true), { icon: 'history' }]);
-    items.push(['Video naar prullenbak…', () => moveToTrash('video', video.id, video.title, back), { icon: 'trash', danger: true }]);
+    items.push(['Video naar prullenbak…', () => moveToTrash('video', video.id, video.title, back,
+      { deliveryWarning: video.delivery ? 'Zolang de video in de prullenbak staat, verdwijnt het bestand van de opleverpagina van de klant.' : null }), { icon: 'trash', danger: true }]);
   }
   return menuButton(items, 'Meer acties');
 }
@@ -1219,7 +1247,8 @@ function versionsList(video, current) {
       h('span', { class: 'version-info' },
         h('span', { class: 'version-tags' }, statusPill(v.status, { small: true }),
           v.isLatest ? h('span', { class: 'badge badge-neutral' }, 'Nieuwste') : null,
-          v.isClientVersion ? h('span', { class: 'badge badge-accent' }, icon('eye'), 'Klant ziet deze') : null),
+          v.isClientVersion ? h('span', { class: 'badge badge-accent' }, icon('eye'), 'Klant ziet deze') : null,
+          video.delivery?.versionId === v.id ? h('span', { class: `badge ${video.delivery.available ? 'badge-ok' : 'badge-warn'}` }, icon('package'), video.delivery.available ? 'Opgeleverd' : 'Oplevering geblokkeerd') : null),
         h('span', { class: 'small muted' }, `Geüpload ${formatDate(v.createdAt)}`),
         h('span', { class: 'small muted' }, v.sharedAt ? `Gedeeld ${formatDate(v.sharedAt)}${v.roundNumber ? ` · ronde ${v.roundNumber}` : ''}` : 'Niet gedeeld', ' · ', plural(v.commentCount, 'reactie', 'reacties'),
           v.openComments ? ` (${v.openComments} open)` : ''),

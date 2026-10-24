@@ -121,6 +121,10 @@ function render() {
     duration: version.duration,
   });
   state.player = player;
+  // Klantactiviteit: alleen de eerste keer afspelen per versie op deze pagina (niet in het teamvoorbeeld).
+  if (!preview) {
+    player.video.addEventListener('play', () => reportPlayback(version.id), { once: true });
+  }
   player.onMarkerClick((id) => { selectComment(id, true); showDrawing(state.comments.find((c) => c.id === id)); });
 
   // ---- Kop: welke video en versie bekijk ik? ----
@@ -236,6 +240,15 @@ function render() {
         commentsEl)),
     canAct() ? actionsEl : null);
   drawComments();
+}
+
+const reportedPlayback = new Set();
+function reportPlayback(versionId) {
+  if (reportedPlayback.has(versionId)) return;
+  reportedPlayback.add(versionId);
+  const visitorName = isApprover() ? undefined : (store.get('rt-reviewer-name') || undefined);
+  // Eén request-id: een herhaalpoging na een verbindingsfout telt niet dubbel. Mislukt het, dan niets doen.
+  apiWithRetry('POST', `${base}/activity`, { type: 'playback_started', versionId, requestId: newRequestId(), visitorName }).catch(() => {});
 }
 
 function howToCard() {

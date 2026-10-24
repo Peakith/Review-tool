@@ -80,6 +80,13 @@ function render(data) {
       h('div', { class: 'p-group-head' }, h('h2', { id: `group-${g.key}` }, g.title, h('span', { class: 'p-count' }, list.length)), g.text ? h('p', { class: 'small muted' }, g.text) : null),
       h('div', { class: 'p-grid' }, list.map(card))));
   }
+  // Definitieve bestanden staan op een eigen pagina; hier alleen de verwijzing.
+  if (data.delivery) {
+    sections.unshift(h('a', { class: 'p-delivery-card', href: data.delivery.url },
+      h('div', { class: 'brief-icon' }, icon('package')),
+      h('div', {}, h('h2', {}, 'Definitieve bestanden'), h('p', { class: 'small muted' }, `${plural(data.delivery.count, 'bestand is', 'bestanden zijn')} definitief vrijgegeven en klaar om te downloaden.`)),
+      h('span', { class: 'btn btn-sm btn-primary' }, icon('download'), h('span', { class: 'btn-label' }, 'Naar de oplevering'))));
+  }
   if (data.briefing.length) sections.push(briefingSection(data.briefing));
 
   mount(root,

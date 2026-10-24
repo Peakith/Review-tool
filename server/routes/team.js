@@ -8,6 +8,7 @@ const { intParam } = require('../access');
 const { syncTaskFromComment } = require('./tasks');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { KINDS, ASPECTS, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions } = require('../client');
+const { activeDeliveryOf, deliveryState, validApproval, releaseProblem, REASON_TEAM } = require('../deliveries');
 
 // Media voor het team: wel cachen, maar bij elk gebruik opnieuw laten controleren, zodat
 // een item in de prullenbak of ingetrokken toegang direct effect heeft.
@@ -63,7 +64,17 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       posterVersionId: poster?.id || null,
       openComments: shared ? openClientComments(shared.id) : 0,
       rounds: { count: roundCount(v.id), included: roundsIncluded(v) },
+      delivery: deliverySummaryOf(v),
     };
+  }
+
+  /** De actieve definitieve oplevering van een video (exacte versie en of hij te downloaden is). */
+  function deliverySummaryOf(v) {
+    const d = activeDeliveryOf(db, v.id);
+    if (!d) return null;
+    const ver = db.prepare('SELECT number FROM versions WHERE id = ?').get(d.version_id);
+    const state = deliveryState(db, d);
+    return { id: d.id, versionId: d.version_id, versionNumber: ver.number, releasedAt: d.released_at, available: state.available, reason: state.reason, reasonText: state.reason ? REASON_TEAM[state.reason] : null };
   }
 
   // ---------- Projecten ----------
@@ -152,6 +163,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       briefingCount: db.prepare('SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ? AND trashed_at IS NULL').get(p.id).n,
       sharedBriefingCount: db.prepare("SELECT COUNT(*) AS n FROM briefing_items WHERE project_id = ? AND trashed_at IS NULL AND visibility = 'client'").get(p.id).n,
       portalLinkActive: !!activePortalLink(p.id),
+      deliveryCount: db.prepare('SELECT COUNT(*) AS n FROM deliveries d JOIN videos v ON v.id = d.video_id WHERE d.project_id = ? AND d.withdrawn_at IS NULL AND v.trashed_at IS NULL').get(p.id).n,
       // Nog af te handelen feedback (zelfde regels als het overzicht "Feedback & taken").
       openFeedback: db.prepare(`SELECT COUNT(*) AS n FROM comments c JOIN versions ver ON ver.id = c.version_id JOIN videos v ON v.id = ver.video_id
         LEFT JOIN comment_tasks t ON t.comment_id = c.id
@@ -249,6 +261,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
       unroundedSharedVersions: versions.filter((x) => x.shared_at && !x.round_id).map((x) => x.number).sort((a, b) => a - b),
       // De versie die klanten via hun link zien (nieuwste gedeelde), los van de interne nieuwste.
       clientVersionId: shared?.id || null,
+      delivery: deliverySummaryOf(v),
       versions: versions.map((ver, i) => ({
         ...versionDto(ver),
         roundId: ver.round_id,
@@ -260,6 +273,9 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
         file: versionFileDto(ver),
         events: eventDtos(db, ver.id),
         approval: approvalDto(db, ver.id),
+        // Kan deze versie definitief worden vrijgegeven (echte, nog geldige klantgoedkeuring)?
+        releasable: !!validApproval(db, ver),
+        releaseProblem: ver.status === 'approved' ? releaseProblem(db, ver) : null,
         rounds: roundDtos(db, ver.id),
         commentCount: db.prepare('SELECT COUNT(*) AS n FROM comments WHERE version_id = ?').get(ver.id).n,
       })),
@@ -611,6 +627,7 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
         posterUrl: (v, ver) => `/api/versions/${ver.id}/poster`,
         fileUrl: (b) => `/api/briefing/${b.id}/file`,
       }),
+      delivery: require('./portal').deliverySummary(db, p, `/voorbeeld/oplevering/${p.id}`),
       preview: { projectId: p.id, portalLinkActive: !!activePortalLink(p.id) },
     });
   });

@@ -57,7 +57,7 @@ brew install node ffmpeg
 
 | Wat | Standaardlocatie | Bij een update |
 |---|---|---|
-| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.4.0` | vervangen |
+| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.5.0` | vervangen |
 | Gegevens (database met accounts, projecten, reacties, links en rechten; video's in `media/`) | `~/Studio Review/gegevens` | blijft staan |
 | Back-ups | `~/Studio Review/backups` | blijft staan |
 | Instellingen | `~/Studio Review/instellingen.env` | blijft staan |
@@ -243,19 +243,98 @@ brew install node ffmpeg
   - zet je ze aan, dan wordt de export op elke pagina en in de bestandsnaam als **INTERN** gemarkeerd.
 - **Klanten** kunnen via hun link en het portaal ook downloaden, maar krijgen nooit interne gegevens, ook niet via aangepaste verzoeken.
 
+## Definitieve opleveringen en klantactiviteit
+
+**Publiceren en vrijgeven zijn twee verschillende acties**
+- *Publiceren* zet een versie klaar voor review (zoals voorheen).
+- *Definitief vrijgeven* maakt een goedgekeurde versie beschikbaar als eindbestand om te downloaden. Dat doe je in het project onder **Oplevering › Bestanden vrijgeven…**, of vanuit de werkplek met **Definitief vrijgeven…** bij een goedgekeurde versie.
+- Vrijgeven gaat in twee stappen:
+  1. per video kies je de exacte versie;
+  2. je ziet een overzicht van wat de klant krijgt (bestandsnaam, formaat, grootte, wie goedkeurde) en bevestigt.
+
+**Wanneer telt een goedkeuring?**
+- Alleen als de akkoordgever precies deze versie heeft goedgekeurd via de persoonlijke akkoordlink, en de versie nog op Goedgekeurd staat.
+- Een handmatig op “Goedgekeurd” gezette status **zonder** klantgoedkeuring telt niet. Het venster legt uit waarom.
+- Wordt de status na de goedkeuring handmatig gecorrigeerd (bijvoorbeeld naar “Aanpassingen nodig”), dan geldt de goedkeuring als **ingetrokken**:
+  - een bestaande oplevering van die versie wordt **geblokkeerd** (geen nieuwe downloads; de klant ziet “tijdelijk niet beschikbaar”);
+  - de status handmatig terugzetten op Goedgekeurd herstelt dat **niet**;
+  - nodig is: status op “In review” → de akkoordgever keurt opnieuw goed → het team geeft opnieuw bewust vrij.
+
+**Een oplevering verwijst blijvend naar één versie**
+- Er wordt geen kopie gemaakt: de download is het bestaande bestand van die versie. Ook back-ups bevatten het bestand maar één keer.
+- Een nieuwe upload, een nieuwe reviewversie of een nieuw concept verandert de oplevering niet en blokkeert hem ook niet.
+- Het team ziet wél wanneer er een nieuwere interne of gepubliceerde versie bestaat dan de opgeleverde.
+- **Vervangen** (een andere goedgekeurde versie vrijgeven) vraagt een expliciete bevestiging. De oude oplevering is daarna niet meer te downloaden.
+- **Terugnemen** vraagt een bevestiging en een reden. Het bestand verdwijnt dan van de opleverpagina; versie, goedkeuring en status blijven ongewijzigd.
+- Vrijgaven, vervangingen, terugnames en opleverlinks staan in de **oplevergeschiedenis**, met wie en wanneer.
+
+**De opleverpagina voor de klant**
+- Bovenaan: projectnaam, merk en een korte oplevertekst (in te vullen onder **Oplevering**).
+- Per bestand:
+  - thumbnail en titel;
+  - type, beeldverhouding en kanaal (waar ingevuld);
+  - bestandsformaat, grootte en resolutie;
+  - versienummer en datum van vrijgave;
+  - een downloadknop.
+- De download heeft de zichtbare titel en de echte extensie, bijvoorbeeld `Zomerlijn — Hoofdfilm - v2.mp4`. Het bestand wordt gestreamd (ook grote bestanden komen niet in één keer in het geheugen) en ondersteunt hervatten.
+- Bereikbaar op drie manieren:
+  - een **afzonderlijke opleverlink** (`/o/…`), die je maakt, vervangt of intrekt onder **Oplevering**. Deze link geeft **alleen** toegang tot de vrijgegeven bestanden van dit project: geen reviewpagina’s, concepten, feedback of andere projecten;
+  - via het **klantportaal**: de kaart “Definitieve bestanden” verschijnt zodra er iets is vrijgegeven;
+  - als alleen-lezen **klantweergave** voor het team (downloaden staat daar uit).
+- Intrekken of vervangen van de opleverlink blokkeert direct ook rechtstreekse downloadverzoeken via die link. Het venster toont welke andere links (klantportaal, reviewlinks met download, akkoordlinks) volgens hun eigen rechten toegang houden.
+- **Archief:** opleveringen blijven te downloaden, maar nieuw vrijgeven kan niet.
+- **Prullenbak:**
+  - een video of versie in de prullenbak is niet te downloaden;
+  - een project in de prullenbak sluit de opleverlink af;
+  - terugzetten brengt de toegang terug, maar activeert een ingetrokken link nooit opnieuw;
+  - het venster voor definitief verwijderen waarschuwt als bestanden deel uitmaken van een oplevering.
+- **Back-up terugzetten** zet alles terug zoals het op het moment van die back-up was, dus ook opleverlinks die toen nog actief waren. Trek zo nodig na een herstel de opleverlink opnieuw in of vervang hem.
+
+**Klantactiviteit** (tab **Klantactiviteit** in het project, voor wie mag publiceren en delen)
+- Gebeurtenissen:
+  - klantportaal geopend;
+  - reviewpagina geopend;
+  - afspelen gestart;
+  - opleverpagina geopend;
+  - download aangevraagd.
+- Per regel: datum en tijd, video en exacte versie (waar van toepassing) en via welke link. Filters op gebeurtenis en video.
+- De labels beschrijven alleen wat is waargenomen:
+  - “Afspelen gestart” betekent niet “volledig bekeken”;
+  - “Download aangevraagd” betekent niet “opgeslagen”;
+  - “Via akkoordlink van Joris” zegt welke link is gebruikt, niet wie er keek;
+  - een naam die een bezoeker zelf intypte, staat er als “opgegeven naam, niet geverifieerd”.
+- Wat niet meetelt:
+  - thumbnails, videodeelverzoeken, voorladen en vervolgdelen van een download;
+  - de klantweergave van het team en ingelogde teamleden die een klantlink openen;
+  - herhalingen: hetzelfde signaal via dezelfde link telt één keer per 30 minuten (downloads: per 5 minuten), en een herhaald verzoek wordt herkend.
+- De server controleert bij elk signaal of de link toegang heeft tot de genoemde video en versie. Een bezoeker kan dus geen activiteit voor een ander project registreren.
+- Wat niet wordt bewaard:
+  - er is geen externe trackingdienst;
+  - de app bewaart geen tokens, IP-adressen of apparaatkenmerken.
+- Activiteit verandert nooit een status, taak of goedkeuring. Feedback en goedkeuringen blijven in de geschiedenis per versie staan.
+- **Bewaartermijn:** standaard 90 dagen. Een beheerder stelt die in onder **Opslag & back-ups** (7–730 dagen). Oudere activiteit wordt automatisch opgeruimd bij het starten en elk uur. Goedkeuringen, feedback, statuscorrecties en oplevergeschiedenis worden daarbij nooit verwijderd.
+
+**Volledig scherm op iPhone**
+- Op iPhone opent volledig scherm de ingebouwde speler van iOS. Daarin kunnen geen tekeningen worden getoond.
+- Heeft de video tekeningen, dan krijg je bij de knop **Volledig scherm** eerst een korte uitleg en een keuze:
+  - **Groot in de pagina (met tekeningen):** de speler vult het venster, mét tekeningen; sluiten met dezelfde knop of Esc;
+  - **Schermvullend zonder tekeningen.**
+- Zonder tekeningen gaat de iPhone direct naar de ingebouwde schermvullende weergave, zoals voorheen.
+- Dit is getest met een nagebootste iPhone-omgeving in Chrome, **niet op een echte iPhone**.
+
 ## Rechten per project
 
 Er zijn twee soorten accounts:
-- **Beheerders** zien alles. Zij beheren teamleden, opslag, back-ups en definitief verwijderen. Er blijft altijd minstens één actieve beheerder.
+- **Beheerders** zien alles. Zij beheren teamleden, opslag, back-ups, de bewaartermijn van klantactiviteit en definitief verwijderen. Er blijft altijd minstens één actieve beheerder.
 - **Teamleden** (bijvoorbeeld freelancers) zien alleen de projecten waar ze toegang toe hebben.
 
 Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige:
 
 | Niveau | Mag |
 |---|---|
-| Bekijken en reageren | afspelen, downloaden, reageren (ook tekenen/bereik), reacties afhandelen, taken zien en de eigen taakstatus wijzigen, vergelijken, exporteren, briefing lezen, klantweergave bekijken |
+| Bekijken en reageren | afspelen, downloaden, reageren (ook tekenen/bereik), reacties afhandelen, taken zien en de eigen taakstatus wijzigen, vergelijken, exporteren, briefing lezen, klantweergave bekijken, opleveringen bekijken (zonder links) |
 | Uploaden | + nieuwe video's en versies, (interne) briefingonderdelen, titels en opleveringsgegevens wijzigen, klaarzetten, feedbacktaken maken en toewijzen |
-| Publiceren en delen | + publiceren naar de klant (met keuze van de reviewronde), rondes wijzigen, reviewlinks, klantportaal (projectlink), akkoordgever, briefing delen met de klant |
+| Publiceren en delen | + publiceren naar de klant (met keuze van de reviewronde), rondes wijzigen, reviewlinks, klantportaal (projectlink), akkoordgever, briefing delen met de klant, definitief vrijgeven, vervangen en terugnemen, opleverlink en oplevertekst, klantactiviteit bekijken |
 | Beheren | + project bewerken, status corrigeren, archiveren, naar de prullenbak |
 
 - De server controleert dit bij elke aanvraag, ook voor videobestanden, thumbnails, reacties en uploads.
@@ -264,7 +343,7 @@ Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige
 - Klantlinks en de akkoordgever werken los van accounts, net als voorheen.
 
 ## Versie en cache
-- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.4.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
+- Het versienummer staat onderin de zijbalk en onder **Opslag & back-ups**, bijvoorbeeld `0.5.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
   - de versie komt uit `package.json`;
   - de build is een vingerafdruk van de interfacebestanden.
 - Na een update is gewoon verversen genoeg. De pagina zelf wordt altijd gecontroleerd, en alle scripts en stijlen (ook geïmporteerde modules) komen van een adres per build.
@@ -341,14 +420,15 @@ Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan
 ### Tests
 Alle tests gebruiken eigen, tijdelijke mappen en raken je echte gegevens in `~/Studio Review` niet aan.
 ```bash
-npm test                                                   # 95 servertests (vereist ffmpeg)
+npm test                                                   # 110 servertests (vereist ffmpeg)
 CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (51 controles)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rechten, opslag, back-ups, prullenbak, archief (23)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal, merk, opleveringen, briefing, desktop + mobiel (51)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:feedback # taken, rondes, tekenen, bereik, vergelijken, export, desktop + mobiel (50)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:oplevering # opleveringen, klantactiviteit, iPhone-uitleg (nagebootst), desktop + mobiel (49)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:update   # update met de vorige interface in de browsercache (7)
 npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (13)
-npm run test:upgrade                                       # bijwerken vanaf 0.3.0 met echte gegevens + oude back-up terugzetten (20)
+npm run test:upgrade                                       # bijwerken vanaf 0.4.0 met echte gegevens + oude back-up terugzetten (26)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;
@@ -365,6 +445,8 @@ npm run test:upgrade                                       # bijwerken vanaf 0.3
   - tekeningen en tijdsbereiken: grenzen en vormen op de server, afscherming van interne tekeningen;
   - export: CSV (bijzondere tekens, meerdere regels, formules), PDF-inhoud, interne markering, klantafscherming, rechten;
   - back-up en herstel van taken, rondes, bereiken en tekeningen;
+  - opleveringen: alleen echte klantgoedkeuring, handmatig label en ingetrokken goedkeuring geweigerd, nieuwe concepten raken de oplevering niet, vervangen en terugnemen, opleverlink intrekken en vervangen (ook directe downloads), toegang via verschillende links, archief, prullenbak, definitief-verwijderen-overzicht, downloadnaam en identieke inhoud, back-up en herstel;
+  - klantactiviteit: geen dubbele of technische gebeurtenissen, geen activiteit van het team, afscherming tussen projecten, geen tokens of IP-adressen, opruimen zonder verlies van formele geschiedenis;
   - de start- en stopknop: overnemen van een vorige installatie, een tweede klik, een vreemd programma op de poort en een andere installatie op de poort.
 - De browsertests maken zelf H.264/AAC-MP4's. Ze hebben een Chrome **met H.264** nodig, zoals Google Chrome of [Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/). De Chromium van Playwright speelt geen H.264 af.
 - `test:browser:update`, `test:update-zip` en `test:upgrade` vragen een Git-checkout, omdat ze de vorige versie uit de geschiedenis halen.

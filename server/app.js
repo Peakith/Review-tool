@@ -16,6 +16,9 @@ const { briefingRoutes } = require('./routes/briefing');
 const { brandRoutes, brandLogoRoute } = require('./routes/brands');
 const { taskRoutes, reconcileAssignees } = require('./routes/tasks');
 const { exportRoutes } = require('./routes/exports');
+const { deliveryClientRoutes, deliveryTeamRoutes } = require('./routes/deliveries');
+const { activityRoutes, activityClientRoutes } = require('./routes/activity');
+const { purgeOldActivity } = require('./activity');
 const { FORMATS, toolStatus } = require('./media');
 const { createLocalStorage } = require('./storage');
 const { createAccess } = require('./access');
@@ -159,6 +162,8 @@ function createApp(overrides = {}) {
   portalRoutes(api, db, config, { storage });
   brandLogoRoute(api, db, config, { storage });
   exportRoutes(api, db, config, { storage, mode: 'client' });
+  deliveryClientRoutes(api, db, config, { storage });
+  activityClientRoutes(api, db, config);
 
   // ---------- Team (inloggen verplicht) ----------
   const team = asyncRouter();
@@ -170,11 +175,22 @@ function createApp(overrides = {}) {
   brandRoutes(team, db, config, { access, storage });
   taskRoutes(team, db, config, { access });
   exportRoutes(team, db, config, { access, storage, mode: 'team' });
+  deliveryTeamRoutes(team, db, config, { access, storage });
+  activityRoutes(team, db, config, { access });
   // Taken van wie inmiddels geen toegang meer heeft, losmaken (ook bij het starten).
   reconcileAssignees(db, access);
 
+  // Oude passieve klantactiviteit opruimen (nooit goedkeuringen, feedback of oplevergeschiedenis).
+  const cleanupActivity = () => {
+    try {
+      const n = purgeOldActivity(db);
+      if (n) console.log(`Opruimen: ${n} oude klantactiviteit(en) verwijderd (bewaartermijn verstreken)`);
+    } catch (err) { console.error('Opruimen van klantactiviteit mislukt:', err); }
+  };
+  cleanupActivity();
   const runCleanup = () => uploads.cleanupExpired().then((r) => {
     if (r.removed || r.orphans) console.log(`Opruimen: ${r.removed} verlopen upload(s) en ${r.orphans} los(se) bestand(en) verwijderd`);
+    cleanupActivity();
   }).catch((err) => console.error('Opruimen van uploads mislukt:', err));
   const cleanupTimer = setInterval(runCleanup, config.cleanupIntervalMinutes * 60_000);
   cleanupTimer.unref();
@@ -219,6 +235,8 @@ function createApp(overrides = {}) {
   app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
   app.get('/r/:token', sendPage('review/index.html'));
   app.get('/p/:token', sendPage('review/portal.html'));
+  // Definitieve opleveringen: via de opleverlink, via het klantportaal en als teamvoorbeeld.
+  app.get(['/o/:token', '/p/:token/oplevering', '/voorbeeld/oplevering/:id'], sendPage('review/delivery.html'));
   // Voorbeeldweergave voor het team: dezelfde klantpagina's, gevuld via het teamaccount.
   app.get('/voorbeeld/project/:id', sendPage('review/portal.html'));
   app.get('/voorbeeld/video/:id', sendPage('review/index.html'));
@@ -232,7 +250,7 @@ function createApp(overrides = {}) {
     if (res.headersSent) return res.end();
     const message = err.type === 'entity.too.large' ? 'Het bestand is te groot.'
       : status >= 500 && !expected ? 'Er ging iets mis op de server' : err.message;
-    if (req.path.startsWith('/api')) res.status(status).json({ error: message });
+    if (req.path.startsWith('/api')) res.status(status).json({ error: message, ...(expected && err.details ? { details: err.details } : {}) });
     else res.status(status).send(message);
   });
 

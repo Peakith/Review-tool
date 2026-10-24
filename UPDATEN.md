@@ -5,6 +5,25 @@ Vanaf versie 0.2.0 staan programma en gegevens los van elkaar:
 - **Programma**: de uitgepakte map. Bij elke update komt er een nieuwe.
 - **Gegevens**: `~/Studio Review/` met daarin `gegevens/`, `backups/` en `instellingen.env`. Deze map blijft gewoon staan.
 
+## Van 0.4.0 naar 0.5.0 (bouwronde 4: definitieve opleveringen en klantactiviteit)
+
+Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` blijven staan.
+
+1. **Maak eerst een back-up:** **Opslag & back-ups › Nu back-up maken**. Wacht tot er “compleet en gecontroleerd” staat.
+2. **Stop de app:** dubbelklik `Stop Studio Review.command`.
+3. **Pak de nieuwe ZIP uit** in een nieuwe map (laat de oude map nog even staan).
+4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.** Er zijn geen nieuwe onderdelen nodig; internet is niet nodig.
+5. **Ververs een openstaand tabblad.** Onderin de zijbalk staat dan **Studio Review 0.5.0**.
+6. Open een project: er zijn twee nieuwe tabbladen, **Oplevering** en **Klantactiviteit**.
+
+**Goed om te weten na deze update**
+- Er wordt niets automatisch vrijgegeven. Bestaande goedkeuringen door de akkoordgever tellen wel: die versies kun je meteen bewust vrijgeven.
+- Versies die alleen handmatig op Goedgekeurd zijn gezet, kunnen niet worden vrijgegeven; daarvoor is een goedkeuring via de akkoordlink nodig.
+- Klantactiviteit wordt pas vanaf deze versie bijgehouden; er is geen activiteit van vóór de update.
+- Bestaande links, reacties, rondes, taken, exports en het klantportaal werken ongewijzigd.
+
+**Terug naar 0.4.0?** Stop de app, zet in de oude map de back-up van stap 1 terug met `npm run herstel`, en start de oude versie. Zonder herstel start 0.4.0 ook; die toont dan geen opleveringen en activiteit.
+
 ## Van 0.3.0 naar 0.4.0 (bouwronde 3: taken, rondes, tekenen, vergelijken, export)
 
 Hetzelfde als de vorige keer: alleen een nieuwe programmamap. Je gegevens in `~/Studio Review` blijven staan.

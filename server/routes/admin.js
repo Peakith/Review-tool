@@ -203,8 +203,23 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     const id = intParam(req.params.id);
     trashItem(req, type, id);
     const files = await filesOf(type, id);
-    res.json({ type, id, files, fileCount: files.length, totalBytes: sumBytes(files), ...relatedCounts(type, id) });
+    const deliveries = deliveriesFor(type, id);
+    // Bestanden die (actief) zijn opgeleverd, apart markeren in het overzicht.
+    const delivered = new Set(deliveries.filter((d) => d.active).map((d) => d.storedName));
+    for (const f of files) if (delivered.has(f.key)) f.inDelivery = true;
+    res.json({ type, id, files, fileCount: files.length, totalBytes: sumBytes(files), ...relatedCounts(type, id),
+      deliveries: deliveries.map(({ storedName, ...d }) => d) });
   });
+
+  /** Opleveringen (actief en eerder) die bij definitief verwijderen mee verdwijnen. */
+  function deliveriesFor(type, id) {
+    if (type === 'briefing') return [];
+    const where = { project: 'd.project_id = ?', video: 'd.video_id = ?', version: 'd.version_id = ?' }[type];
+    return db.prepare(`SELECT d.*, v.title, ver.number, ver.stored_name FROM deliveries d JOIN videos v ON v.id = d.video_id JOIN versions ver ON ver.id = d.version_id
+      WHERE ${where} ORDER BY d.released_at DESC`).all(id).map((d) => ({
+      title: d.title, versionNumber: d.number, releasedAt: d.released_at, active: !d.withdrawn_at, storedName: d.stored_name,
+    }));
+  }
 
   function relatedCounts(type, id) {
     if (type === 'briefing') return { versions: 0, comments: 0, links: 0, briefing: 1 };

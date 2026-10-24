@@ -195,7 +195,7 @@ async function viewMyAccount(ctx) {
 
 export async function viewStorage(ctx) {
   document.title = 'Opslag & back-ups — Studio Review';
-  const [report, backups, system] = await Promise.all([api('GET', '/api/storage'), api('GET', '/api/backups'), api('GET', '/api/system')]);
+  const [report, backups, system, activity] = await Promise.all([api('GET', '/api/storage'), api('GET', '/api/backups'), api('GET', '/api/system'), api('GET', '/api/settings/activity')]);
   const t = report.totals;
   const tile = (label, bytes, hint, cls = '') => h('div', { class: `stat-tile ${cls}` }, h('span', { class: 'stat-label' }, label), h('strong', {}, formatBytes(bytes)), hint ? h('span', { class: 'small muted' }, hint) : null);
 
@@ -255,7 +255,26 @@ export async function viewStorage(ctx) {
             p.archived ? h('span', { class: 'badge badge-neutral' }, 'Archief') : null, p.trashed ? h('span', { class: 'badge badge-warn' }, 'Prullenbak') : null),
           h('td', { class: 'num' }, p.versions),
           ...[p.active, p.oldVersions, p.attachments, p.archivedBytes, p.trash, p.total].map((b, i) => h('td', { class: `num${i === 5 ? ' strong' : ''}` }, b ? formatBytes(b) : '–')))))))),
-    backupCard));
+    backupCard,
+    activityCard(activity)));
+}
+
+/** Bewaartermijn van passieve klantactiviteit (standaard 90 dagen). */
+function activityCard(st) {
+  const input = h('input', { type: 'number', min: String(st.range[0]), max: String(st.range[1]), step: '1', inputmode: 'numeric', value: String(st.retentionDays), class: 'input-narrow', 'aria-label': 'Bewaartermijn in dagen' });
+  const save = button('Opslaan', { size: 'sm', onClick: async (e) => {
+    const restore = busy(e.currentTarget);
+    try {
+      const r = await api('PUT', '/api/settings/activity', { retentionDays: Number(input.value) });
+      toast(`Bewaartermijn: ${plural(r.retentionDays, 'dag', 'dagen')}.${r.removed ? ` ${r.removed} oudere gebeurtenis(sen) opgeruimd.` : ''}`, 'success');
+    } catch (err) { toast(err.message, 'error'); input.focus(); }
+    restore();
+  } });
+  return h('section', { class: 'card' },
+    h('h2', { class: 'card-title' }, 'Klantactiviteit bewaren'),
+    h('p', { class: 'small muted' }, 'Passieve signalen (portaal of pagina geopend, afspelen gestart, download aangevraagd) worden na deze termijn automatisch verwijderd. Goedkeuringen, feedback, statusgeschiedenis en oplevergeschiedenis blijven altijd bewaard. Er worden geen IP-adressen of apparaatgegevens opgeslagen.'),
+    h('div', { class: 'share-form share-form-row' }, h('label', { class: 'field-inline' }, input, h('span', {}, 'dagen')), save,
+      h('span', { class: 'small muted' }, `Nu ${plural(st.total, 'gebeurtenis', 'gebeurtenissen')} bewaard · standaard ${st.defaultDays} dagen`)));
 }
 
 function backupsCard(ctx, data) {
@@ -362,10 +381,16 @@ async function purgeDialog(ctx, item) {
         h('div', {}, h('strong', {}, preview.comments), h('span', { class: 'small muted' }, 'reacties')),
         h('div', {}, h('strong', {}, preview.links), h('span', { class: 'small muted' }, 'links')),
         preview.briefing ? h('div', {}, h('strong', {}, preview.briefing), h('span', { class: 'small muted' }, 'briefingonderdelen')) : null),
+      preview.deliveries?.some((d) => d.active) ? h('div', { class: 'notice notice-warn' }, icon('package'),
+        h('div', {}, h('strong', {}, 'Let op: dit is (deels) een definitieve oplevering. '),
+          'Na verwijderen kan de klant deze bestanden niet meer downloaden via de opleverpagina, en verdwijnt de oplevergeschiedenis ervan.',
+          h('ul', { class: 'small' }, preview.deliveries.filter((d) => d.active).map((d) => h('li', {}, `${d.title} · versie ${d.versionNumber} (vrijgegeven ${formatDate(d.releasedAt)})`))))) : null,
+      preview.deliveries?.length && !preview.deliveries.some((d) => d.active) ? h('p', { class: 'small muted' }, icon('package'), ` ${preview.deliveries.length} eerdere (teruggenomen) oplevering(en) verdwijnen uit de oplevergeschiedenis.`) : null,
       h('h3', { class: 'purge-files-title' }, 'Bestanden die verdwijnen'),
       h('ul', { class: 'purge-files' }, preview.files.map((f) => h('li', {},
         icon(f.kind === 'video' ? 'film' : f.kind === 'bijlage' ? 'doc' : 'grid'),
-        h('span', { class: 'truncate' }, f.label, f.originalFilename ? h('span', { class: 'muted' }, ` · ${f.originalFilename}`) : h('span', { class: 'muted' }, ' · thumbnail')),
+        h('span', { class: 'truncate' }, f.label, f.originalFilename ? h('span', { class: 'muted' }, ` · ${f.originalFilename}`) : h('span', { class: 'muted' }, ' · thumbnail'),
+          f.inDelivery ? h('span', { class: 'badge badge-warn' }, icon('package'), 'opgeleverd') : null),
         h('span', { class: 'mono small' }, f.bytes === null ? 'ontbreekt' : formatBytes(f.bytes))))),
       h('label', { class: 'check purge-ack' }, ack, 'Ik begrijp dat dit definitief is'),
     ],

@@ -61,7 +61,7 @@ Deze punten zijn **niet op een echte Mac getest**: de start- en stopknop zijn al
 | # | Doe | Verwacht | ✓ |
 |---|---|---|---|
 | 25 | Dubbelklik `Start Studio Review.command` in de nieuwe map. | macOS vraagt eenmalig om toestemming (zie de README). Daarna opent Terminal, de controles staan op ✓, de vraag om gegevens over te nemen verschijnt, en de browser opent vanzelf. | ☐ |
-| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.4.0 (build …)". | ☐ |
+| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.5.0 (build …)". | ☐ |
 | 27 | Dubbelklik nog eens op de startknop. | Er start niets nieuws; de bestaande sessie opent in de browser. | ☐ |
 | 28 | **Opslag & back-ups › Nu back-up maken.** | De back-up krijgt "compleet en gecontroleerd", met de juiste aantallen en in een map onder `~/Studio Review/backups`. | ☐ |
 | 29 | **Team & rechten** → voeg een freelancer toe met toegang "Bekijken en reageren" tot één project. Log in als freelancer (privévenster). | De freelancer ziet alleen dat project, kan reageren, maar ziet geen upload-, deel- of publiceerknoppen. | ☐ |
@@ -103,6 +103,24 @@ Gebruik een testproject, of een aparte gegevensmap (zie boven). Doe de klantstap
 | 53 | Project → **Exporteren** → PDF, zonder interne gegevens. Open het bestand. | Je ziet het merk, versie, ronde, tijdcodes, antwoorden en de tekening op het videobeeld. Er staat niets interns in. | ☐ |
 | 54 | **Exporteren** → CSV, met “Interne notities en taakgegevens” aan. Open het bestand in Numbers of Excel. | De bestandsnaam eindigt op “INTERN”. €, ë en meerregelige tekst staan goed. Een reactie die met “=” begint, wordt niet uitgerekend. | ☐ |
 | 55 | Geef een collega geen toegang meer tot het project (**Team & rechten**). | Zijn taak staat op “niet toegewezen”, met de uitleg waarom. | ☐ |
+
+## I. Definitieve oplevering en klantactiviteit (bouwronde 4, ± 15 min)
+Gebruik een testproject. Doe de klantstappen in een privévenster (niet ingelogd), liefst in Safari én Chrome. Alles werkt lokaal: de links zijn alleen op je eigen Mac te openen.
+
+| # | Doe | Verwacht | ✓ |
+|---|---|---|---|
+| 56 | Laat de akkoordgever (privévenster, akkoordlink) versie 1 goedkeuren. Team: open de video. | In de statusbalk staat **Definitief vrijgeven…**. | ☐ |
+| 57 | Zet bij een andere video de status handmatig op Goedgekeurd (Status corrigeren). Open **Oplevering › Bestanden vrijgeven…**. | Die video kan niet worden gekozen; de uitleg zegt dat een statuslabel geen klantgoedkeuring vervangt. | ☐ |
+| 58 | Kies versie 1 → **Overzicht bekijken** → **Vrijgeven**. Vul een oplevertekst in en sla op. Maak een **opleverlink**. | Het overzicht toont bestandsnaam, formaat en grootte. De rij staat op “Beschikbaar voor de klant”. | ☐ |
+| 59 | Privévenster: open de opleverlink en klik **Downloaden**. | Merk, oplevertekst, thumbnail, type/kanaal, MP4 + grootte, versie, datum. Het bestand heet “Titel - v1.mp4” en speelt af in QuickTime. | ☐ |
+| 60 | Team: upload een nieuwe versie (concept). | Onder Oplevering staat “Er is een nieuwere versie…”. De klant ziet en downloadt nog steeds versie 1. | ☐ |
+| 61 | Publiceer v2, laat hem goedkeuren, en klik bij de oplevering **Vervangen…**. Probeer eerst zonder het vinkje. | Zonder vinkje gebeurt niets. Met vinkje ziet de klant versie 2; de geschiedenis toont “vervangen”. | ☐ |
+| 62 | Corrigeer de status van v2 naar “Aanpassingen nodig”. Ververs de opleverpagina van de klant. | Team: “Geblokkeerd”. Klant: “Tijdelijk niet beschikbaar”, geen downloadknop. | ☐ |
+| 63 | **Terugnemen…** met een reden. Daarna de opleverlink **Intrekken…**. | Het intrekvenster noemt welke andere links nog toegang geven. De klant ziet eerst een lege pagina, daarna “Deze link werkt niet meer”. | ☐ |
+| 64 | Open het klantportaal (projectlink) in het privévenster. | Na een nieuwe vrijgave staat bovenaan de kaart “Definitieve bestanden”. | ☐ |
+| 65 | Team: tab **Klantactiviteit**. Filter op “Download aangevraagd” en op een video. | Je ziet je eigen klantstappen met tijd, video, versie en “Via opleverlink” / “Via akkoordlink van …”. Je eigen bezoeken als ingelogd teamlid staan er niet bij. | ☐ |
+| 66 | **Opslag & back-ups** → Klantactiviteit bewaren: zet 30 dagen en sla op. | Opgeslagen. Goedkeuringen en geschiedenis blijven staan. | ☐ |
+| 67 | Op een iPhone (alleen met een bereikbaar adres): open een video met een tekening en tik op volledig scherm. | Een korte uitleg met **Groot in de pagina (met tekeningen)**. Daarin staat de tekening op de juiste plek. *Nog niet op een echte iPhone getest.* | ☐ |
 
 ## Handmatige browsertestlijst
 Automatisch getest (`npm run test:browser`, zie de PR): **Chrome 141 desktop (Linux, headless)** en **Chrome 141 met Pixel 7-emulatie**. Al het andere moet nog met de hand. Voer per browser minstens stappen 8–11, 13, 19–20 en 7 uit.

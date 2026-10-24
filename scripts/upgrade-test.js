@@ -1,4 +1,4 @@
-// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard 347b857 = 0.3.0, bouwronde 2) met echte gegevens.
+// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard a0d99e8 = 0.4.0, bouwronde 3) met echte gegevens.
 //  1. vorige versie (zonder .git) maakt account, project, video met twee versies, reviewlink, klantreactie,
 //     feedback, teamnotitie en -antwoord, akkoordlink en goedkeuring, en een back-up;
 //  2. de nieuwe code start op dezelfde gegevens: alles werkt nog, teamnotities zijn intern, antwoorden aan
@@ -12,7 +12,7 @@ const path = require('path');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
 const REPO = path.resolve(__dirname, '..');
-const OLD_REV = process.argv[2] || '347b857';
+const OLD_REV = process.argv[2] || 'a0d99e8';
 const { client, upload, makeVideo, rid } = require(path.join(REPO, 'test/helpers'));
 const { restoreBackup, listBackups } = require(path.join(REPO, 'server/backup'));
 
@@ -89,16 +89,30 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   const portal = (await client(base).get(new URL(link.url).pathname.replace('/p/', '/api/portal/'))).data;
   ok('klantportaal voor bestaand project', portal.videos.length === 1 && portal.videos[0].version.status === 'approved' && portal.videos[0].version.number === 2);
   // Bouwronde 3 op bestaande gegevens: geen verzonnen rondes, taken en export werken.
-  ok('geen verzonnen reviewrondes voor eerder gedeelde versies', video.rounds?.length === 0 && JSON.stringify(video.unroundedSharedVersions) === '[1,2]');
+  // Vanaf 0.3.0: geen rondes verzinnen. Vanaf 0.4.0: de vastgelegde rondes blijven precies staan.
+  const hadRounds = fs.readFileSync(path.join(OLD, 'server', 'db.js'), 'utf8').includes('review_rounds');
+  if (hadRounds) ok('bestaande reviewronde behouden (v1 en v2 in ronde 1)', JSON.stringify(video.rounds.map((r) => [r.number, r.versions.map((x) => x.number).sort()])) === '[[1,[1,2]]]' && video.unroundedSharedVersions.length === 0);
+  else ok('geen verzonnen reviewrondes voor eerder gedeelde versies', video.rounds?.length === 0 && JSON.stringify(video.unroundedSharedVersions) === '[1,2]');
   const fb = (await t2.get(`/api/projects/${projectId}/feedback?status=all`)).data.items;
   ok('bestaande klantreactie staat in het feedbackoverzicht', fb.some((i) => i.body === 'Klantreactie: logo groter'));
   const cc2 = fb.find((i) => i.body === 'Klantreactie: logo groter').commentId;
   ok('van een bestaande reactie een taak maken', (await t2.post(`/api/comments/${cc2}/task`, { priority: 'high' })).status === 201);
   const v3 = (await t2.post(`/api/videos/${created.videoId}/versions`, { uploadId: await upload(t2, file, { videoId: created.videoId }) })).data;
   await t2.post(`/api/versions/${v3.versionId}/ready`);
-  ok('volgende publicatie start ronde 1 (eerste vastgelegde ronde)', (await t2.post(`/api/versions/${v3.versionId}/share`, { round: 'new', changeNote: 'Logo groter', requestId: rid() })).data.roundNumber === 1);
+  const nextRound = video.rounds.length + 1;
+  ok(`volgende publicatie start ronde ${nextRound}`, (await t2.post(`/api/versions/${v3.versionId}/share`, { round: 'new', changeNote: 'Logo groter', requestId: rid() })).data.roundNumber === nextRound);
   const pdf = await fetch(`${base}/api/projects/${projectId}/export.pdf`, { headers: { cookie: t2.cookie() } });
   ok('feedback exporteren (PDF) op bestaande gegevens', pdf.status === 200 && (await pdf.arrayBuffer()).byteLength > 1000);
+  // Bouwronde 4 op bestaande gegevens: een goedkeuring van vóór de update kan worden vrijgegeven.
+  const cand = (await t2.get(`/api/projects/${projectId}/delivery-candidates`)).data.videos[0].versions.find((x) => x.number === 2);
+  ok('bestaande klantgoedkeuring (v2) telt voor definitief vrijgeven', cand?.eligible === true && cand.approval.name === 'Joris');
+  ok('v2 bewust vrijgeven', (await t2.post(`/api/projects/${projectId}/deliveries`, { items: [{ versionId: v2.versionId }], confirm: true, requestId: rid() })).status === 201);
+  const dlToken = new URL((await t2.post(`/api/projects/${projectId}/delivery-link`)).data.link.url).pathname.split('/').pop();
+  const page = (await client(base).get(`/api/delivery/${dlToken}`)).data;
+  ok('opleverpagina toont v2 (niet de nieuwe interne v3)', page.items.length === 1 && page.items[0].versionNumber === 2);
+  const file2 = await fetch(`${base}${page.items[0].downloadUrl}`);
+  ok('download van de opgeleverde versie werkt', file2.status === 200 && (await file2.arrayBuffer()).byteLength === fs.statSync(file).size);
+  ok('klantactiviteit vastgelegd (opleverpagina + download)', (await t2.get(`/api/projects/${projectId}/activity`)).data.items.length >= 2);
   const backups = await listBackups(env.BACKUP_DIR);
   ok('back-up van de vorige versie staat in de lijst als volledig', backups.some((b) => b.name === oldBackup.name && b.status === 'volledig'));
   await stop(srv);
@@ -114,6 +128,7 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   const media = await fetch(`${base}/api/review/${token}/versions/${v2.versionId}/media`);
   ok('na herstel: klant kan de video afspelen via de oude link', media.status === 200);
   ok('na herstel: projectlink van ná de back-up bestaat niet meer (zoals verwacht)', (await client(base).get(new URL(link.url).pathname.replace('/p/', '/api/portal/'))).status === 404);
+  ok('na herstel: oplevering van ná de back-up bestaat niet (geen verzonnen gegevens)', (await t3.get(`/api/projects/${projectId}/deliveries`)).data.history.length === 0);
   await stop(srv);
 
   fs.rmSync(T, { recursive: true, force: true });

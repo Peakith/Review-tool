@@ -229,14 +229,51 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   };
   muteBtn.addEventListener('click', toggleMute);
 
+  // ---- Volledig scherm ----
+  // Op iPhone bestaat alleen de ingebouwde schermvullende speler van iOS (webkitEnterFullscreen).
+  // Daarin kunnen we geen tekeningen tonen. Zijn er tekeningen, dan leggen we dat uit en bieden we
+  // "Groot in de pagina": de speler vult dan het venster, mét tekeningen.
+  let pageFull = false;
+  const fsChoice = h('div', { class: 'pc-fschoice', role: 'dialog', 'aria-label': 'Volledig scherm met tekeningen', hidden: true });
+  stage.append(fsChoice);
+  const setPageFull = (on) => {
+    pageFull = on;
+    el.classList.toggle('is-pagefull', on);
+    document.documentElement.classList.toggle('has-pagefull-player', on);
+    setIcon(fsBtn, on ? 'minimize' : 'fullscreen', on ? 'Groot in de pagina sluiten (Esc)' : 'Volledig scherm (F)');
+    fsChoice.hidden = true;
+    requestAnimationFrame(layoutOverlay);
+  };
+  const hasDrawings = () => !!shown || markers.some((m) => m.drawing);
+  function showFsChoice() {
+    const native = h('button', { type: 'button', class: 'btn btn-sm btn-secondary' }, 'Schermvullend zonder tekeningen');
+    const page = h('button', { type: 'button', class: 'btn btn-sm btn-primary' }, icon('fullscreen'), h('span', { class: 'btn-label' }, 'Groot in de pagina (met tekeningen)'));
+    const close = h('button', { type: 'button', class: 'btn btn-sm btn-ghost btn-icon', 'aria-label': 'Sluiten' }, icon('x'));
+    page.addEventListener('click', () => setPageFull(true));
+    native.addEventListener('click', () => { fsChoice.hidden = true; video.webkitEnterFullscreen(); });
+    close.addEventListener('click', () => { fsChoice.hidden = true; });
+    fsChoice.replaceChildren(
+      h('div', { class: 'pc-fschoice-head' }, icon('info'), h('strong', {}, 'Tekeningen en volledig scherm'), close),
+      h('p', {}, 'De schermvullende weergave van iPhone toont geen tekeningen. Ze zijn niet verdwenen: kies “Groot in de pagina” om het beeld met tekeningen groot te bekijken.'),
+      h('div', { class: 'pc-fschoice-actions' }, page, native));
+    fsChoice.hidden = false;
+    page.focus();
+  }
+  function fallbackFullscreen() {
+    if (!video.webkitEnterFullscreen) return setPageFull(true);
+    if (hasDrawings()) return showFsChoice();
+    return video.webkitEnterFullscreen(); // iOS Safari zonder tekeningen
+  }
   const toggleFullscreen = () => {
+    if (pageFull) return setPageFull(false);
     if (document.fullscreenElement) return document.exitFullscreen();
-    if (el.requestFullscreen) return el.requestFullscreen().catch(() => video.webkitEnterFullscreen?.());
-    if (video.webkitEnterFullscreen) return video.webkitEnterFullscreen(); // iOS Safari
+    if (el.requestFullscreen) return el.requestFullscreen().catch(fallbackFullscreen);
+    return fallbackFullscreen();
   };
   fsBtn.addEventListener('click', toggleFullscreen);
   const onFsChange = () => { el.classList.toggle('is-fullscreen', document.fullscreenElement === el); requestAnimationFrame(layoutOverlay); };
   document.addEventListener('fullscreenchange', onFsChange);
+  video.addEventListener('webkitendfullscreen', () => requestAnimationFrame(layoutOverlay));
 
   const step = 1 / fps;
   function onKey(e) {
@@ -255,9 +292,11 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
       '.': () => { video.pause(); seek(video.currentTime + step); },
       f: toggleFullscreen,
       m: toggleMute,
+      Escape: () => (pageFull ? setPageFull(false) : !fsChoice.hidden ? (fsChoice.hidden = true) : null),
     };
     const fn = keys[e.key] || keys[e.key.toLowerCase?.()];
     if (!fn || (e.key === ' ' && onButton)) return;
+    if (e.key === 'Escape' && !pageFull && fsChoice.hidden) return;
     fn();
     e.preventDefault();
   }
@@ -278,6 +317,7 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
     layoutOverlay,
     onLayout(fn) { layoutListeners.add(fn); return () => layoutListeners.delete(fn); },
     showAnnotation,
+    setPageFull,
     playRange,
     play: () => video.play().catch(() => {}),
     duration,
@@ -286,6 +326,7 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
       window.removeEventListener('resize', layoutOverlay);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('fullscreenchange', onFsChange);
+      document.documentElement.classList.remove('has-pagefull-player');
       timeListeners.clear();
       video.pause();
       video.removeAttribute('src');

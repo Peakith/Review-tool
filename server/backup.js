@@ -18,7 +18,7 @@ const { VERSION } = require('./build');
  * dus ook grote video's passen niet in één keer in het werkgeheugen.
  */
 const FORMAT = 1;
-const COUNT_TABLES = ['users', 'projects', 'videos', 'versions', 'comments', 'share_links', 'feedback_rounds', 'approvals', 'briefing_items', 'project_links', 'brands', 'review_rounds', 'comment_tasks'];
+const COUNT_TABLES = ['users', 'projects', 'videos', 'versions', 'comments', 'share_links', 'feedback_rounds', 'approvals', 'briefing_items', 'project_links', 'brands', 'review_rounds', 'comment_tasks', 'deliveries', 'delivery_links', 'client_activity'];
 
 const stamp = (d = new Date()) => {
   const p = (n) => String(n).padStart(2, '0');

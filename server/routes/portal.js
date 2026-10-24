@@ -4,6 +4,8 @@ const auth = require('../auth');
 const { HttpError } = require('../status');
 const { portalDto, sharedVersions } = require('../client');
 const { safeFileHeaders } = require('../files');
+const { recordActivity, portalSource } = require('../activity');
+const { activeDeliveries } = require('../deliveries');
 
 const TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
 
@@ -22,6 +24,12 @@ function portalReviewToken(db, projectLink, videoId) {
       VALUES (?, ?, 'reviewer', 'Via klantportaal', 0, ?, ?, ?)`).run(videoId, token, projectLink.created_by, now(), projectLink.id);
     return token;
   });
+}
+
+/** Verwijzing naar de opleverpagina in het portaal, als er definitieve bestanden zijn. */
+function deliverySummary(db, project, url) {
+  const n = activeDeliveries(db, project.id).filter((d) => !db.prepare('SELECT trashed_at FROM videos WHERE id = ?').get(d.video_id)?.trashed_at).length;
+  return n ? { count: n, url } : null;
 }
 
 /** Klantportaal: één stabiele link per project, zonder account. */
@@ -51,7 +59,8 @@ function portalRoutes(router, db, config, { storage }) {
       posterUrl: (v) => `${base}/videos/${v.id}/poster`,
       fileUrl: (b) => `${base}/briefing/${b.id}/file`,
     });
-    res.json(dto);
+    recordActivity(db, req, { projectId: req.project.id, type: 'portal_opened', src: portalSource(req.projectLink) });
+    res.json({ ...dto, delivery: deliverySummary(db, req.project, `/p/${req.projectLink.token}/oplevering`) });
   });
 
   // Alleen de thumbnail van de gepubliceerde versie; nooit van een intern concept.
@@ -71,4 +80,4 @@ function portalRoutes(router, db, config, { storage }) {
   });
 }
 
-module.exports = { portalRoutes, portalReviewToken };
+module.exports = { portalRoutes, portalReviewToken, deliverySummary };

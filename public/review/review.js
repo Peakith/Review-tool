@@ -19,7 +19,37 @@ const urls = {
   comments: (vid) => `${base}/versions/${vid}/comments`,
   media: (vid) => (preview ? `/api/versions/${vid}/media` : `${base}/versions/${vid}/media`),
   poster: (vid) => (preview ? `/api/versions/${vid}/poster` : `${base}/versions/${vid}/poster`),
+  hls: (vid) => (preview ? `/api/versions/${vid}/hls` : `${base}/versions/${vid}/hls`),
 };
+
+/**
+ * Hoe deze versie wordt afgespeeld: via afspeelversies (kwaliteitskeuze), of het origineel als
+ * downloaden voor deze link mag en de afspeelversies er nog niet zijn. Zonder downloadrecht is er
+ * nooit een terugval naar het origineel.
+ */
+function playbackFor(v) {
+  const pb = v.playback || { levels: [], original: true };
+  const h_ = urls.hls(v.id);
+  const hls = pb.levels.length ? {
+    master: `${h_}/master.m3u8`, levels: pb.levels,
+    levelPlaylist: (l) => `${h_}/${l}/index.m3u8`, levelFile: (l) => `${h_}/${l}/seg.m4s`,
+  } : null;
+  const src = !hls && pb.original ? urls.media(v.id) : null;
+  let unavailable = null;
+  if (!hls && !src) {
+    unavailable = pb.failed
+      ? tr('Deze video kan op dit moment niet worden afgespeeld. Neem contact op met het productieteam.')
+      : tr('Deze video wordt voorbereid om af te spelen ({p}%). Deze pagina werkt zichzelf bij.', { p: Math.round((pb.progress || 0) * 100) });
+  }
+  return { hls, src, unavailable, waiting: !hls && !src && !pb.failed };
+}
+/** Bestand voor de vergelijkweergave: origineel als dat mag, anders een afspeelversie (max. 1080p). */
+function compareSrc(v) {
+  const pb = v.playback || { levels: [], original: true };
+  if (pb.original) return urls.media(v.id);
+  const lvl = pb.levels.find((l) => l.level <= 1080) || pb.levels.at(-1);
+  return lvl ? `${urls.hls(v.id)}/${lvl.level}/seg.m4s` : '';
+}
 const root = document.getElementById('root');
 
 const store = {
@@ -169,11 +199,16 @@ function render() {
   const latest = info.versions[0];
   const status = clientStatus(version);
 
+  const pb = playbackFor(version);
   const player = createPlayer({
-    src: urls.media(version.id),
+    src: pb.src,
+    hls: pb.hls,
+    unavailable: pb.unavailable,
     poster: version.hasPoster ? urls.poster(version.id) : undefined,
     duration: version.duration,
   });
+  // Nog in voorbereiding: af en toe opnieuw kijken, zonder dat getypte tekst verloren gaat.
+  if (pb.waiting) schedulePlaybackCheck(version.id);
   state.player = player;
   // Klantactiviteit: alleen de eerste keer afspelen per versie op deze pagina (niet in het teamvoorbeeld).
   if (!preview) {
@@ -394,7 +429,7 @@ function showCompare(current) {
   const versions = info.versions.map((v) => ({
     id: v.id, number: v.number, label: tr('Versie {n}', { n: v.number }),
     sub: `${v.isLatest ? `${tr('nieuwste')} · ` : ''}${clientStatusText(v.status)}`,
-    src: urls.media(v.id), poster: v.hasPoster ? urls.poster(v.id) : undefined, duration: v.duration,
+    src: compareSrc(v), poster: v.hasPoster ? urls.poster(v.id) : undefined, duration: v.duration,
   }));
   const other = info.versions.find((v) => v.id !== current.id);
   compareView = createCompare({ versions, a: other.id, b: current.id });
@@ -485,6 +520,23 @@ async function approve() {
   state.justSent = { type: 'approved', number: v.number };
   toast(tr('Versie {n} is goedgekeurd. Dank je wel!', { n: v.number }), 'success');
   await load(v.id);
+}
+
+let playbackTimer = null;
+function schedulePlaybackCheck(versionId) {
+  clearTimeout(playbackTimer);
+  playbackTimer = setTimeout(async () => {
+    try {
+      const fresh = await api('GET', base);
+      const v = fresh.versions.find((x) => x.id === versionId);
+      if (v?.playback.levels.length && state.version?.id === versionId && !unsentInput().text) {
+        state.info = fresh;
+        await showVersion(v);
+        return;
+      }
+    } catch { /* volgende poging */ }
+    if (state.version?.id === versionId) schedulePlaybackCheck(versionId);
+  }, 10_000);
 }
 
 // Houd reacties van andere reviewers en het team actueel.

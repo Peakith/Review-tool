@@ -48,7 +48,7 @@ test('prullenbak: geen toegang via klantlink of media; terugzetten herstelt, ing
   assert.equal((await guest.get(`/api/review/${extraToken}`)).status, 410, 'ingetrokken link blijft ingetrokken');
   const comments = (await guest.get(`/api/review/${s.token}/versions/${s.versionId}/comments`, key)).data;
   assert.equal(comments[0].body, 'Reactie', 'reacties terug');
-  assert.equal((await guest.get(`/api/review/${s.token}/versions/${s.versionId}/media`)).status, 200);
+  assert.equal((await guest.get(`/api/review/${s.token}/versions/${s.versionId}/media`)).data.code, 'original_blocked', 'link werkt weer; origineel blijft zonder downloadrecht afgeschermd');
 });
 
 test('versie in de prullenbak: klant ziet de vorige gedeelde versie; enige versie kan niet', async () => {
@@ -86,7 +86,7 @@ test('archief: bestanden blijven, alleen-lezen voor team en klant, terug te hale
   const guest = client(srv.base);
   const info = (await guest.get(`/api/review/${s.token}`)).data;
   assert.equal(info.archived, true);
-  assert.equal((await guest.get(`/api/review/${s.token}/versions/${s.versionId}/media`)).status, 200, 'klant kan nog kijken');
+  assert.equal((await guest.get(`/api/review/${s.token}/versions/${s.versionId}/media`)).data.code, 'original_blocked', 'klant heeft nog toegang (origineel zonder downloadrecht afgeschermd)');
   assert.equal((await guest.post(`/api/review/${s.token}/versions/${s.versionId}/comments`, { body: 'x', authorName: 'Eva', requestId: rid() }, key)).status, 409);
   assert.equal((await guest.post(`/api/review/${s.token}/versions/${s.versionId}/feedback`, { authorName: 'Eva', message: 'x', requestId: rid() }, key)).status, 409);
   assert.equal((await admin.post(`/api/projects/${s.projectId}/archive`, { archived: false })).status, 200);

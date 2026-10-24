@@ -50,7 +50,8 @@ export async function viewDeliveries({ project, host, onCount }) {
   function activeSection() {
     const rows = data.active.filter((d) => !d.videoTrashed);
     return h('section', { class: 'dl-section', 'aria-labelledby': 'dl-active' },
-      h('h2', { id: 'dl-active', class: 'dl-head' }, 'Vrijgegeven bestanden', h('span', { class: 'seg-count' }, rows.length)),
+      h('h2', { id: 'dl-active', class: 'dl-head' }, 'Vrijgegeven bestanden', h('span', { class: 'seg-count' }, rows.length),
+        rows.filter((d) => d.available).length > 1 ? h('a', { class: 'btn btn-sm btn-ghost dl-zip', href: `/api/projects/${project.id}/deliveries/package.zip`, title: 'Hetzelfde pakket als de klant krijgt: alle beschikbare bestanden onder hun oorspronkelijke naam, met een overzicht' }, icon('download'), h('span', { class: 'btn-label' }, 'Alles als ZIP')) : null),
       rows.length ? h('div', { class: 'dl-list' }, rows.map(activeRow)) : h('div', { class: 'card' }, emptyState({
         icon: 'package', compact: true, title: 'Nog niets vrijgegeven',
         text: 'Zodra de akkoordgever een versie heeft goedgekeurd, kun je hem hier definitief vrijgeven. De klant ziet hem dan op de opleverpagina.',

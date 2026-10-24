@@ -78,3 +78,12 @@ Bestaande project-, review-, akkoord- en opleverlinks houden hun bereik; een los
 - **B**: klanten en klantportaal, eenvoudiger goedkeuren via persoonlijke portaallink, NL/EN, vorige/volgende, wachtwoord en vervaldatum op links.
 - **C**: inbox en meldingen, klantactiviteit als duidelijke tijdlijn.
 - **D**: adaptieve videokwaliteit, downloadrechten, opleverpakketten als ZIP.
+
+## Fase D: waar staat wat
+| Functie | Plek |
+|---|---|
+| Kwaliteit kiezen (Auto, 4K, 1440p, 1080p, 720p; alleen wat de bron heeft) | Tandwiel in de spelerbalk (team en klant); het label toont wat er echt speelt |
+| Status van de afspeelversies, voortgang, opnieuw proberen | Videowerkplek → **Info** → “Afspeelversies” |
+| Ruimte van afspeelversies | Instellingen → Opslag & back-ups (totaal) en Info per versie |
+| Downloadrecht per reviewlink | Delen bij de video (“Klant mag het bestand downloaden”, standaard uit) |
+| Alles als ZIP | Opleverpagina van de klant (“Alles downloaden”) en Project → Oplevering (“Alles als ZIP”) |

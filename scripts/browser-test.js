@@ -281,7 +281,7 @@ async function waitUploadsDone(page, n) {
         body: JSON.stringify({ body: `Opmerking ${i + 1}: ${'detail '.repeat(i % 5 + 1)}`, timecode: i, authorName: 'Eva Bakker', requestId: `bulk-${i}-${Date.now()}` }),
       });
     }
-  }, { token: new URL(reviewUrl).pathname.split('/').pop(), version: await client.evaluate(() => document.querySelector('video').src.match(/versions\/(\d+)/)[1]) });
+  }, { token: new URL(reviewUrl).pathname.split('/').pop(), version: await client.evaluate(() => document.querySelector('.version-pick select').value) });
   await page.reload();
   await page.waitForSelector('.comment');
   const composerBox = await page.locator('.panel-composer').boundingBox();

@@ -333,6 +333,36 @@ CREATE TABLE IF NOT EXISTS follows (
   PRIMARY KEY (user_id, kind, target_id)
 );
 
+-- Afspeelversies (bouwronde 5, fase D): per versie een of meer kwaliteiten (HLS, fMP4 in één bestand
+-- per kwaliteit). Het origineel blijft onaangeroerd. level = korte zijde in pixels (720, 1080, 1440, 2160).
+CREATE TABLE IF NOT EXISTS version_variants (
+  version_id INTEGER NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
+  level INTEGER NOT NULL,
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  bandwidth INTEGER NOT NULL,
+  codecs TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (version_id, level)
+);
+
+-- Verwerking van afspeelversies op de achtergrond (één taak per versie).
+CREATE TABLE IF NOT EXISTS media_jobs (
+  id INTEGER PRIMARY KEY,
+  version_id INTEGER NOT NULL UNIQUE REFERENCES versions(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'queued',   -- queued | running | done | failed
+  progress REAL NOT NULL DEFAULT 0,        -- 0..1
+  levels TEXT NOT NULL DEFAULT '[]',       -- geplande kwaliteiten (JSON)
+  current_level INTEGER,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  source_info TEXT,                        -- JSON: afmetingen, rotatie, HDR, audio
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT
+);
+
 -- Opgeslagen zoekopdrachten per gebruiker (alleen de zoekvraag; resultaten worden altijd opnieuw
 -- en met de actuele rechten berekend).
 CREATE TABLE IF NOT EXISTS saved_searches (

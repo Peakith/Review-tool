@@ -141,7 +141,63 @@ function downloadableDelivery(db, projectId, deliveryId) {
   return { delivery: d, video, version, state };
 }
 
+/**
+ * Inhoud van het opleverpakket (ZIP) van een project: alleen actieve opleveringen met een geldige
+ * vrijgave en goedkeuring, precies die versies, onder hun oorspronkelijke bestandsnaam. Komen namen
+ * dubbel voor, dan krijgt elk zo'n bestand een eigen map met de videotitel. Plus een kort overzicht.
+ */
+function packageContents(db, project, { language = 'nl', localPath, sizeOf }) {
+  const en = language === 'en';
+  const files = [];
+  for (const d of activeDeliveries(db, project.id)) {
+    const video = db.prepare('SELECT * FROM videos WHERE id = ?').get(d.video_id);
+    const version = db.prepare('SELECT * FROM versions WHERE id = ?').get(d.version_id);
+    if (!video || !version || video.trashed_at) continue;
+    if (!deliveryState(db, d, { version, video }).available) continue;
+    const approval = db.prepare('SELECT approver_name, created_at FROM approvals WHERE id = ?').get(d.approval_id);
+    files.push({ delivery: d, video, version, approval, filename: originalDownloadName(version, video) });
+  }
+  const order = { main: 0, teaser: 1, cutdown: 2, social: 3, other: 4 };
+  files.sort((a, b) => (order[a.video.kind] ?? 5) - (order[b.video.kind] ?? 5) || a.delivery.released_at.localeCompare(b.delivery.released_at) || a.delivery.id - b.delivery.id);
+  const clean = (t) => String(t || '').replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, '-').replace(/\s+/g, ' ').trim().replace(/^\.+/, '').slice(0, 120) || 'video';
+  const count = new Map();
+  for (const f of files) count.set(f.filename.toLowerCase(), (count.get(f.filename.toLowerCase()) || 0) + 1);
+  const used = new Set();
+  for (const f of files) {
+    let name = f.filename;
+    if (count.get(f.filename.toLowerCase()) > 1) {
+      let folder = clean(f.video.title);
+      if (used.has(`${folder}/${name}`.toLowerCase())) folder = `${folder} (${en ? 'version' : 'versie'} ${f.version.number})`;
+      for (let i = 2; used.has(`${folder}/${name}`.toLowerCase()); i++) folder = `${clean(f.video.title)} (${i})`;
+      name = `${folder}/${name}`;
+    }
+    used.add(name.toLowerCase());
+    f.path = name;
+  }
+  const zone = (iso) => new Date(iso).toLocaleString(en ? 'en-GB' : 'nl-NL', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+  const lines = [
+    en ? `Final delivery: ${project.name}` : `Definitieve oplevering: ${project.name}`,
+    project.client_name ? (en ? `For: ${project.client_name}` : `Voor: ${project.client_name}`) : null,
+    en ? `Package created: ${zone(new Date().toISOString())}` : `Pakket gemaakt: ${zone(new Date().toISOString())}`,
+    '',
+    en ? 'Each file is exactly the approved version listed below, unchanged.' : 'Elk bestand is precies de goedgekeurde versie hieronder, ongewijzigd.',
+    '',
+  ].filter((l) => l !== null);
+  for (const f of files) {
+    lines.push(f.path);
+    lines.push(`  ${en ? 'Video' : 'Video'}: ${f.video.title} · ${en ? 'version' : 'versie'} ${f.version.number}`);
+    if (f.approval) lines.push(`  ${en ? 'Approved by' : 'Goedgekeurd door'}: ${f.approval.approver_name}, ${zone(f.approval.created_at)}`);
+    lines.push(`  ${en ? 'Released' : 'Vrijgegeven'}: ${zone(f.delivery.released_at)}`);
+    lines.push(`  ${en ? 'Size' : 'Grootte'}: ${f.version.size_bytes} bytes`);
+    lines.push('');
+  }
+  const overview = Buffer.from(`${lines.join('\r\n')}\r\n`, 'utf8');
+  const entries = files.map((f) => ({ name: f.path, path: localPath(f.version.stored_name), size: sizeOf(f), deliveryId: f.delivery.id }));
+  entries.push({ name: en ? 'Overview.txt' : 'Overzicht.txt', buffer: overview, size: overview.length });
+  return { files, entries, zipName: `${clean(project.name)} - ${en ? 'delivery' : 'oplevering'}.zip` };
+}
+
 module.exports = {
   validApproval, releaseProblem, deliveryState, activeDeliveries, activeDeliveryOf, fileInfo,
-  clientDeliveryDto, downloadableDelivery, REASON_TEAM,
+  clientDeliveryDto, downloadableDelivery, packageContents, REASON_TEAM,
 };

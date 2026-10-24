@@ -106,6 +106,10 @@ function loadConfig(overrides = {}) {
     // Afgebroken uploads zonder activiteit worden na deze tijd opgeruimd.
     uploadExpiryHours: Number(env.UPLOAD_EXPIRY_HOURS || 24),
     cleanupIntervalMinutes: Number(env.UPLOAD_CLEANUP_INTERVAL_MINUTES || 60),
+    // Afspeelversies (kwaliteiten) maken: hoeveel tegelijk (standaard 1, zodat de Mac bruikbaar blijft).
+    variantConcurrency: Math.max(1, Math.min(4, Number(env.VARIANT_CONCURRENCY || 1))),
+    // x264-snelheid voor afspeelversies: sneller = grotere bestanden, langzamer = kleinere bestanden.
+    variantPreset: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium'].includes(env.VARIANT_PRESET) ? env.VARIANT_PRESET : 'veryfast',
     // Eenmalige code voor het eerste account. Zonder waarde genereert de server er een bij het starten.
     setupToken: env.SETUP_TOKEN || null,
     // Herkent "deze installatie" (programmamap + gegevensmap), bijvoorbeeld voor de startknop.

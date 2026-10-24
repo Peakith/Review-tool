@@ -84,7 +84,8 @@ const sharedVersions = (db, videoId) =>
   db.prepare('SELECT * FROM versions WHERE video_id = ? AND shared_at IS NOT NULL AND trashed_at IS NULL ORDER BY number DESC').all(videoId);
 
 /** Gegevens voor de reviewpagina van één video, zoals de klant die ziet. */
-function clientVideoInfo(db, { video, project, role = 'reviewer', allowDownload = false, approverName = null, archived = false, portal = null }) {
+function clientVideoInfo(db, { video, project, role = 'reviewer', allowDownload = false, approverName = null, archived = false, portal = null, originalPlayback = allowDownload }) {
+  const { playbackInfo } = require('./variants');
   const versions = sharedVersions(db, video.id);
   return {
     archived,
@@ -97,7 +98,8 @@ function clientVideoInfo(db, { video, project, role = 'reviewer', allowDownload 
     approver: video.approver_name ? { name: video.approver_name } : null,
     // De persoon met de akkoordlink is geverifieerd via die persoonlijke link.
     identity: role === 'approver' ? { name: approverName, verified: true } : null,
-    versions: versions.map((v, i) => ({ ...versionDto(v), isLatest: i === 0, approval: clientApproval(db, v.id), ...clientRound(db, v) })),
+    // Afspelen: via afspeelversies (kwaliteiten). Het origineel alleen als downloaden voor deze link mag.
+    versions: versions.map((v, i) => ({ ...versionDto(v), isLatest: i === 0, approval: clientApproval(db, v.id), ...clientRound(db, v), playback: { ...playbackInfo(db, v.id), original: !!originalPlayback } })),
     totalShared: versions.length,
     // Kwam de klant via het klantportaal, dan kan hij terug naar het overzicht.
     portal,

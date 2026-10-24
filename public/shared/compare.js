@@ -25,7 +25,8 @@ export function createCompare({ versions, a, b, onChange = () => {} }) {
   let raf = 0;
 
   const pane = (key) => {
-    const video = h('video', { preload: 'auto', playsinline: true, 'webkit-playsinline': true });
+    const video = h('video', { preload: 'auto', playsinline: true, 'webkit-playsinline': true, controlsList: 'nodownload noremoteplayback', disablePictureInPicture: true });
+    video.addEventListener('contextmenu', (e) => e.preventDefault());
     const label = h('div', { class: 'cmp-label' });
     const state = h('div', { class: 'cmp-state', hidden: true });
     const time = h('div', { class: 'cmp-time mono' });

@@ -54,6 +54,14 @@ function render(data) {
       ? [h('strong', {}, tr(ready === 1 ? '{n} bestand staat' : '{n} bestanden staan', { n: ready })), tr(' klaar om te downloaden')]
       : tr('Op dit moment staat er geen bestand klaar om te downloaden.')) : null);
 
+  // Alles in één keer: een ZIP met precies de vrijgegeven versies en een overzicht.
+  const zip = data.package && mode !== 'preview'
+    ? h('div', { class: 'd-package' },
+      h('a', { class: 'btn btn-secondary', href: data.package.url, download: '' }, icon('download'),
+        h('span', { class: 'btn-label' }, tr('Alles downloaden (ZIP, {size})', { size: formatBytes(data.package.size) }))),
+      h('span', { class: 'small muted' }, tr('{n} bestanden onder hun oorspronkelijke naam, met een overzicht. Je browser toont de voortgang.', { n: data.package.count })))
+    : null;
+
   const list = data.items.length
     ? h('section', { class: 'd-list', 'aria-label': tr('Vrijgegeven bestanden') }, data.items.map(item))
     : h('div', { class: 'card' }, emptyState({
@@ -64,7 +72,7 @@ function render(data) {
   mount(root,
     mode === 'preview' ? previewBar(data) : null,
     header,
-    h('main', { class: 'p-main' }, hero, list,
+    h('main', { class: 'p-main' }, hero, zip, list,
       data.archived ? h('div', { class: 'notice notice-info' }, icon('history'), tr('Dit project is afgerond en gearchiveerd. De definitieve bestanden blijven hier te downloaden.')) : null,
       h('footer', { class: 'p-foot small muted' }, icon('shield'),
         h('span', {}, mode === 'link'

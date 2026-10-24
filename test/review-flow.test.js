@@ -254,7 +254,8 @@ test('ingetrokken klantlink geeft geen toegang meer, ook niet tot media', async 
   const link = video.links.find((l) => l.role === 'reviewer');
   const token = tokenOf(video);
   const guest = client(srv.base);
-  assert.equal((await guest.get(`/api/review/${token}/versions/${ver.id}/media`)).status, 200);
+  // Bouwronde 5: zonder downloadrecht geen origineel (403), maar de link zelf werkt nog.
+  assert.equal((await guest.get(`/api/review/${token}/versions/${ver.id}/media`)).data.code, 'original_blocked');
 
   assert.equal((await team.post(`/api/links/${link.id}/revoke`)).status, 200);
 

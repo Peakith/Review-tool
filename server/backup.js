@@ -18,7 +18,7 @@ const { VERSION } = require('./build');
  * dus ook grote video's passen niet in één keer in het werkgeheugen.
  */
 const FORMAT = 1;
-const COUNT_TABLES = ['users', 'projects', 'videos', 'versions', 'comments', 'share_links', 'feedback_rounds', 'approvals', 'briefing_items', 'project_links', 'brands', 'review_rounds', 'comment_tasks', 'deliveries', 'delivery_links', 'client_activity', 'clients', 'client_links', 'notifications', 'follows'];
+const COUNT_TABLES = ['users', 'projects', 'videos', 'versions', 'comments', 'share_links', 'feedback_rounds', 'approvals', 'briefing_items', 'project_links', 'brands', 'review_rounds', 'comment_tasks', 'deliveries', 'delivery_links', 'client_activity', 'clients', 'client_links', 'notifications', 'follows', 'version_variants'];
 
 const stamp = (d = new Date()) => {
   const p = (n) => String(n).padStart(2, '0');
@@ -75,6 +75,13 @@ function inspectDb(file) {
       files.push({ key: v.stored_name, expectedBytes: v.size_bytes });
       if (v.has_poster) files.push({ key: `${v.stored_name}.jpg`, expectedBytes: null, optional: !!v.custom_poster });
       if (v.custom_poster) files.push({ key: `${v.stored_name}.custom.jpg`, expectedBytes: null });
+    }
+    // Afspeelversies (kwaliteiten) horen bij de back-up: na herstel hoeft niets opnieuw te worden gemaakt.
+    if (has('version_variants')) {
+      for (const r of db.prepare('SELECT ver.stored_name, x.level, x.size_bytes FROM version_variants x JOIN versions ver ON ver.id = x.version_id ORDER BY x.version_id, x.level').all()) {
+        files.push({ key: `${r.stored_name}.v${r.level}.m4s`, expectedBytes: r.size_bytes });
+        files.push({ key: `${r.stored_name}.v${r.level}.m3u8`, expectedBytes: null });
+      }
     }
     // Bijlagen bij briefings (ook in de prullenbak) en merklogo's.
     if (has('briefing_items')) {

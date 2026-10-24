@@ -272,13 +272,19 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     const projects = new Map();
     const totals = { active: 0, oldVersions: 0, archived: 0, trash: 0, attachments: 0, brands: 0 };
     let missingFiles = 0;
+    // Afspeelversies (kwaliteiten) apart, zodat zichtbaar is wat ze kosten (ook in de categorieën meegeteld).
+    let variantBytes = 0;
     for (const r of rows) {
       let bytes = 0;
       if (st.ok) {
         const vSize = await storage.size(r.stored_name);
         if (vSize === null) missingFiles++;
         bytes += vSize || 0;
-        for (const f of sideFiles(db, r)) bytes += (await storage.size(f.key)) || 0;
+        for (const f of sideFiles(db, r)) {
+          const n = (await storage.size(f.key)) || 0;
+          bytes += n;
+          if (f.kind === 'variant') variantBytes += n;
+        }
       }
       const category = (r.ver_trashed || r.video_trashed || r.project_trashed) ? 'trash'
         : (r.video_archived || r.project_archived) ? 'archived'
@@ -319,7 +325,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
       storage: { ...st, configured: config.mediaConfigured },
       reserveBytes: config.minFreeBytes,
       disk,
-      totals: { ...totals, tmp: tmp.bytes, all: totals.active + totals.oldVersions + totals.archived + totals.trash + totals.attachments + totals.brands + tmp.bytes },
+      totals: { ...totals, tmp: tmp.bytes, variants: variantBytes, all: totals.active + totals.oldVersions + totals.archived + totals.trash + totals.attachments + totals.brands + tmp.bytes },
       mediaDirBytes: media?.bytes ?? null,
       missingFiles,
       tmp,

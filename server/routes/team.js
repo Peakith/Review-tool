@@ -10,13 +10,14 @@ const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { KINDS, ASPECTS, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions } = require('../client');
 const { activeDeliveryOf, deliveryState, validApproval, releaseProblem, REASON_TEAM } = require('../deliveries');
 const { protectionDto } = require('../linkguard');
+const { hlsRoutes } = require('../variants');
 const { clientLanguage } = require('../clientportal');
 
 // Media voor het team: wel cachen, maar bij elk gebruik opnieuw laten controleren, zodat
 // een item in de prullenbak of ingetrokken toegang direct effect heeft.
 const MEDIA_CACHE = 'private, no-cache';
 
-function teamRoutes(router, db, config, { finalize, access, storage, notifier }) {
+function teamRoutes(router, db, config, { finalize, access, storage, notifier, variants }) {
   const actor = (req) => ({ actorType: 'team', actorLabel: req.user.name, userId: req.user.id });
 
   // Actieve (niet-weggegooide) versies; nummering telt weggegooide versies wel mee.
@@ -224,6 +225,7 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier })
       notifier.setFollow(req.user.id, 'project', p.id, true, { auto: true });
       return { videoId, ...insertVersion(videoId, file, req.user) };
     });
+    variants.enqueue(result.versionId);
     res.status(201).json(result);
   });
 
@@ -232,6 +234,7 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier })
     const file = await finalize(req.body?.uploadId, req.user, { videoId: video.id, projectId: video.project_id });
     // Nieuwe versie: titel, deel-links en akkoordgever blijven bij de video.
     const result = db.tx(() => insertVersion(video.id, file, req.user));
+    variants.enqueue(result.versionId);
     notifier.setFollow(req.user.id, 'project', video.project_id, true, { auto: true });
     res.status(201).json(result);
   });
@@ -279,6 +282,7 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier })
         isClientVersion: ver.id === shared?.id,
         openComments: openClientComments(ver.id),
         file: versionFileDto(ver),
+        playback: variants.statusOf(ver.id),
         events: eventDtos(db, ver.id),
         approval: approvalDto(db, ver.id),
         // Kan deze versie definitief worden vrijgegeven (echte, nog geldige klantgoedkeuring)?
@@ -653,7 +657,7 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier })
   router.get('/preview/videos/:id', (req, res) => {
     const { video: v, project } = access.video(req, req.params.id, 'view');
     res.json({
-      ...clientVideoInfo(db, { video: v, project, role: 'reviewer', archived: !!(v.archived_at || project.archived_at), portal: { url: `/voorbeeld/project/${project.id}` } }),
+      ...clientVideoInfo(db, { video: v, project, role: 'reviewer', archived: !!(v.archived_at || project.archived_at), portal: { url: `/voorbeeld/project/${project.id}` }, originalPlayback: true }),
       language: clientLanguage(db, project),
       preview: { projectId: project.id, videoId: v.id },
     });
@@ -667,6 +671,18 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier })
   });
 
   // ---------- Media ----------
+
+  // Afspeelversies (kwaliteiten) voor het team, en opnieuw proberen na een fout.
+  hlsRoutes(router, '/versions/:id', { db, storage, versionOf: (req) => access.version(req, req.params.id, 'view').version });
+  router.post('/versions/:id/playback/retry', (req, res) => {
+    const { version: ver } = access.version(req, req.params.id, 'upload');
+    variants.retry(ver.id);
+    res.json({ ok: true, playback: variants.statusOf(ver.id) });
+  });
+  router.get('/versions/:id/playback', (req, res) => {
+    const { version: ver } = access.version(req, req.params.id, 'view');
+    res.json(variants.statusOf(ver.id));
+  });
 
   router.get('/versions/:id/media', async (req, res) => {
     const { version: ver } = access.version(req, req.params.id, 'view');

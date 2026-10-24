@@ -7,13 +7,14 @@ const { clientVideoInfo, sharedVersions: listShared } = require('../client');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { recordActivity, shareLinkSource, isFirstRequest } = require('../activity');
 const linkguard = require('../linkguard');
+const { hlsRoutes } = require('../variants');
 const { assertClientAccess, effectiveClientShare, clientLanguage, clientReviewToken, portalNeighbours } = require('../clientportal');
 
 /**
  * Klant-API. Iedere aanvraag controleert opnieuw of de link bestaat en niet is
  * ingetrokken, en of de gevraagde versie bij deze video hoort en gedeeld is.
  */
-function reviewRoutes(router, db, config, { storage, notifier }) {
+function reviewRoutes(router, db, config, { storage, notifier, variants }) {
   router.use('/review/:token', (req, res, next) => {
     const token = String(req.params.token || '');
     const link = /^[A-Za-z0-9_-]{20,64}$/.test(token)
@@ -242,9 +243,14 @@ function reviewRoutes(router, db, config, { storage, notifier }) {
     res.json({ ok: true, replayed, status: currentStatus(ver.id) });
   });
 
+  // Afspeelversies (kwaliteiten) via HLS; dezelfde controle als alle klantroutes (middleware hierboven).
+  hlsRoutes(router, '/review/:token/versions/:versionId', { db, storage, versionOf: getSharedVersion });
+
   // Klantmedia nooit in de browsercache bewaren: ingetrokken of weggegooid betekent direct geen toegang.
+  // Het origineel alleen als downloaden voor deze link aanstaat; anders uitsluitend de afspeelversies.
   router.get('/review/:token/versions/:versionId/media', async (req, res) => {
     const ver = getSharedVersion(req);
+    if (!req.link.allow_download) throw new HttpError(403, 'Het originele bestand is via deze link niet beschikbaar.', 'original_blocked');
     await storage.send(res, ver.stored_name, { 'Content-Type': ver.mime_type, 'Cache-Control': 'private, no-store' });
   });
 

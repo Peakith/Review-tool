@@ -20,6 +20,8 @@ async function startServer(overrides = {}) {
   // Alles in tijdelijke mappen, ook back-ups en instellingen (nooit de echte ~/Studio Review).
   const created = createApp({
     dataDir, backupDir: `${dataDir}-backups`, minFreeBytes: 0, chunkBytes: 4096, setupToken: SETUP_TOKEN,
+    // Afspeelversies alleen in de tests die erom gaan (test/variants.test.js zet ze aan).
+    variants: false, variantPreset: 'ultrafast',
     env: { ...process.env, STUDIO_REVIEW_HOME: `${dataDir}-home`, DATA_DIR: '', MEDIA_DIR: '', BACKUP_DIR: '' },
     ...overrides,
   });

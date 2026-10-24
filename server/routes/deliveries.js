@@ -7,8 +7,10 @@ const { contentDisposition } = require('../media');
 const { posterKey } = require('../views');
 const {
   validApproval, releaseProblem, deliveryState, activeDeliveries, activeDeliveryOf, fileInfo,
-  clientDeliveryDto, downloadableDelivery, REASON_TEAM,
+  clientDeliveryDto, downloadableDelivery, packageContents, REASON_TEAM,
 } = require('../deliveries');
+const fs = require('node:fs');
+const { planZip, streamZip } = require('../zip');
 const { recordActivity, deliverySource, portalSource, clientSource, isFirstRequest } = require('../activity');
 const linkguard = require('../linkguard');
 const { assertClientAccess, clientLanguage, clientProject } = require('../clientportal');
@@ -21,6 +23,46 @@ const userName = (db, id) => (id ? db.prepare('SELECT name FROM users WHERE id =
 async function sendDeliveryFile(storage, res, found) {
   const info = fileInfo(found.video, found.version);
   await storage.send(res, found.version.stored_name, { 'Content-Type': found.version.mime_type, 'Content-Disposition': contentDisposition(info.filename), 'Cache-Control': NO_STORE });
+}
+
+/**
+ * Opleverpakket (ZIP) streamen. stillAllowed() wordt vóór elk bestand opnieuw aangeroepen: wordt de
+ * link intussen ingetrokken, verloopt hij, of wordt een oplevering teruggenomen, dan stopt de download
+ * (afgebroken verbinding, geen ogenschijnlijk compleet pakket).
+ */
+async function sendPackage(db, storage, req, res, project, { language, stillAllowed = () => {}, onStart = () => {} }) {
+  storage.assertReady();
+  const pkg = packageContents(db, project, {
+    language,
+    localPath: (key) => storage.localPath(key),
+    sizeOf: (f) => fs.statSync(storage.localPath(f.version.stored_name)).size,
+  });
+  if (!pkg.files.length) throw new HttpError(404, 'Er staan geen definitief vrijgegeven bestanden klaar.', 'not_found');
+  const plan = planZip(pkg.entries);
+  res.set({
+    'Content-Type': 'application/zip',
+    'Content-Length': String(plan.total),
+    'Content-Disposition': contentDisposition(pkg.zipName),
+    'Cache-Control': NO_STORE,
+    'X-Content-Type-Options': 'nosniff',
+  });
+  if (req.method === 'HEAD') return res.end();
+  onStart();
+  try {
+    await streamZip(res, plan, {
+      beforeEntry: (entry) => {
+        stillAllowed();
+        if (entry.deliveryId) {
+          const found = downloadableDelivery(db, project.id, entry.deliveryId);
+          if (!found || !found.state.available) throw new Error('Een oplevering is intussen teruggenomen of geblokkeerd.');
+        }
+      },
+    });
+    res.end();
+  } catch (err) {
+    // Halverwege niet meer toegestaan of verbinding verbroken: afbreken, zodat de browser de download als mislukt toont.
+    res.destroy(err.aborted ? undefined : err);
+  }
 }
 
 function notAvailable(found) {
@@ -62,6 +104,9 @@ function deliveryClientRoutes(router, db, config, { storage }) {
     router.get(page.prefix, (req, res) => {
       const base = page.base(req);
       const dto = clientDeliveryDto(db, req.project, { poster: (d) => `${base}/${d.id}/poster`, download: (d) => `${base}/${d.id}/download` });
+      const ready = dto.items.filter((i) => i.available);
+      // Pakket-URL: bij de opleverlink staat die onder /delivery/:token, anders onder de pagina zelf.
+      dto.package = ready.length > 1 ? { url: `${page.prefix === '/delivery/:token' ? `/api/delivery/${req.deliveryLink.token}` : base}/package.zip`, count: ready.length, size: ready.reduce((n, i) => n + i.size, 0) } : null;
       recordActivity(db, req, { projectId: req.project.id, type: 'delivery_opened', src: page.src(req) });
       const own = req.deliveryLink || req.projectLink || req.clientLink;
       res.json({ ...dto, language: clientLanguage(db, req.project), linkExpiresAt: own?.expires_at || null, portal: page.back(req) ? { url: page.back(req) } : null });
@@ -73,6 +118,21 @@ function deliveryClientRoutes(router, db, config, { storage }) {
       if (err) throw err;
       if (!found.version.has_poster) throw new HttpError(404, 'Geen voorvertoning');
       await storage.send(res, posterKey(found.version), { 'Content-Type': 'image/jpeg', 'Cache-Control': NO_STORE });
+    });
+    // Alles in één ZIP (alleen beschikbare, vrijgegeven bestanden).
+    router.get(`${page.prefix}/package.zip`, async (req, res) => {
+      const own = req.deliveryLink ? ['delivery', 'delivery_links', req.deliveryLink] : req.clientLink ? ['client', 'client_links', req.clientLink] : ['project', 'project_links', req.projectLink];
+      await sendPackage(db, storage, req, res, req.project, {
+        language: clientLanguage(db, req.project),
+        // Opnieuw controleren met de actuele gegevens: ingetrokken, verlopen, wachtwoord gewijzigd, klanttoegang uit.
+        stillAllowed: () => {
+          linkguard.guard(db, req, own[0], db.prepare(`SELECT * FROM ${own[1]} WHERE id = ?`).get(own[2].id));
+          const p = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.project.id);
+          if (!p || p.trashed_at) throw new HttpError(410, 'Dit project is niet meer beschikbaar.');
+          assertClientAccess(p);
+        },
+        onStart: () => { if (isFirstRequest(req)) recordActivity(db, req, { projectId: req.project.id, type: 'download_requested', src: page.src(req) }); },
+      });
     });
     router.get(`${filePath}/download`, async (req, res) => {
       const found = downloadableDelivery(db, req.project.id, req.params.deliveryId);
@@ -299,6 +359,12 @@ function deliveryTeamRoutes(router, db, config, { access, storage, notifier }) {
   });
 
   // Voorbeeld voor het team: precies de klantopbouw, alleen-lezen (geen downloads, geen activiteit).
+  // Team: hetzelfde pakket als de klant krijgt (geen klantactiviteit).
+  router.get('/projects/:id/deliveries/package.zip', async (req, res) => {
+    const { project: p } = access.project(req, req.params.id, 'view');
+    await sendPackage(db, storage, req, res, p, { language: 'nl' });
+  });
+
   router.get('/projects/:id/delivery-preview', (req, res) => {
     const { project: p } = access.project(req, req.params.id, 'view');
     const dto = clientDeliveryDto(db, p, {

@@ -82,7 +82,8 @@ describe('klantportaal', () => {
     assert.equal((await guest.get(`/api/portal/${token}/videos/${concept.videoId}/poster`)).status, 404, 'poster van concept-video');
     const info = (await guest.get(`/api/review/${derived}`)).data;
     assert.deepEqual(info.versions.map((v) => v.number), [1]);
-    assert.equal((await guest.get(`/api/review/${derived}/versions/${main.versionId}/media`)).status, 200);
+    // Bouwronde 5: afgeleide portaallink heeft geen downloadrecht; afspelen gaat via afspeelversies.
+    assert.equal((await guest.get(`/api/review/${derived}/versions/${main.versionId}/media`)).data.code, 'original_blocked');
     // Na publiceren van v2 ziet de klant v2
     await publish(main.v2);
     const p2 = (await guest.get(`/api/portal/${token}`)).data;

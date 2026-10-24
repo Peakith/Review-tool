@@ -324,6 +324,19 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; m
 .pc-btn:hover { background: rgba(255,255,255,.08); }
 .pc-btn .icon { --icon-size: 20px; }
 .pc-rate { width: auto; padding: 0 8px; font: 600 12px var(--mono); color: #bdb9b2; }
+/* Kwaliteitskeuze (tandwiel) */
+.pc-quality-wrap { position: relative; display: inline-flex; }
+.pc-quality { width: auto; gap: 6px; padding: 0 8px; font: 600 12px var(--font); color: #d8d5cf; }
+.pc-quality .icon { --icon-size: 18px; }
+.pc-quality-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 30; min-width: 230px; padding: 6px; border-radius: 10px; background: #1c1c1f; border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 10px 30px rgba(0, 0, 0, .5); color: #f2f0ec; display: grid; gap: 2px; }
+.pc-quality-head { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #a9a59e; padding: 6px 8px 4px; }
+.pc-quality-item { display: grid; grid-template-columns: 18px 1fr; align-items: center; column-gap: 8px; text-align: left; padding: 7px 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: 500 13px var(--font); cursor: pointer; }
+.pc-quality-item:hover, .pc-quality-item:focus-visible { background: rgba(255, 255, 255, .1); outline: none; }
+.pc-quality-item:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.pc-quality-check .icon { --icon-size: 15px; }
+.pc-quality-sub { grid-column: 2; font-size: 11.5px; color: #a9a59e; font-weight: 400; }
+.pc-quality-now { font-size: 12px; color: #c9c5be; padding: 6px 8px 4px; border-top: 1px solid rgba(255, 255, 255, .1); margin-top: 4px; }
+@media (max-width: 520px) { .pc-quality-label { display: none; } }
 .pc-time { font: 12.5px var(--mono); font-variant-numeric: tabular-nums; color: #bdb9b2; margin-left: 4px; }
 .pc-track { position: relative; height: 24px; cursor: pointer; touch-action: none; outline: none; border-radius: 4px; }
 .pc-rail { position: absolute; left: 0; right: 0; top: 10px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.16); overflow: hidden; transition: height .1s, top .1s; }

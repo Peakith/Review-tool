@@ -23,6 +23,7 @@ const { meRoutes } = require('./routes/me');
 const { clientPortalRoutes, clientTeamRoutes } = require('./routes/clients');
 const { createNotifier } = require('./notify');
 const { inboxRoutes } = require('./routes/inbox');
+const { createVariants } = require('./variants');
 const { FORMATS, toolStatus } = require('./media');
 const { createLocalStorage } = require('./storage');
 const { createAccess } = require('./access');
@@ -175,7 +176,10 @@ function createApp(overrides = {}) {
 
   // ---------- Klant (deel-link) ----------
   const notifier = createNotifier(db, access);
-  reviewRoutes(api, db, config, { storage, notifier });
+  // Afspeelversies op de achtergrond (ook voor oudere versies die er nog geen hebben).
+  const variants = createVariants({ db, config, storage });
+  if (config.variants !== false) variants.start();
+  reviewRoutes(api, db, config, { storage, notifier, variants });
   portalRoutes(api, db, config, { storage });
   clientPortalRoutes(api, db, config, { storage });
   brandLogoRoute(api, db, config, { storage });
@@ -187,7 +191,7 @@ function createApp(overrides = {}) {
   const team = asyncRouter();
   team.use(auth.requireTeam(db));
   const uploads = uploadRoutes(team, db, config, { access, storage });
-  teamRoutes(team, db, config, { ...uploads, access, storage, notifier });
+  teamRoutes(team, db, config, { ...uploads, access, storage, notifier, variants });
   adminRoutes(team, db, config, { access, storage, uploads });
   briefingRoutes(team, db, config, { access, storage, uploads });
   brandRoutes(team, db, config, { access, storage });
@@ -287,8 +291,8 @@ function createApp(overrides = {}) {
 
   const needsSetup = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
   return {
-    app, db, config, uploads, storage, access, setupToken, needsSetup, runCleanup, mediaCheck,
-    stop() { clearInterval(cleanupTimer); },
+    app, db, config, uploads, storage, access, setupToken, needsSetup, runCleanup, mediaCheck, variants,
+    stop() { clearInterval(cleanupTimer); variants.stop(); },
   };
 }
 

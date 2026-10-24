@@ -42,6 +42,19 @@ export function renderShapes(shapes, { vw, vh }) {
 }
 
 const RATES = [1, 1.5, 2, 0.5];
+const store = {
+  get(key) { try { return sessionStorage.getItem(key); } catch { return null; } },
+  set(key, value) { try { sessionStorage.setItem(key, value); } catch { /* privémodus */ } },
+};
+const LEVEL_LABEL = { 2160: '4K', 1440: '1440p', 1080: '1080p', 720: '720p' };
+const levelLabel = (n) => LEVEL_LABEL[n] || `${n}p`;
+/** Kwaliteit van het beeld dat nu echt speelt (korte zijde), als label. */
+const playedLabel = (video) => {
+  const short = Math.min(video.videoWidth || 0, video.videoHeight || 0);
+  if (!short) return null;
+  const known = [2160, 1440, 1080, 720].find((l) => Math.abs(short - l) <= 8);
+  return levelLabel(known || short);
+};
 
 /**
  * Videospeler met eigen bediening, tijdlijn met reactiemarkeringen,
@@ -49,8 +62,12 @@ const RATES = [1, 1.5, 2, 0.5];
  * Sneltoetsen (als de speler of de pagina focus heeft): spatie/K afspelen,
  * J/L of ←/→ 5 seconden, , en . één beeld, F volledig scherm, M geluid.
  */
-export function createPlayer({ src, poster, duration: knownDuration, fps = 25 }) {
-  const video = h('video', { src, poster, preload: 'metadata', playsinline: true, 'webkit-playsinline': true });
+export function createPlayer({ src, poster, duration: knownDuration, fps = 25, hls: hlsSource = null, unavailable = null }) {
+  // Geen src als er afspeelversies zijn: die laadt de kwaliteitskeuze hieronder (HLS).
+  const video = h('video', { src: hlsSource?.levels?.length ? undefined : (src || undefined), poster, preload: 'metadata', playsinline: true, 'webkit-playsinline': true, controlsList: 'nodownload noremoteplayback', disablePictureInPicture: true, draggable: 'false' });
+  // Geen “Video opslaan als…” via het contextmenu. Dit is geen kopieerbeveiliging: wat afgespeeld
+  // wordt, kan altijd worden opgenomen. Het voorkomt alleen een ongewenste download met één klik.
+  video.addEventListener('contextmenu', (e) => e.preventDefault());
   const playBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': tr('Afspelen (spatie)') }, icon('play'));
   const timeEl = h('span', { class: 'pc-time', 'aria-live': 'off' }, `0:00 / ${timecode(knownDuration || 0)}`);
   const progress = h('div', { class: 'pc-progress' });
@@ -65,11 +82,13 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   const rateBtn = h('button', { class: 'pc-btn pc-rate', type: 'button', 'aria-label': tr('Afspeelsnelheid') }, '1×');
   const muteBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': tr('Geluid uit (M)') }, icon('volume'));
   const fsBtn = h('button', { class: 'pc-btn', type: 'button', 'aria-label': tr('Volledig scherm (F)') }, icon('fullscreen'));
+  const qualityBtn = h('button', { class: 'pc-btn pc-quality', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', hidden: true }, icon('gear'), h('span', { class: 'pc-quality-label' }, ''));
+  const qualityMenu = h('div', { class: 'pc-quality-menu', role: 'menu', hidden: true });
   const bigPlay = h('button', { class: 'pc-bigplay', type: 'button', 'aria-label': tr('Afspelen') }, icon('play'));
   const loading = h('div', { class: 'spinner pc-loading', 'aria-hidden': 'true' });
   const loadError = h('div', { class: 'pc-error', role: 'alert', hidden: true });
   const controls = h('div', { class: 'pc-controls' }, track,
-    h('div', { class: 'pc-row' }, playBtn, timeEl, h('span', { class: 'pc-spacer' }), rateBtn, muteBtn, fsBtn));
+    h('div', { class: 'pc-row' }, playBtn, timeEl, h('span', { class: 'pc-spacer' }), h('span', { class: 'pc-quality-wrap' }, qualityBtn, qualityMenu), rateBtn, muteBtn, fsBtn));
   // Laag precies boven het werkelijke videobeeld (zonder zwarte randen) voor tekeningen.
   const overlay = h('div', { class: 'pc-overlay', hidden: true });
   const stage = h('div', { class: 'player-stage' }, video, overlay, bigPlay, loading, loadError);
@@ -142,6 +161,8 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(layoutOverlay) : null;
   ro?.observe(stage);
   video.addEventListener('loadedmetadata', layoutOverlay);
+  // Andere kwaliteit = andere beeldafmetingen in pixels, zelfde verhouding: tekeningen blijven op hun plek.
+  video.addEventListener('resize', () => { layoutOverlay(); if (shown) showAnnotation(shown); drawQuality(); });
   window.addEventListener('resize', layoutOverlay);
 
   // ---- Tekening tonen (alleen-lezen) ----
@@ -276,8 +297,127 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
   document.addEventListener('fullscreenchange', onFsChange);
   video.addEventListener('webkitendfullscreen', () => requestAnimationFrame(layoutOverlay));
 
+  // ---- Kwaliteit (afspeelversies via HLS) ----
+  // Auto kiest de hoogste kwaliteit die de verbinding aankan (en wisselt niet bij elk schommelinkje);
+  // een eigen keuze blijft staan tot je hem wijzigt. Wisselen behoudt tijdstip, geluid en tekeningen.
+  const levels = (hlsSource?.levels || []).slice().sort((a, b) => b.level - a.level); // hoog → laag
+  let choice = 'auto';
+  let hls = null;
+  let mode = null; // 'hlsjs' | 'native' | 'file'
+  const wantedLevel = () => (choice === 'auto' ? null : levels.find((l) => String(l.level) === String(choice)) || null);
+  function drawQuality() {
+    if (!levels.length) return;
+    const now = playedLabel(video);
+    const label = choice === 'auto' ? `Auto${now ? ` · ${now}` : ''}` : (wantedLevel()?.label || levelLabel(choice));
+    qualityBtn.querySelector('.pc-quality-label').textContent = label;
+    qualityBtn.setAttribute('aria-label', `${tr('Kwaliteit')}: ${label}${now && choice !== 'auto' ? '' : ''}`);
+    const item = (key, text, sub) => h('button', {
+      type: 'button', role: 'menuitemradio', class: 'pc-quality-item', 'aria-checked': String(String(choice) === String(key)),
+      onClick: () => { setQuality(key); closeQuality(); qualityBtn.focus(); },
+    }, h('span', { class: 'pc-quality-check', 'aria-hidden': 'true' }, String(choice) === String(key) ? icon('check') : null), text, sub ? h('span', { class: 'pc-quality-sub' }, sub) : null);
+    qualityMenu.replaceChildren(
+      h('div', { class: 'pc-quality-head' }, tr('Kwaliteit')),
+      item('auto', tr('Auto'), tr('hoogste die je verbinding aankan')),
+      ...levels.map((l) => item(l.level, l.label, `${l.width}×${l.height}`)),
+      h('div', { class: 'pc-quality-now' }, now ? tr('Nu: {q}', { q: now }) : tr('Nu: wordt geladen…')));
+  }
+  const closeQuality = () => { qualityMenu.hidden = true; qualityBtn.setAttribute('aria-expanded', 'false'); };
+  qualityBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!qualityMenu.hidden) return closeQuality();
+    drawQuality();
+    qualityMenu.hidden = false;
+    qualityBtn.setAttribute('aria-expanded', 'true');
+    qualityMenu.querySelector('[aria-checked="true"]')?.focus();
+  });
+  qualityMenu.addEventListener('keydown', (e) => {
+    const items = [...qualityMenu.querySelectorAll('.pc-quality-item')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.stopPropagation(); closeQuality(); qualityBtn.focus(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  });
+  const outsideQuality = (e) => { if (!qualityMenu.hidden && !qualityMenu.contains(e.target) && e.target !== qualityBtn) closeQuality(); };
+  document.addEventListener('click', outsideQuality);
+
+  /** Bron wisselen zonder hls.js (Safari-eigen HLS of los bestand): tijd en afspeelstatus behouden. */
+  function swapSource(url) {
+    const t = video.currentTime;
+    const playing = !video.paused;
+    const keepRange = rangeEnd;
+    video.src = url;
+    video.addEventListener('loadedmetadata', () => {
+      video.currentTime = t;
+      if (keepRange !== null) rangeEnd = keepRange;
+      if (playing) video.play().catch(() => {});
+    }, { once: true });
+  }
+
+  function setQuality(key) {
+    choice = key;
+    store.set('rt-quality', String(key));
+    if (mode === 'hlsjs' && hls) {
+      // currentLevel: direct wisselen vanaf het huidige tijdstip; -1 = automatisch.
+      const idx = key === 'auto' ? -1 : hls.levels.findIndex((l) => Math.min(l.width, l.height) === Number(key) || l.height === Number(key));
+      hls.currentLevel = idx;
+      if (key === 'auto') hls.nextLevel = -1;
+    } else if (mode === 'native') {
+      swapSource(key === 'auto' ? hlsSource.master : hlsSource.levelPlaylist(key));
+    } else if (mode === 'file') {
+      swapSource(hlsSource.levelFile(key === 'auto' ? levels[0].level : key));
+    }
+    drawQuality();
+  }
+
+  async function startHls() {
+    const saved = store.get('rt-quality');
+    if (saved && (saved === 'auto' || levels.some((l) => String(l.level) === saved))) choice = saved;
+    qualityBtn.hidden = false;
+    let Hls = null;
+    try {
+      const mod = await import('/shared/vendor/hls.light.min.mjs');
+      Hls = mod.default;
+    } catch { Hls = null; }
+    if (Hls?.isSupported()) {
+      mode = 'hlsjs';
+      hls = new Hls({
+        // Lokaal of op een snel netwerk: begin hoog. ABR stapt alleen terug als het echt nodig is.
+        startLevel: -1, abrEwmaDefaultEstimate: 25e6, capLevelToPlayerSize: false,
+        maxBufferLength: 30, backBufferLength: 30, enableWorker: false,
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (choice !== 'auto') setQuality(choice);
+        else hls.startLevel = hls.levels.length - 1; // hoogste (afspeellijst staat oplopend)
+        drawQuality();
+      });
+      hls.on(Hls.Events.LEVEL_SWITCHED, drawQuality);
+      hls.on(Hls.Events.ERROR, (evt, data) => {
+        if (!data.fatal) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+        else { loadError.hidden = false; loadError.textContent = tr('De video kon niet worden geladen. Controleer je verbinding en ververs de pagina.'); }
+      });
+      hls.loadSource(hlsSource.master);
+      hls.attachMedia(video);
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      mode = 'native'; // Safari: eigen HLS-ondersteuning (Auto); een vaste keuze speelt die ene afspeellijst
+      video.src = choice === 'auto' ? hlsSource.master : hlsSource.levelPlaylist(choice);
+    } else {
+      mode = 'file'; // zonder HLS-ondersteuning: één afspeelversie als gewoon bestand
+      video.src = hlsSource.levelFile(choice === 'auto' ? levels[0].level : choice);
+    }
+    drawQuality();
+  }
+  if (levels.length) startHls();
+  if (!levels.length && !src && unavailable) {
+    loadError.hidden = false;
+    loadError.textContent = unavailable;
+    bigPlay.hidden = true;
+  }
+
   const step = 1 / fps;
   function onKey(e) {
+    if (e.key === 'Escape' && !qualityMenu.hidden) { closeQuality(); qualityBtn.focus(); e.preventDefault(); return; }
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.target.closest?.('input, textarea, select, [contenteditable], dialog')) return;
     if (document.querySelector('dialog[open]')) return;
@@ -322,7 +462,11 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25 })
     playRange,
     play: () => video.play().catch(() => {}),
     duration,
+    quality: () => ({ choice, played: playedLabel(video), mode, levels: levels.map((l) => l.label) }),
+    setQuality,
     destroy() {
+      hls?.destroy();
+      document.removeEventListener('click', outsideQuality);
       ro?.disconnect();
       window.removeEventListener('resize', layoutOverlay);
       document.removeEventListener('keydown', onKey);

@@ -153,6 +153,8 @@ export const EN = {
   'Neem contact op met het productieteam.': 'Please contact the production team.',
   '{title}, versie {n} downloaden ({format}, {size})': 'Download {title}, version {n} ({format}, {size})',
   Downloaden: 'Download',
+  'Alles downloaden (ZIP, {size})': 'Download all (ZIP, {size})',
+  '{n} bestanden onder hun oorspronkelijke naam, met een overzicht. Je browser toont de voortgang.': '{n} files with their original names, plus an overview. Your browser shows the progress.',
   Vrijgegeven: 'Released',
   'Dit bestand is niet meer beschikbaar via deze link (ingetrokken of tijdelijk geblokkeerd). Neem contact op met het productieteam.': 'This file is no longer available via this link (revoked or temporarily blocked). Please contact the production team.',
   'Dit bestand is niet meer beschikbaar. Ververs de pagina voor de actuele bestanden.': 'This file is no longer available. Refresh the page to see the current files.',
@@ -353,6 +355,16 @@ export const EN = {
   'Groot in de pagina (met tekeningen)': 'Enlarge in page (with drawings)',
   'Tekeningen en volledig scherm': 'Drawings and full screen',
   'De schermvullende weergave van iPhone toont geen tekeningen. Ze zijn niet verdwenen: kies “Groot in de pagina” om het beeld met tekeningen groot te bekijken.': 'iPhone’s full-screen view does not show drawings. They are still there: choose “Enlarge in page” to see the picture large with drawings.',
+
+  // Kwaliteit en afspelen
+  Kwaliteit: 'Quality',
+  Auto: 'Auto',
+  'hoogste die je verbinding aankan': 'highest your connection can handle',
+  'Nu: {q}': 'Now: {q}',
+  'Nu: wordt geladen…': 'Now: loading…',
+  'Deze video kan op dit moment niet worden afgespeeld. Neem contact op met het productieteam.': 'This video cannot be played at the moment. Please contact the production team.',
+  'Deze video wordt voorbereid om af te spelen ({p}%). Deze pagina werkt zichzelf bij.': 'This video is being prepared for playback ({p}%). This page updates itself.',
+  'Het originele bestand is via deze link niet beschikbaar.': 'The original file is not available via this link.',
 
   // Versies vergelijken
   'Gekoppelde tijdlijn': 'Linked timeline',

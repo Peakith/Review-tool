@@ -250,3 +250,4 @@ html[lang="en"] .howto[open] summary::after { content: "Hide"; }
   .r-nav-link.is-next { grid-column: 2; }
   .r-nav-text .truncate { max-width: 18ch; }
 }
+.d-package { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; }

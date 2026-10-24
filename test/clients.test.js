@@ -320,7 +320,8 @@ describe('linkbeveiliging', () => {
     assert.equal(ok.headers.get('set-cookie').includes('geheim'), false);
     const v = await portalVideo(unlocked, link.token, 'Hoofdfilm');
     assert.equal((await unlocked.get(`/api/review/${v.token}`)).status, 200);
-    assert.equal((await unlocked.get(`/api/review/${v.token}/versions/${A.main.versionId}/media`)).status, 200);
+    // Bouwronde 5: link zonder downloadrecht krijgt het origineel niet (wel na de wachtwoordcontrole: 403, niet 401).
+    assert.equal((await unlocked.get(`/api/review/${v.token}/versions/${A.main.versionId}/media`)).data.code, 'original_blocked');
     // Iemand anders met alleen de afgeleide link: wachtwoord nodig, ook voor media
     const stranger = client(srv.base);
     assert.equal((await stranger.get(`/api/review/${v.token}`)).status, 401);

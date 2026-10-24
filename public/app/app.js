@@ -805,8 +805,12 @@ async function viewVideo(id) {
   let filter = 'all';
   let tab = new URLSearchParams(location.search).get('tab') || 'comments';
 
+  // Afspelen via de afspeelversies (kwaliteitskeuze) zodra die er zijn; het team kan altijd terugvallen op het origineel.
+  const pbLevels = version.playback?.levels || [];
+  const hlsBase = `/api/versions/${version.id}/hls`;
   const player = createPlayer({
     src: `/api/versions/${version.id}/media`,
+    hls: pbLevels.length ? { master: `${hlsBase}/master.m3u8`, levels: pbLevels, levelPlaylist: (l) => `${hlsBase}/${l}/index.m3u8`, levelFile: (l) => `${hlsBase}/${l}/seg.m4s` } : null,
     poster: version.hasPoster ? `/api/versions/${version.id}/poster` : undefined,
     duration: version.duration,
   });
@@ -1006,7 +1010,8 @@ function propertiesBlock(video, version, may, player, refresh) {
       row('Afgesproken rondes', video.roundsIncluded?.count ? `${video.roundsIncluded.count} ${video.roundsIncluded.source === 'video' ? '(voor deze video)' : '(projectstandaard)'}` : h('span', { class: 'muted' }, 'niet ingesteld')),
       row('Oorspronkelijke naam', h('span', { class: 'info-filename', title: 'Deze naam krijgt het bestand bij downloaden, ook als je de titel wijzigt.' }, f.originalFilename)),
       row('Bestand', [f.extension.toUpperCase(), formatBytes(f.size), version.width ? `${version.width}×${version.height}` : null, version.duration ? timecode(version.duration) : null].filter(Boolean).join(' · ')),
-      row('Geüpload', formatDate(version.createdAt))),
+      row('Geüpload', formatDate(version.createdAt)),
+      row('Afspeelversies', playbackStatus(version, may('upload'), refresh))),
     h('div', { class: 'info-thumb' },
       posterImgEl,
       h('div', { class: 'info-thumb-text' },
@@ -1015,6 +1020,52 @@ function propertiesBlock(video, version, may, player, refresh) {
         may('upload') ? h('div', { class: 'info-thumb-actions' },
           button('Huidig frame gebruiken', { size: 'sm', icon: 'image', title: 'Pauzeer de video op het gewenste beeld', onClick: (e) => setFrame(e.currentTarget) }),
           f.customPoster ? button('Automatisch', { size: 'sm', variant: 'ghost', onClick: (e) => resetFrame(e.currentTarget) }) : null) : null)));
+}
+
+/**
+ * Status van de afspeelversies (kwaliteiten) van een versie. Klanten zonder downloadrecht kunnen
+ * pas kijken als er minstens één afspeelversie klaar is; het origineel blijft altijd onaangeroerd.
+ */
+function playbackStatus(version, mayRetry, refresh) {
+  const pb = version.playback || { status: 'none', levels: [] };
+  const el = h('div', { class: 'pb-status' });
+  const draw = (p) => {
+    const ready = p.levels.map((l) => l.label).join(', ');
+    const parts = [];
+    if (p.levels.length) parts.push(h('span', {}, ready, h('span', { class: 'muted' }, ` · ${formatBytes(p.bytes)}`)));
+    if (p.status === 'queued') parts.push(h('span', { class: 'badge badge-neutral' }, icon('clock'), 'in de wachtrij'));
+    if (p.status === 'running') {
+      const todo = p.planned.filter((l) => !p.levels.some((x) => x.level === l.level)).map((l) => l.label).join(', ');
+      parts.push(h('span', { class: 'pb-running' }, h('span', { class: 'badge badge-neutral' }, `wordt gemaakt: ${Math.round(p.progress * 100)}%`), todo ? h('span', { class: 'small muted' }, ` (${todo})`) : null));
+    }
+    if (p.status === 'failed') {
+      parts.push(h('span', { class: 'pb-failed' }, h('span', { class: 'badge badge-danger' }, icon('alert'), 'mislukt'), h('span', { class: 'small' }, ` ${p.error || ''}`),
+        mayRetry ? button('Opnieuw proberen', { size: 'sm', variant: 'ghost', icon: 'refresh', onClick: async (e) => {
+          const restore = busy(e.currentTarget);
+          try { draw((await api('POST', `/api/versions/${version.id}/playback/retry`)).playback); poll(); } catch (err) { toast(err.message, 'error'); restore(); }
+        } }) : null));
+    }
+    if (p.status === 'none') parts.push(h('span', { class: 'muted' }, 'nog niet gestart'));
+    if (p.hdr) parts.push(h('span', { class: 'small muted pb-note' }, 'HDR-bron: afspeelversies zijn zonder kleuromzetting (SDR) gemaakt en kunnen fletser ogen dan het origineel.'));
+    mount(el, parts);
+  };
+  let timer = null;
+  const poll = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (!document.body.contains(el)) return;
+      try {
+        const p = await api('GET', `/api/versions/${version.id}/playback`);
+        const gained = p.levels.length !== (version.playback?.levels.length || 0) && p.status === 'done';
+        draw(p);
+        if (gained && !version.playback?.levels.length) { refresh(); return; }
+        if (['queued', 'running'].includes(p.status)) poll();
+      } catch { poll(); }
+    }, 5000);
+  };
+  draw(pb);
+  if (['queued', 'running'].includes(pb.status)) poll();
+  return el;
 }
 
 /** Type · verhouding · kanaal van de oplevering, met een knop om ze aan te passen. */

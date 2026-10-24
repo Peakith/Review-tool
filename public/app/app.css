@@ -843,3 +843,9 @@ a.dash-row:hover { background: var(--surface-2); border-radius: 6px; }
 .act-row.is-feedback_sent .act-icon { color: var(--st-changes); }
 .act-row.is-team { opacity: .75; }
 .act-team { flex-direction: row; align-items: center; gap: 8px; align-self: end; min-height: 40px; }
+
+/* Afspeelversies (bouwronde 5, fase D) */
+.pb-status { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pb-note { flex-basis: 100%; }
+.pb-failed { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dl-zip { margin-left: auto; }

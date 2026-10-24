@@ -26,6 +26,7 @@ const P = {
   chevronRight: '<path d="m9.5 6.5 5.5 5.5-5.5 5.5"/>',
   arrowLeft: '<path d="M11 6.5 5.5 12l5.5 5.5M6 12h13"/>',
   inbox: '<path d="M4 13.5 6.2 6A1.5 1.5 0 0 1 7.6 5h8.8a1.5 1.5 0 0 1 1.4 1l2.2 7.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/><path d="M4 13.5h4.5l1.2 2h4.6l1.2-2H20"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/>',
   bell: '<path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 1.5H5z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   arrowRight: '<path d="M13 6.5 18.5 12 13 17.5M18 12H5"/>',
   more: '<circle cx="5.5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="18.5" cy="12" r="1.2" fill="currentColor"/>',

@@ -84,11 +84,13 @@ const apiOf = (page, base) => ({
   await api.call('POST', `/api/videos/${vA.videoId}/versions`, { uploadId: await api.upload(fileA, { videoId: vA.videoId }) });
   const reviewUrl = (await api.call('GET', `/api/videos/${vA.videoId}`)).data.links[0].url;
   await page.reload();
-  await page.waitForSelector('.project-card');
+  await page.waitForSelector('.dash-card');
+  check('na het eerste project opent de app op het dashboard', await page.isVisible('.dash-card:has-text("Recente projecten")'));
   check('versienummer zichtbaar in de zijbalk', /Studio Review \d+\.\d+\.\d+ \(build [0-9a-f]{8}\)/.test(await page.textContent('.side-version')), await page.textContent('.side-version'));
 
   // ---------- Team & rechten ----------
-  await page.click('.side-nav a:has-text("Team & rechten")');
+  await page.click('.side-nav a:has-text("Instellingen")');
+  await page.click('.settings-nav a:has-text("Team & rechten")');
   await page.waitForSelector('.member-list');
   const form = page.locator('form.card:has-text("Teamlid of freelancer toevoegen")');
   await form.locator('input').nth(0).fill('Freek Freelancer');
@@ -111,17 +113,36 @@ const apiOf = (page, base) => ({
   await f.fill('input[name=email]', 'freek@freelance.nl');
   await f.fill('input[name=password]', 'een-lang-wachtwoord');
   await f.click('button[type=submit]');
+  await f.waitForSelector('.dash-card');
+  check('freelancer: dashboard toont alleen eigen project', (await f.textContent('.dash-card:has-text("Recente projecten")')).includes('Voorjaarscampagne') && !(await f.textContent('.dash-grid')).includes('Van Dijk'));
+  await f.click('.side-nav a:has-text("Projecten")');
   await f.waitForSelector('.project-card');
   const names = await f.locator('.project-name').allTextContents();
   check('freelancer ziet alleen toegewezen project', names.length === 1 && names[0] === 'Voorjaarscampagne 2026', names.join(', '));
-  check('freelancer: geen "Nieuw project", "Opslag" of beheer', !(await f.isVisible('text=Nieuw project')) && !(await f.isVisible('.side-nav a:has-text("Opslag")')) && await f.isVisible('.side-nav a:has-text("Mijn account")'));
+  const fNoNew = !(await f.isVisible('text=Nieuw project'));
+  await f.click('.side-nav a:has-text("Instellingen")');
+  await f.waitForSelector('.settings-nav');
+  check('freelancer: geen "Nieuw project", "Opslag" of beheer', fNoNew && !(await f.isVisible('.settings-nav a:has-text("Opslag")')) && !(await f.isVisible('.settings-nav a:has-text("Team & rechten")')) && await f.isVisible('.settings-nav a:has-text("Mijn account")'));
+  const fOpslag = await f.request.get(`${srv.base}/api/storage`);
+  check('freelancer: opslag ook rechtstreeks geweigerd', fOpslag.status() === 403, String(fOpslag.status()));
+  await f.click('.side-nav a:has-text("Projecten")');
+  await f.waitForSelector('.project-card');
   await f.click('.project-card');
   await f.waitForSelector('.video-row');
-  check('freelancer (bekijken): geen upload- of beheerknoppen', !(await f.isVisible('button:has-text("Nieuwe video")')) && !(await f.isVisible('button[aria-label="Projectacties"]')));
+  await f.click('button[aria-label="Projectacties"]');
+  const fMenu = await f.textContent('.menu:not([hidden])');
+  await f.keyboard.press('Escape');
+  check('freelancer (bekijken): geen upload- of beheerknoppen', !(await f.isVisible('button:has-text("Nieuwe video")')) && !(await f.isVisible('.page-actions button:has-text("Delen")'))
+    && !/Project bewerken|Archiveren|prullenbak/.test(fMenu) && /Feedback exporteren/.test(fMenu), fMenu);
   await f.click('.video-row-title');
   await f.waitForSelector('.publish-bar');
   check('freelancer (bekijken): geen Delen, Nieuwe versie of Status corrigeren',
-    !(await f.isVisible('.page-actions button:has-text("Delen")')) && !(await f.isVisible('.page-actions button:has-text("Nieuwe versie")')) && !(await f.isVisible('button:has-text("Status van Versie"):has-text("corrigeren")')));
+    !(await f.isVisible('.page-actions button:has-text("Delen")')) && await (async () => {
+      await f.click('button[aria-label="Meer acties"]');
+      const ok = !(await f.isVisible('.menu-item:has-text("Nieuwe versie")')) && !(await f.isVisible('.menu-item:has-text("Status van Versie")')) && await f.isVisible('.menu-item:has-text("Download")');
+      await f.keyboard.press('Escape');
+      return ok;
+    })());
   await f.click('.composer textarea');
   await f.fill('.composer textarea', 'Kleurcorrectie in dit shot nog checken.');
   await f.click('.composer button[type=submit]');
@@ -135,7 +156,8 @@ const apiOf = (page, base) => ({
   check('freelancer: videobestand van ander project rechtstreeks → 404', direct.status() === 404, `status ${direct.status()}`);
 
   // ---------- Opslag & back-ups ----------
-  await page.click('.side-nav a:has-text("Opslag & back-ups")');
+  await page.click('.side-nav a:has-text("Instellingen")');
+  await page.click('.settings-nav a:has-text("Opslag & back-ups")');
   await page.waitForSelector('.stat-tiles');
   check('opslagpagina toont schijfruimte en gebruik per project', await page.isVisible('.disk-bar') && (await page.locator('.data-table tbody tr').count()) >= 2);
   await page.click('button:has-text("Nu back-up maken")');
@@ -162,7 +184,8 @@ const apiOf = (page, base) => ({
   await page.waitForSelector('.toast:has-text("prullenbak")');
   const clientMediaTrashed = await page.request.get(`${srv.base}/api/versions/${vB.versionId}/media`);
   check('video in prullenbak: ook voor beheerder niet direct op te vragen (410)', clientMediaTrashed.status() === 410);
-  await page.click('.side-nav a:has-text("Prullenbak")');
+  await page.click('.side-nav a:has-text("Instellingen")');
+  await page.click('.settings-nav a:has-text("Prullenbak")');
   await page.waitForSelector('.trash-item');
   await shot(page, '24-prullenbak');
   await page.click('.trash-item:has-text("Interview directeur") button:has-text("Definitief verwijderen")');
@@ -183,7 +206,8 @@ const apiOf = (page, base) => ({
   await page.click('.menu:not([hidden]) .menu-item:has-text("Archiveren")');
   await page.waitForSelector('.notice:has-text("Dit project is gearchiveerd")');
   check('project gearchiveerd, alleen-lezen melding', !(await page.isVisible('button:has-text("Nieuwe video")')));
-  await page.click('.side-nav a:has-text("Archief")');
+  await page.click('.side-nav a:has-text("Projecten")');
+  await page.click('.projects-foot a:has-text("Gearchiveerde projecten")');
   await page.waitForSelector('.trash-item:has-text("Voorjaarscampagne 2026")');
   await shot(page, '26-archief');
   const cctx = await browser.newContext({ ...devices['Pixel 7'] });
@@ -208,7 +232,8 @@ const apiOf = (page, base) => ({
   await o.click('button[type=submit]');
   await o.waitForSelector('.system-banner.is-error');
   check('ontbrekende externe schijf: duidelijke melding', (await o.textContent('.system-banner')).includes('“StudioReviewSchijf” is niet aangesloten'));
-  await o.click('.side-nav a:has-text("Opslag & back-ups")');
+  await o.click('.side-nav a:has-text("Instellingen")');
+  await o.click('.settings-nav a:has-text("Opslag & back-ups")');
   await o.waitForSelector('.notice-error:has-text("Opslag niet bereikbaar")');
   await shot(o, '28-externe-schijf-ontbreekt');
   check('geen map aangemaakt onder /Volumes', !fs.existsSync('/Volumes/StudioReviewSchijf'));

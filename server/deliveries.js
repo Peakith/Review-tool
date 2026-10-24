@@ -1,7 +1,7 @@
 'use strict';
 const { STATUSES } = require('./status');
 const { videoMeta, brandDto } = require('./client');
-const { downloadFilename } = require('./media');
+const { originalDownloadName } = require('./media');
 
 /**
  * Definitieve opleveringen.
@@ -93,7 +93,7 @@ function fileInfo(video, version) {
     height: version.height,
     versionNumber: version.number,
     hasPoster: !!version.has_poster,
-    filename: downloadFilename(`${video.title} - v${version.number}`, version.extension),
+    filename: originalDownloadName(version, video),
   };
 }
 

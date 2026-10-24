@@ -1,8 +1,8 @@
 'use strict';
 const { now } = require('../db');
 const { HttpError, changeStatus, OPEN_FOR_CLIENT } = require('../status');
-const { downloadFilename, contentDisposition } = require('../media');
-const { commentDtos } = require('../views');
+const { originalDownloadName, contentDisposition } = require('../media');
+const { commentDtos, posterKey } = require('../views');
 const { clientVideoInfo, sharedVersions: listShared } = require('../client');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { recordActivity, shareLinkSource, isFirstRequest } = require('../activity');
@@ -228,7 +228,7 @@ function reviewRoutes(router, db, config, { storage }) {
   router.get('/review/:token/versions/:versionId/poster', async (req, res) => {
     const ver = getSharedVersion(req);
     if (!ver.has_poster) throw new HttpError(404, 'Geen voorvertoning');
-    await storage.send(res, `${ver.stored_name}.jpg`, { 'Cache-Control': 'private, no-store' });
+    await storage.send(res, posterKey(ver), { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, no-store' });
   });
 
   router.get('/review/:token/versions/:versionId/download', async (req, res) => {
@@ -237,7 +237,7 @@ function reviewRoutes(router, db, config, { storage }) {
     if (isFirstRequest(req)) {
       recordActivity(db, req, { projectId: req.project.id, type: 'download_requested', videoId: req.video.id, versionId: ver.id, src: shareLinkSource(req.link) });
     }
-    const name = downloadFilename(`${req.video.title} - v${ver.number}`, ver.extension);
+    const name = originalDownloadName(ver, req.video);
     await storage.send(res, ver.stored_name, { 'Content-Type': ver.mime_type, 'Content-Disposition': contentDisposition(name), 'Cache-Control': 'private, no-store' });
   });
 }

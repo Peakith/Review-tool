@@ -129,7 +129,7 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   await page.click('dialog button:has-text("Overzicht bekijken")');
   await page.waitForSelector('dialog .release-summary');
   const summary = await page.textContent('dialog .release-summary');
-  check('vrijgeven stap 2: overzicht van wat de klant krijgt (bestandsnaam, formaat, goedkeuring)', /Zomerlijn — Hoofdfilm - v1\.mp4/.test(summary) && /MP4/.test(summary) && /Joris Bakker/.test(summary), summary);
+  check('vrijgeven stap 2: overzicht van wat de klant krijgt (bestandsnaam, formaat, goedkeuring)', /hoofdfilm_v1\.mp4/.test(summary) && /MP4/.test(summary) && /Joris Bakker/.test(summary), summary);
   await shot(page, '81-vrijgeven-stap2-overzicht');
   await page.click('dialog button:has-text("Vrijgeven (1)")');
   await page.waitForSelector('.dl-row .badge-ok');
@@ -168,7 +168,7 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   const [download] = await Promise.all([cp.waitForEvent('download'), cp.click('.d-download')]);
   const saved = path.join(S, 'download.mp4');
   await download.saveAs(saved);
-  check('download: juiste naam met echte extensie', download.suggestedFilename() === 'Zomerlijn — Hoofdfilm - v1.mp4', download.suggestedFilename());
+  check('download: oorspronkelijke uploadnaam met echte extensie', download.suggestedFilename() === 'hoofdfilm_v1.mp4', download.suggestedFilename());
   check('download: identieke bestandsinhoud', Buffer.compare(fs.readFileSync(saved), fs.readFileSync(files.v1)) === 0);
   const newActs = server.db.prepare('SELECT type FROM client_activity WHERE id > ? ORDER BY id').all(before).map((a) => a.type);
   check('klantactiviteit: opleverpagina geopend + download aangevraagd (thumbnail en controle tellen niet)', JSON.stringify(newActs) === '["delivery_opened","download_requested"]', JSON.stringify(newActs));
@@ -194,14 +194,16 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
 
   // Statuscorrectie: het venster noemt de exacte versie en de gevolgen voor goedkeuring en oplevering
   await page.goto(`${BASE}/video/${main.videoId}?v=${v2.versionId}`);
-  await page.click('.publish-bar button:has-text("Status van Versie 2 corrigeren")');
+  await page.click('button[aria-label="Meer acties"]');
+  await page.click('.menu:not([hidden]) .menu-item:has-text("Status van Versie 2 corrigeren")');
   const fixV2 = await page.textContent('dialog');
   check('statuscorrectie v2: geldt alleen voor Versie 2; oplevering (Versie 1) verandert niet', /alleen voor Versie 2/.test(fixV2) && /De definitieve oplevering is Versie 1/.test(fixV2), fixV2.slice(0, 200));
   await page.selectOption('dialog select', 'approved');
   check('statuscorrectie v2 naar Goedgekeurd: uitleg dat een label geen klantgoedkeuring is', /alleen een label/.test(await page.textContent('dialog .status-impact')));
   await page.click('dialog button:has-text("Annuleren")');
   await page.goto(`${BASE}/video/${main.videoId}?v=${main.versionId}`);
-  await page.click('.publish-bar button:has-text("Status van Versie 1 corrigeren")');
+  await page.click('button[aria-label="Meer acties"]');
+  await page.click('.menu:not([hidden]) .menu-item:has-text("Status van Versie 1 corrigeren")');
   await page.selectOption('dialog select', 'changes_requested');
   const fixV1 = await page.textContent('dialog .status-impact');
   check('statuscorrectie v1: waarschuwt dat de goedkeuring wordt ingetrokken en de oplevering geblokkeerd', /trekt de goedkeuring van Joris Bakker voor Versie 1 in/.test(fixV1) && /oplevering van deze versie wordt geblokkeerd/.test(fixV1), fixV1);
@@ -239,7 +241,7 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   const [dl2] = await Promise.all([cp.waitForEvent('download'), cp.click('.d-download')]);
   const saved2 = path.join(S, 'download2.mp4');
   await dl2.saveAs(saved2);
-  check('download na vervangen: v2-bestand met juiste naam', dl2.suggestedFilename() === 'Zomerlijn — Hoofdfilm - v2.mp4' && Buffer.compare(fs.readFileSync(saved2), fs.readFileSync(files.v2)) === 0);
+  check('download na vervangen: v2-bestand met juiste naam', dl2.suggestedFilename() === 'hoofdfilm_v2.mp4' && Buffer.compare(fs.readFileSync(saved2), fs.readFileSync(files.v2)) === 0);
   const histText = await page.textContent('.dl-history');
   check('geschiedenis: vervangen met reden en wie', /vervangen door Sanne de Vries/.test(histText) && /Vervangen door versie 2/.test(histText), histText.slice(0, 200));
 

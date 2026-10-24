@@ -2,7 +2,9 @@
 // logo of, zonder logo, een nette naammarkering. De basisinterface is voor elk merk gelijk.
 import { h, icon } from './util.js';
 
-const BG = [15, 16, 18]; // --bg
+const BG_DARK = [15, 16, 18]; // --bg (donker)
+const BG_LIGHT = [245, 245, 243]; // --bg (licht)
+const currentMode = () => (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
 
 const hexToRgb = (hex) => {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
@@ -18,19 +20,21 @@ const lum = (rgb) => {
 export const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 const mix = (rgb, to, t) => rgb.map((v, i) => v + (to[i] - v) * t);
 
-/** Lichter maken tot het contrast met de achtergrond minstens `min` is. */
-function liftTo(rgb, min) {
+/** Lichter (donker thema) of donkerder (licht thema) maken tot het contrast minstens `min` is. */
+function liftTo(rgb, min, mode) {
+  const bg = mode === 'light' ? BG_LIGHT : BG_DARK;
+  const to = mode === 'light' ? [0, 0, 0] : [255, 255, 255];
   let out = rgb;
-  for (let t = 0; t <= 1 && contrast(out, BG) < min; t += 0.05) out = mix(rgb, [255, 255, 255], t);
+  for (let t = 0; t <= 1 && contrast(out, bg) < min; t += 0.05) out = mix(rgb, to, t);
   return out;
 }
 
-/** CSS-variabelen voor een accentkleur. */
-export function palette(hex) {
+/** CSS-variabelen voor een accentkleur, leesbaar in het huidige thema. */
+export function palette(hex, mode = currentMode()) {
   const base = hexToRgb(hex);
   if (!base) return null;
-  const accent = liftTo(base, 3); // knoppen en focusrand: minstens 3:1 op de achtergrond
-  const strong = liftTo(base, 4.5); // tekst en links: minstens 4,5:1
+  const accent = liftTo(base, 3, mode); // knoppen en focusrand: minstens 3:1 op de achtergrond
+  const strong = liftTo(base, 4.5, mode); // tekst en links: minstens 4,5:1
   const ink = contrast(accent, [255, 255, 255]) >= contrast(accent, [17, 17, 17]) ? '#ffffff' : '#111111';
   const [r, g, b] = accent.map(Math.round);
   return {
@@ -43,7 +47,11 @@ export function palette(hex) {
 }
 
 /** Past het merk toe op de hele pagina (of herstelt de standaard bij brand = null). */
+let lastBrand;
+window.addEventListener('themechange', () => { if (lastBrand !== undefined) applyBrand(lastBrand); });
+
 export function applyBrand(brand, target = document.documentElement) {
+  if (target === document.documentElement) lastBrand = brand;
   const vars = palette(brand?.accent);
   for (const k of ['--accent', '--accent-strong', '--accent-ink', '--accent-soft', '--accent-line']) {
     if (vars) target.style.setProperty(k, vars[k]); else target.style.removeProperty(k);

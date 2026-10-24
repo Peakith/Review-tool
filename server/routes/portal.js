@@ -4,6 +4,7 @@ const auth = require('../auth');
 const { HttpError } = require('../status');
 const { portalDto, sharedVersions } = require('../client');
 const { safeFileHeaders } = require('../files');
+const { posterKey } = require('../views');
 const { recordActivity, portalSource } = require('../activity');
 const { activeDeliveries } = require('../deliveries');
 
@@ -68,7 +69,7 @@ function portalRoutes(router, db, config, { storage }) {
     const video = db.prepare('SELECT * FROM videos WHERE id = ? AND project_id = ? AND trashed_at IS NULL').get(Number(req.params.videoId), req.project.id);
     const ver = video ? sharedVersions(db, video.id)[0] : null;
     if (!ver || !ver.has_poster) throw new HttpError(404, 'Geen voorvertoning');
-    await storage.send(res, `${ver.stored_name}.jpg`, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, no-store' });
+    await storage.send(res, posterKey(ver), { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, no-store' });
   });
 
   // Alleen gedeelde briefingbestanden; interne onderdelen bestaan voor de klant niet.

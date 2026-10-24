@@ -69,9 +69,12 @@ function inspectDb(file) {
     const counts = {};
     for (const t of COUNT_TABLES) if (has(t)) counts[t] = db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n;
     const files = [];
-    for (const v of db.prepare('SELECT stored_name, has_poster, size_bytes FROM versions ORDER BY id').all()) {
+    const hasCol = (t, c) => db.prepare(`PRAGMA table_info(${t})`).all().some((x) => x.name === c);
+    const custom = hasCol('versions', 'custom_poster');
+    for (const v of db.prepare(`SELECT stored_name, has_poster, size_bytes${custom ? ', custom_poster' : ''} FROM versions ORDER BY id`).all()) {
       files.push({ key: v.stored_name, expectedBytes: v.size_bytes });
-      if (v.has_poster) files.push({ key: `${v.stored_name}.jpg`, expectedBytes: null });
+      if (v.has_poster) files.push({ key: `${v.stored_name}.jpg`, expectedBytes: null, optional: !!v.custom_poster });
+      if (v.custom_poster) files.push({ key: `${v.stored_name}.custom.jpg`, expectedBytes: null });
     }
     // Bijlagen bij briefings (ook in de prullenbak) en merklogo's.
     if (has('briefing_items')) {
@@ -122,7 +125,7 @@ async function createBackup({ db, config, storage, label = '', onProgress = () =
     for (let i = 0; i < snap.files.length; i++) {
       const f = snap.files[i];
       onProgress({ phase: 'bestanden', done: i, total: snap.files.length, bytes });
-      if (!(await storage.exists(f.key))) { missing.push(f.key); continue; }
+      if (!(await storage.exists(f.key))) { if (!f.optional) missing.push(f.key); continue; }
       const copied = await storage.copyOut(f.key, path.join(work, 'media', f.key));
       if (f.expectedBytes !== null && copied.bytes !== f.expectedBytes) missing.push(f.key);
       files.push({ key: f.key, bytes: copied.bytes, sha256: copied.sha256 });

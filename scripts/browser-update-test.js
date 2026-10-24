@@ -75,9 +75,10 @@ const stopServer = (child) => new Promise((r) => { child.once('exit', r); child.
     await page.waitForSelector('.side-version', { timeout: 15000 });
     const label = await page.textContent('.side-version');
     check('na gewoon verversen: nieuwe interface met versienummer', /\d+\.\d+\.\d+ \(build/.test(label), label);
-    check('nieuwe beheeronderdelen zichtbaar (bestaand account is beheerder)', await page.isVisible('.side-nav a:has-text("Prullenbak")') && await page.isVisible('.side-nav a:has-text("Opslag & back-ups")'));
+    check('nieuwe indeling zichtbaar: dashboard, projecten en instellingen', await page.isVisible('.side-nav a:has-text("Dashboard")') && await page.isVisible('.side-nav a:has-text("Instellingen")'));
     check('ook geïmporteerde modules komen van de nieuwe build', fresh.some((u) => u.includes('/shared/util.js')) && fresh.some((u) => u.includes('/shared/icons.js')), `${fresh.length} bestanden via /assets/<build>/`);
-    check('bestaand project en sessie behouden', await page.isVisible('.project-card:has-text("Project uit de vorige versie")'));
+    await page.waitForSelector('.dash-card');
+    check('bestaand project en sessie behouden', (await page.textContent('.dash-grid')).includes('Project uit de vorige versie'));
     check('geen JavaScript-fouten na de update', errors.length === 0, errors.join(' | '));
     await page.screenshot({ path: path.join(SHOTS, '31-na-update.png') });
   } finally {

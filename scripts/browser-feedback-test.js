@@ -109,8 +109,8 @@ function mp4(name, { size = '1920x1080', seconds = 12, freq = 440, pattern = 'te
 
   if (ONLY.includes('A')) {
     await publishUi(main.videoId, { round: 'Ronde 1 starten', deadlineDate: '2026-11-10', roundNote: 'Let vooral op de eindtitel.' });
-    await page.click('#tab-rounds');
-    const roundsText = await page.textContent('#tabpanel-rounds');
+    await page.click('#tab-info');
+    const roundsText = await page.textContent('#info-rounds');
     check('rondes: ronde 1 met deadline en tijdzone (per video bijgehouden)', /Ronde 1/.test(roundsText) && /10 nov 2026.*17:00.*(CET|GMT\+1)/.test(roundsText) && /per video/.test(roundsText), roundsText.slice(0, 160));
     await shot(page, '61-rondes-tab');
 
@@ -449,7 +449,8 @@ function mp4(name, { size = '1920x1080', seconds = 12, freq = 440, pattern = 'te
 
     // Team: exportvenster
     await page.goto(`${BASE}/projecten/${projectId}`);
-    await page.click('button:has-text("Exporteren")');
+    await page.click('button[aria-label="Projectacties"]');
+    await page.click('.menu:not([hidden]) .menu-item:has-text("Feedback exporteren")');
     await page.waitForSelector('dialog .export-videos');
     await shot(page, '73-export-venster');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('dialog button:has-text("Downloaden")')]);
@@ -460,7 +461,8 @@ function mp4(name, { size = '1920x1080', seconds = 12, freq = 440, pattern = 'te
     check('export PDF (team, standaard): geen interne gegevens', !t.includes('INTERN') && !t.includes('GEHEIM'));
     execFileSync('pdftoppm', ['-r', '80', '-png', '-f', '1', '-l', '2', pdfFile, path.join(SHOTS, '74-export-pdf-pagina')]);
 
-    await page.click('button:has-text("Exporteren")');
+    await page.click('button[aria-label="Projectacties"]');
+    await page.click('.menu:not([hidden]) .menu-item:has-text("Feedback exporteren")');
     await page.check('dialog .round-option:has-text("CSV") input');
     await page.check('dialog label.check:has-text("Interne notities") input');
     check('export: waarschuwing bij interne export', await page.isVisible('dialog .notice-warn:has-text("Interne export")'));

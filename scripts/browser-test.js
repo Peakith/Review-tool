@@ -147,7 +147,8 @@ async function waitUploadsDone(page, n) {
   await page.click('.tray-item.is-done >> nth=0 >> button:has-text("Sluiten")').catch(() => {});
 
   // ---------- Video delen ----------
-  await page.click('.side-projects a:has-text("Voorjaarscampagne")');
+  await page.click('.side-nav a:has-text("Projecten")');
+  await page.click('.project-card:has-text("Voorjaarscampagne")');
   await page.click('.video-row-title:has-text("Campagnefilm")');
   await page.waitForSelector('.publish-bar.is-concept');
   await page.click('.publish-bar button:has-text("Klaar voor review")');
@@ -175,7 +176,7 @@ async function waitUploadsDone(page, n) {
   // Download met juiste naam
   await page.click('button[aria-label="Meer acties"]');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.menu-item:has-text("Download")')]);
-  check('download: bestandsnaam = titel + versie + .mp4', dl.suggestedFilename() === 'Campagnefilm — Hoofdvideo - v1.mp4', dl.suggestedFilename());
+  check('download: oorspronkelijke uploadnaam (niet de titel)', dl.suggestedFilename() === 'klant_campagne_edit_v03.mp4', dl.suggestedFilename());
 
   // ---------- Klant (reviewer) op desktop ----------
   const cctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -242,7 +243,8 @@ async function waitUploadsDone(page, n) {
   await shot(page, '05-reviewwerkplek-team');
 
   // Nieuwe versie
-  await page.click('.page-actions button:has-text("Nieuwe versie")');
+  await page.click('button[aria-label="Meer acties"]');
+  await page.click('.menu-item:has-text("Nieuwe versie uploaden")');
   await page.waitForSelector('dialog .facts');
   check('nieuwe-versievenster legt uit dat de versie intern blijft', (await page.textContent('dialog')).includes('Klanten blijven tot dan Versie 1 zien'));
   await chooseFiles(page, () => page.click('dialog .dropzone'), [v2]);
@@ -315,15 +317,16 @@ async function waitUploadsDone(page, n) {
   await page.reload();
   await page.waitForSelector('.publish-bar.is-approved');
   check('team ziet goedkeuring door Joris Jansen', (await page.textContent('.publish-bar')).includes('Joris Jansen'));
-  check('correctieknop noemt de exacte versie', await page.isVisible('button:has-text("Status van Versie"):has-text("corrigeren")'));
-  await page.click('.publish-bar button:has-text("Status van Versie 2 corrigeren")');
+  await page.click('button[aria-label="Meer acties"]');
+  check('correctieknop noemt de exacte versie', await page.isVisible('.menu-item:has-text("Status van Versie"):has-text("corrigeren")'));
+  await page.click('.menu-item:has-text("Status van Versie 2 corrigeren")');
   await page.selectOption('dialog select', 'in_review');
   await page.click('dialog button:has-text("Status opslaan")');
   check('correctie zonder reden wordt geweigerd', await page.isVisible('dialog[open]'));
   await page.fill('dialog textarea', 'Klant wil eindtitel nog laten checken');
   await page.click('dialog button:has-text("Status opslaan")');
   await page.waitForSelector('.publish-bar.is-in_review');
-  await page.click('[role=tab]:has-text("Geschiedenis")');
+  await page.click('#tab-info');
   check('correctie met reden in geschiedenis', (await page.textContent('.history')).includes('Reden: Klant wil eindtitel nog laten checken'));
 
   // ---------- Toegang intrekken ----------
@@ -343,9 +346,9 @@ async function waitUploadsDone(page, n) {
   await noNullText(page, 'projectoverzicht');
   check('projectoverzicht toont thumbnails', (await page.locator('.project-cover img').count()) >= 2);
   await shot(page, '03-projectoverzicht');
-  await page.fill('input[type=search]', 'van dijk');
+  await page.fill('input[aria-label="Zoek projecten"]', 'van dijk');
   check('zoeken filtert projecten', (await page.locator('.project-card').count()) === 1);
-  await page.fill('input[type=search]', '');
+  await page.fill('input[aria-label="Zoek projecten"]', '');
   await page.click('.project-card:has-text("Voorjaarscampagne")');
   await page.waitForSelector('.video-row');
   await shot(page, '04-project-gevuld');
@@ -361,7 +364,7 @@ async function waitUploadsDone(page, n) {
   // Trage verbinding: laadstatus zichtbaar, daarna de inhoud
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 1500, downloadThroughput: 50_000, uploadThroughput: 50_000 });
-  await page.click('.side-projects a:has-text("Voorjaarscampagne")');
+  await page.click('.project-card:has-text("Voorjaarscampagne")');
   check('trage verbinding: laadindicator zichtbaar', await page.isVisible('.loading-page .spinner'));
   await page.waitForSelector('.video-row', { timeout: 30_000 });
   check('trage verbinding: pagina laadt daarna volledig', true);
@@ -378,7 +381,7 @@ async function waitUploadsDone(page, n) {
 
   const mteam = await (await browser.newContext({ ...devices['Pixel 7'], storageState: await ctx.storageState() })).newPage();
   watch(mteam, 'team-mobiel');
-  await mteam.goto(`${BASE}/`);
+  await mteam.goto(`${BASE}/projecten`);
   await mteam.waitForSelector('.project-card');
   await shot(mteam, '11-team-mobiel-overzicht');
 

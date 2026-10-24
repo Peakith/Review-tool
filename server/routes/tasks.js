@@ -222,6 +222,8 @@ function taskRoutes(router, db, config, { access }) {
     const projectIds = allowed ? [...allowed.keys()] : db.prepare('SELECT id FROM projects').all().map((p) => p.id);
     res.json({ items: feedbackItems({ projectIds, filters: { assignee: 'me', status: req.query.status || 'active' }, userId: req.user.id }) });
   });
+
+  return { feedbackItems };
 }
 
 module.exports = { taskRoutes, taskDto, syncTaskFromComment, reconcileAssignees, PRIORITIES, TASK_STATUSES };

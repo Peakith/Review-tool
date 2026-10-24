@@ -1,6 +1,9 @@
 'use strict';
 const { STATUSES, EVENTS } = require('./status');
 
+/** Opslagsleutel van de thumbnail van een versie: handmatig gekozen frame of de automatische. */
+const posterKey = (v) => (v.custom_poster ? `${v.stored_name}.custom.jpg` : `${v.stored_name}.jpg`);
+
 function versionDto(v) {
   return {
     id: v.id,
@@ -24,6 +27,8 @@ function versionFileDto(v) {
     originalFilename: v.original_filename,
     extension: v.extension,
     size: v.size_bytes,
+    customPoster: !!v.custom_poster,
+    customPosterTime: v.custom_poster ? v.custom_poster_time : null,
   };
 }
 
@@ -112,4 +117,4 @@ function roundDtos(db, versionId) {
   }));
 }
 
-module.exports = { versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos };
+module.exports = { posterKey, versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos };

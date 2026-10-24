@@ -1,4 +1,5 @@
 'use strict';
+const { sideFiles } = require('../versionfiles');
 const os = require('node:os');
 const { now } = require('../db');
 const { HttpError } = require('../status');
@@ -111,7 +112,10 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     for (const ver of db.prepare(sql).all(id)) {
       const label = `${ver.title} · versie ${ver.number}`;
       files.push({ key: ver.stored_name, label, kind: 'video', originalFilename: ver.original_filename, bytes: await storage.size(ver.stored_name) });
-      if (ver.has_poster) files.push({ key: `${ver.stored_name}.jpg`, label, kind: 'thumbnail', bytes: await storage.size(`${ver.stored_name}.jpg`) });
+      for (const f of sideFiles(db, ver)) {
+        const bytes = await storage.size(f.key);
+        if (bytes !== null || !f.optional) files.push({ key: f.key, label, kind: f.kind, bytes });
+      }
     }
     if (type === 'project') {
       for (const b of db.prepare("SELECT * FROM briefing_items WHERE project_id = ? AND kind = 'file'").all(id)) {
@@ -260,7 +264,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
   router.get('/storage', async (req, res) => {
     access.requireAdmin(req);
     const st = storage.status();
-    const rows = db.prepare(`SELECT ver.id, ver.video_id, ver.number, ver.stored_name, ver.has_poster, ver.trashed_at AS ver_trashed,
+    const rows = db.prepare(`SELECT ver.id, ver.video_id, ver.number, ver.stored_name, ver.has_poster, ver.custom_poster, ver.trashed_at AS ver_trashed,
         v.project_id, v.trashed_at AS video_trashed, v.archived_at AS video_archived,
         p.name AS project_name, p.trashed_at AS project_trashed, p.archived_at AS project_archived
       FROM versions ver JOIN videos v ON v.id = ver.video_id JOIN projects p ON p.id = v.project_id`).all();
@@ -274,7 +278,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
         const vSize = await storage.size(r.stored_name);
         if (vSize === null) missingFiles++;
         bytes += vSize || 0;
-        if (r.has_poster) bytes += (await storage.size(`${r.stored_name}.jpg`)) || 0;
+        for (const f of sideFiles(db, r)) bytes += (await storage.size(f.key)) || 0;
       }
       const category = (r.ver_trashed || r.video_trashed || r.project_trashed) ? 'trash'
         : (r.video_archived || r.project_archived) ? 'archived'

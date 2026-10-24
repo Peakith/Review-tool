@@ -19,6 +19,7 @@ const { exportRoutes } = require('./routes/exports');
 const { deliveryClientRoutes, deliveryTeamRoutes } = require('./routes/deliveries');
 const { activityRoutes, activityClientRoutes } = require('./routes/activity');
 const { purgeOldActivity } = require('./activity');
+const { meRoutes } = require('./routes/me');
 const { FORMATS, toolStatus } = require('./media');
 const { createLocalStorage } = require('./storage');
 const { createAccess } = require('./access');
@@ -109,8 +110,14 @@ function createApp(overrides = {}) {
   api.get('/session', async (req, res) => {
     const user = auth.sessionUser(db, req);
     const needsSetup = db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
+    let preferences = null;
+    if (user) {
+      try { preferences = JSON.parse(db.prepare('SELECT preferences FROM users WHERE id = ?').get(user.id)?.preferences || '{}'); } catch { preferences = {}; }
+    }
     res.json({
       user, needsSetup, formats: Object.keys(FORMATS), maxUploadBytes: config.maxUploadBytes,
+      // Alleen het thema hoort al bij het laden van de pagina; de rest via /api/me/preferences.
+      theme: preferences && ['dark', 'light', 'system'].includes(preferences.theme) ? preferences.theme : 'dark',
       version: versionInfo(),
       media: user ? await mediaCheck() : undefined,
       system: user ? {
@@ -179,7 +186,8 @@ function createApp(overrides = {}) {
   adminRoutes(team, db, config, { access, storage, uploads });
   briefingRoutes(team, db, config, { access, storage, uploads });
   brandRoutes(team, db, config, { access, storage });
-  taskRoutes(team, db, config, { access });
+  const { feedbackItems } = taskRoutes(team, db, config, { access });
+  meRoutes(team, db, config, { access, storage, feedbackItems });
   exportRoutes(team, db, config, { access, storage, mode: 'team' });
   deliveryTeamRoutes(team, db, config, { access, storage });
   activityRoutes(team, db, config, { access });
@@ -221,7 +229,14 @@ function createApp(overrides = {}) {
     return { html, csp: CSP.replace("script-src 'self'", `script-src 'self' 'sha256-${hash}'`) };
   }
   const sendPage = (file) => (req, res) => {
-    const { html, csp } = renderPage(file);
+    let { html, csp } = renderPage(file);
+    // Teampagina's: het thema van het ingelogde account staat er direct in (geen flits bij laden).
+    if (file.startsWith('app/')) {
+      const user = auth.sessionUser(db, req);
+      let pref = null;
+      try { pref = user ? JSON.parse(db.prepare('SELECT preferences FROM users WHERE id = ?').get(user.id)?.preferences || '{}').theme : null; } catch { pref = null; }
+      if (['dark', 'light', 'system'].includes(pref)) html = html.replace('<html lang="nl">', `<html lang="nl" data-theme-pref="${pref}">`);
+    }
     res.setHeader('Content-Security-Policy', csp);
     res.setHeader('Cache-Control', 'no-cache');
     res.type('html').send(html);
@@ -246,7 +261,7 @@ function createApp(overrides = {}) {
   // Voorbeeldweergave voor het team: dezelfde klantpagina's, gevuld via het teamaccount.
   app.get('/voorbeeld/project/:id', sendPage('review/portal.html'));
   app.get('/voorbeeld/video/:id', sendPage('review/index.html'));
-  app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief', '/merken', '/taken'], sendPage('app/index.html'));
+  app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief', '/merken', '/taken', '/zoeken', '/instellingen*', '/klanten*', '/inbox'], sendPage('app/index.html'));
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {

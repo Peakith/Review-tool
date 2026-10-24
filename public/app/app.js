@@ -7,7 +7,11 @@ import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom, commentCounts } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
 import { configureUploads, enqueue, checkFile, suggestTitle, createUploadTray, onUploadsChange } from './uploads.js';
-import { viewTeam, viewStorage, viewTrash, viewArchive, viewBrands, can, menuButton } from './admin.js';
+import { can, menuButton } from './admin.js';
+import { viewDashboard } from './dashboard.js';
+import { searchBox, viewSearch } from './search.js';
+import { viewSettings, settingsSection, saveTheme } from './settings.js';
+import { THEMES, applyTheme, themePref } from '/shared/theme.js';
 import { viewBriefing } from './briefing.js';
 import { taskDialog, taskChip, viewFeedback, viewMyTasks } from './tasks.js';
 import { createCompare } from '/shared/compare.js';
@@ -20,7 +24,6 @@ let session = null;
 let cleanup = () => {};
 let shellEl = null;
 let pageEl = null;
-let sidebarProjects = null;
 
 // ---------- Router ----------
 
@@ -48,25 +51,25 @@ async function route() {
     return;
   }
   if (!session.user) { shellEl = null; return session.needsSetup ? viewSetup() : viewLogin(); }
+  // Thema van dit account (ook direct na inloggen, zonder herladen).
+  if (session.theme && session.theme !== themePref()) applyTheme(session.theme);
   configureUploads(session);
   ensureShell();
   const path = location.pathname;
   let m;
   const views = [
+    [/^\/$/, () => viewDashboard({ ...ctx(), onboarding }), 'dashboard'],
+    [/^\/projecten$/, () => viewProjects(), 'projects'],
+    [/^\/zoeken$/, () => viewSearch(ctx()), 'search'],
+    [/^\/(instellingen(\/[a-z]+)?|team|merken|opslag|prullenbak|archief)$/, () => viewSettings(ctx(), settingsSection(location.pathname, session)), 'settings'],
     [/^\/projecten\/(\d+)$/, (id) => viewProject(Number(id)), 'projects'],
     [/^\/projecten\/(\d+)\/briefing$/, (id) => viewProject(Number(id), 'briefing'), 'projects'],
     [/^\/projecten\/(\d+)\/feedback$/, (id) => viewProject(Number(id), 'feedback'), 'projects'],
     [/^\/projecten\/(\d+)\/oplevering$/, (id) => viewProject(Number(id), 'delivery'), 'projects'],
     [/^\/projecten\/(\d+)\/activiteit$/, (id) => viewProject(Number(id), 'activity'), 'projects'],
     [/^\/taken$/, () => viewMyTasks(ctx()), 'tasks'],
-    [/^\/merken$/, () => (session.user.isAdmin ? viewBrands(ctx()) : viewNotFound()), 'brands'],
     [/^\/video\/(\d+)$/, (id) => viewVideo(Number(id)), 'projects'],
     [/^\/video\/(\d+)\/vergelijk$/, (id) => viewCompare(Number(id)), 'projects'],
-    [/^\/team$/, () => viewTeam(ctx()), 'team'],
-    [/^\/opslag$/, () => (session.user.isAdmin ? viewStorage(ctx()) : viewNotFound()), 'storage'],
-    [/^\/prullenbak$/, () => viewTrash(ctx()), 'trash'],
-    [/^\/archief$/, () => viewArchive(ctx()), 'archive'],
-    [/^\/?$/, () => viewProjects(), 'projects'],
   ];
   const match = views.find(([re]) => (m = path.match(re)));
   const [, render, section] = match || [null, () => viewNotFound(), 'projects'];
@@ -79,7 +82,7 @@ async function route() {
     mount(pageEl, h('div', { class: 'page' },
       pageHeader({ title: err.status === 404 ? 'Niet gevonden' : 'Er ging iets mis' }),
       errorState(err, () => route()),
-      h('p', { class: 'muted', style: null }, h('a', { href: '/', 'data-nav': true }, '← Terug naar projecten'))));
+      h('p', { class: 'muted', style: null }, h('a', { href: '/projecten', 'data-nav': true }, '← Terug naar projecten'))));
   }
   pageEl.focus({ preventScroll: true });
 }
@@ -90,7 +93,7 @@ const ctx = () => ({ session, pageEl, pageHeader, navigate, refresh: () => route
 function viewNotFound() {
   document.title = 'Niet gevonden — Studio Review';
   mount(pageEl, h('div', { class: 'page' }, pageHeader({ title: 'Pagina niet gevonden' }),
-    emptyState({ icon: 'folder', title: 'Deze pagina bestaat niet', text: 'Misschien is het project of de video verwijderd.', action: button('Naar projecten', { variant: 'primary', onClick: () => navigate('/') }) })));
+    emptyState({ icon: 'folder', title: 'Deze pagina bestaat niet', text: 'Misschien is het project of de video verwijderd.', action: button('Naar projecten', { variant: 'primary', onClick: () => navigate('/projecten') }) })));
 }
 
 // ---------- Shell: vaste zijbalk ----------
@@ -100,68 +103,87 @@ function ensureShell() {
   const tray = createUploadTray({
     openItem: (item) => navigate(item.target.kind === 'video' ? `/video/${item.result.videoId}` : `/video/${item.target.videoId}?v=${item.result.versionId}`),
   });
-  sidebarProjects = h('nav', { class: 'side-projects', 'aria-label': 'Recente projecten' });
   const menuBtn = button('', { icon: 'grid', variant: 'ghost', 'aria-label': 'Menu', class: 'btn btn-ghost btn-icon menu-btn', onClick: () => shellEl.classList.toggle('nav-open') });
+  const navLink = (href, section, iconName, label, extra) => h('a', { href, 'data-nav': true, dataset: { section } }, icon(iconName), h('span', { class: 'nav-label' }, label), extra);
   const sidebar = h('aside', { class: 'sidebar' },
     h('div', { class: 'side-top' },
       h('a', { href: '/', 'data-nav': true, class: 'brand' }, h('span', { class: 'brand-mark' }, icon('play')), h('span', {}, 'Studio Review')),
       menuBtn),
     h('div', { class: 'side-scroll' },
+      searchBox({ navigate }),
       h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
-        h('a', { href: '/', 'data-nav': true, dataset: { section: 'projects' } }, icon('folder'), 'Projecten'),
-        h('a', { href: '/taken', 'data-nav': true, dataset: { section: 'tasks' } }, icon('tasks'), 'Mijn taken', h('span', { class: 'side-count', id: 'my-task-count', hidden: true })),
-        h('a', { href: '/archief', 'data-nav': true, dataset: { section: 'archive' } }, icon('history'), 'Archief'),
-        h('a', { href: '/prullenbak', 'data-nav': true, dataset: { section: 'trash' } }, icon('trash'), 'Prullenbak'),
-        session.user.isAdmin
-          ? h('a', { href: '/team', 'data-nav': true, dataset: { section: 'team' } }, icon('users'), 'Team & rechten')
-          : h('a', { href: '/team', 'data-nav': true, dataset: { section: 'team' } }, icon('users'), 'Mijn account'),
-        session.user.isAdmin ? h('a', { href: '/merken', 'data-nav': true, dataset: { section: 'brands' } }, icon('palette'), 'Merken') : null,
-        session.user.isAdmin ? h('a', { href: '/opslag', 'data-nav': true, dataset: { section: 'storage' } }, icon('server'), 'Opslag & back-ups') : null),
-      h('div', { class: 'side-label' }, 'Recent'),
-      sidebarProjects),
+        navLink('/', 'dashboard', 'grid', 'Dashboard'),
+        navLink('/projecten', 'projects', 'folder', 'Projecten')),
+      h('nav', { class: 'side-nav side-nav-secondary', 'aria-label': 'Snel naar' },
+        navLink('/taken', 'tasks', 'tasks', 'Mijn taken', h('span', { class: 'side-count', id: 'my-task-count', hidden: true })))),
     h('div', { class: 'side-foot' },
+      h('nav', { class: 'side-nav', 'aria-label': 'Instellingen' }, navLink('/instellingen', 'settings', 'wrench', 'Instellingen')),
       systemStatus(),
-      h('div', { class: 'side-version', title: 'Versie van deze installatie' }, `Studio Review ${session.version?.label || ''}`),
-      h('div', { class: 'side-user' },
-        h('span', { class: 'avatar', 'aria-hidden': 'true' }, initials(session.user.name)),
-        h('div', { class: 'side-user-text' }, h('div', { class: 'truncate' }, session.user.name), h('div', { class: 'truncate small muted' }, session.user.email)),
-        button('', { icon: 'logout', variant: 'ghost', size: 'sm', 'aria-label': 'Uitloggen', title: 'Uitloggen', onClick: logout }))));
+      profileMenu(),
+      h('div', { class: 'side-version', title: 'Versie van deze installatie' }, `Studio Review ${session.version?.label || ''}`)));
   pageEl = h('main', { class: 'page-host', id: 'main', tabindex: '-1' });
   shellEl = h('div', { class: 'app' },
     h('a', { class: 'skip-link', href: '#main' }, 'Naar inhoud'),
     sidebar,
     h('div', { class: 'main-col' }, systemBanner(), pageEl),
     tray);
-  shellEl.addEventListener('click', (e) => { if (e.target.closest('.side-nav a, .side-projects a')) shellEl.classList.remove('nav-open'); });
+  shellEl.addEventListener('click', (e) => { if (e.target.closest('.side-nav a, .suggest-item')) shellEl.classList.remove('nav-open'); });
   mount(root, shellEl);
   refreshSidebar();
+}
+
+/** Profielmenu: thema (klein), instellingen en uitloggen. */
+function profileMenu() {
+  const menu = h('div', { class: 'menu profile-menu', role: 'menu', hidden: true });
+  const trigger = h('button', { type: 'button', class: 'side-user', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `Profielmenu van ${session.user.name}` },
+    h('span', { class: 'avatar', 'aria-hidden': 'true' }, initials(session.user.name)),
+    h('span', { class: 'side-user-text' }, h('span', { class: 'truncate' }, session.user.name), h('span', { class: 'truncate small muted' }, session.user.email)),
+    icon('chevronDown'));
+  const close = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', outside); };
+  const outside = (e) => { if (!wrap.contains(e.target)) close(); };
+  function draw() {
+    mount(menu,
+      h('div', { class: 'menu-label' }, 'Thema'),
+      THEMES.map(([key, label]) => h('button', {
+        type: 'button', class: 'menu-item', role: 'menuitemradio', 'aria-checked': String(themePref() === key),
+        onClick: async () => { await saveTheme(key); draw(); },
+      }, h('span', { class: 'menu-check', 'aria-hidden': 'true' }, themePref() === key ? icon('check') : null), label)),
+      h('div', { class: 'menu-sep', role: 'separator' }),
+      h('a', { class: 'menu-item', role: 'menuitem', href: '/instellingen/account', 'data-nav': true, onClick: close }, icon('users'), 'Mijn account'),
+      h('a', { class: 'menu-item', role: 'menuitem', href: '/instellingen', 'data-nav': true, onClick: close }, icon('wrench'), 'Instellingen'),
+      h('button', { type: 'button', class: 'menu-item', role: 'menuitem', onClick: () => { close(); logout(); } }, icon('logout'), 'Uitloggen'),
+      h('div', { class: 'menu-foot small muted' }, `Studio Review ${session.version?.label || ''}`));
+  }
+  trigger.addEventListener('click', () => {
+    if (!menu.hidden) return close();
+    draw();
+    menu.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    setTimeout(() => document.addEventListener('click', outside));
+    menu.querySelector('.menu-item')?.focus();
+  });
+  menu.addEventListener('keydown', (e) => {
+    const items = [...menu.querySelectorAll('.menu-item')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { close(); trigger.focus(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  });
+  const wrap = h('div', { class: 'profile-wrap' }, menu, trigger);
+  return wrap;
 }
 
 const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
 
 function setActiveNav(section) {
-  shellEl.querySelectorAll('.side-nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.section === section && (section !== 'projects' || location.pathname === '/')));
-  shellEl.querySelectorAll('.side-projects a').forEach((a) => {
-    const id = a.dataset.project;
-    a.classList.toggle('is-active', location.pathname.startsWith(`/projecten/${id}`) || a.dataset.current === 'true');
-  });
+  shellEl.querySelectorAll('.side-nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.section === section));
 }
 
-async function refreshSidebar(currentProjectId) {
+async function refreshSidebar() {
   api('GET', '/api/my/tasks').then((r) => {
     const el = document.getElementById('my-task-count');
     if (el) { el.textContent = String(r.items.length); el.hidden = !r.items.length; }
   }).catch(() => {});
-  try {
-    const projects = await api('GET', '/api/projects');
-    mount(sidebarProjects, projects.length
-      ? projects.slice(0, 12).map((p) => h('a', {
-        href: `/projecten/${p.id}`, 'data-nav': true, dataset: { project: p.id, current: String(p.id === currentProjectId) },
-        class: location.pathname === `/projecten/${p.id}` || p.id === currentProjectId ? 'is-active' : '',
-        title: p.name,
-      }, h('span', { class: 'truncate' }, p.name), needsAttention(p) ? h('span', { class: 'side-dot', title: 'Actie nodig' }) : null))
-      : h('p', { class: 'side-empty' }, 'Nog geen projecten'));
-  } catch { /* zijbalk is niet kritisch */ }
 }
 
 /** Waarschuwt als er serveronderdelen ontbreken. */
@@ -338,7 +360,7 @@ async function viewProjects() {
     if (state.q) q.set('q', state.q);
     if (state.filter !== 'all') q.set('filter', state.filter);
     if (state.sort !== 'activity') q.set('sort', state.sort);
-    history.replaceState(null, '', `/${q.toString() ? `?${q}` : ''}`);
+    history.replaceState(null, '', `/projecten${q.toString() ? `?${q}` : ''}`);
   };
   function draw() {
     const term = state.q.trim().toLowerCase();
@@ -370,11 +392,11 @@ async function viewProjects() {
       h('div', { class: 'search toolbar-search' }, icon('search'), search),
       filterBar,
       h('label', { class: 'toolbar-sort' }, h('span', { class: 'visually-hidden' }, 'Sorteren'), sort)),
-    grid));
+    grid,
+    h('nav', { class: 'projects-foot small', 'aria-label': 'Meer projecten' },
+      h('a', { href: '/instellingen/archief', 'data-nav': true }, icon('history'), ' Gearchiveerde projecten'),
+      h('a', { href: '/instellingen/prullenbak', 'data-nav': true }, icon('trash'), ' Prullenbak'))));
   draw();
-  const onSlash = (e) => { if (e.key === '/' && !e.target.closest('input, textarea')) { e.preventDefault(); search.focus(); } };
-  document.addEventListener('keydown', onSlash);
-  cleanup = () => document.removeEventListener('keydown', onSlash);
 }
 
 function onboarding() {
@@ -616,17 +638,17 @@ async function viewProject(id, tab = 'videos') {
   const tabLink = (key, href, iconName, label, extra) => h('a', { href, 'data-nav': true, class: tab === key ? 'is-active' : '', 'aria-current': tab === key ? 'page' : null }, icon(iconName), label, extra);
   const tabs = h('nav', { class: 'page-tabs', 'aria-label': 'Projectonderdelen' },
     h('a', { href: `/projecten/${project.id}`, 'data-nav': true, class: isVideos ? 'is-active' : '', 'aria-current': isVideos ? 'page' : null }, icon('film'), 'Video’s', h('span', { class: 'seg-count' }, project.videos.length)),
-    tabLink('feedback', `/projecten/${project.id}/feedback`, 'tasks', 'Feedback & taken', project.openFeedback ? h('span', { class: 'seg-count' }, project.openFeedback) : null),
-    h('a', { href: `/projecten/${project.id}/briefing`, 'data-nav': true, class: tab === 'briefing' ? 'is-active' : '', 'aria-current': tab === 'briefing' ? 'page' : null }, icon('clipboard'), 'Briefing & referenties',
+    tabLink('feedback', `/projecten/${project.id}/feedback`, 'tasks', 'Feedback', project.openFeedback ? h('span', { class: 'seg-count' }, project.openFeedback) : null),
+    h('a', { href: `/projecten/${project.id}/briefing`, 'data-nav': true, class: tab === 'briefing' ? 'is-active' : '', 'aria-current': tab === 'briefing' ? 'page' : null }, icon('clipboard'), 'Briefing',
       h('span', { class: 'seg-count', dataset: { count: 'briefing' } }, project.briefingCount),
       h('span', { class: 'badge badge-visible', title: 'Onderdelen die de klant kan bekijken', dataset: { count: 'shared' }, hidden: !project.sharedBriefingCount }, icon('eye'), h('span', {}, project.sharedBriefingCount))),
     tabLink('delivery', `/projecten/${project.id}/oplevering`, 'package', 'Oplevering', h('span', { class: 'seg-count', dataset: { count: 'delivery' } }, project.deliveryCount)),
-    can(project.myLevel, 'publish') ? tabLink('activity', `/projecten/${project.id}/activiteit`, 'activity', 'Klantactiviteit') : null);
+    can(project.myLevel, 'publish') ? tabLink('activity', `/projecten/${project.id}/activiteit`, 'activity', 'Activiteit') : null);
   const briefingHost = h('div', {});
 
   const content = h('div', { class: 'page page-drop' },
     pageHeader({
-      crumbs: [{ label: 'Projecten', href: '/' }],
+      crumbs: [{ label: 'Projecten', href: '/projecten' }],
       title: h('h1', { class: 'page-title', title: project.name }, project.name),
       meta: [
         project.clientName ? h('span', {}, project.clientName) : null,
@@ -634,16 +656,20 @@ async function viewProject(id, tab = 'videos') {
         brandChip(project.brand),
       ],
       actions: [
-        mayManage ? menuButton([
-          ['Project bewerken…', () => editProject(project), { icon: 'edit' }],
-          archived ? ['Uit archief halen', () => setArchived('project', project.id, project.name, false), { icon: 'refresh' }]
-            : ['Archiveren', () => setArchived('project', project.id, project.name, true), { icon: 'history' }],
-          ['Naar prullenbak…', () => moveToTrash('project', project.id, project.name, () => navigate('/'), { deliveryWarning: project.deliveryCount ? `Dit project heeft ${plural(project.deliveryCount, 'vrijgegeven bestand', 'vrijgegeven bestanden')}. Zolang het in de prullenbak staat, werken de opleverlink en het klantportaal niet.` : null }), { icon: 'trash', danger: true }],
-        ], 'Projectacties') : null,
-        project.videos.length ? button('Exporteren', { icon: 'fileDown', onClick: () => exportDialog({ projectId: project.id, videos: project.videos }), title: 'Feedback als PDF of CSV' }) : null,
-        h('a', { class: 'btn btn-secondary', href: `/voorbeeld/project/${project.id}`, target: '_blank', rel: 'noopener', title: 'Bekijk het portaal precies zoals de klant het ziet' }, icon('eye'), h('span', { class: 'btn-label' }, 'Klantweergave')),
-        can(project.myLevel, 'publish') ? button('Klantportaal', { icon: 'globe', onClick: () => portalDialog(project), 'aria-label': 'Klantportaal: projectlink delen of beheren' }) : null,
         mayUpload && isVideos ? button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }) : null,
+        can(project.myLevel, 'publish') ? menuButton([
+          ['Klantportaal (projectlink)…', () => portalDialog(project), { icon: 'globe' }],
+          ['Opleverlink en oplevering', () => navigate(`/projecten/${project.id}/oplevering`), { icon: 'package' }],
+          ['Klantweergave bekijken', () => window.open(`/voorbeeld/project/${project.id}`, '_blank', 'noopener'), { icon: 'eye' }],
+        ], 'Delen', { label: 'Delen', icon: 'link' }) : null,
+        menuButton([
+          project.videos.length ? ['Feedback exporteren…', () => exportDialog({ projectId: project.id, videos: project.videos }), { icon: 'fileDown' }] : null,
+          ['Klantweergave bekijken', () => window.open(`/voorbeeld/project/${project.id}`, '_blank', 'noopener'), { icon: 'eye' }],
+          mayManage ? ['Project bewerken…', () => editProject(project), { icon: 'edit' }] : null,
+          mayManage ? (archived ? ['Uit archief halen', () => setArchived('project', project.id, project.name, false), { icon: 'refresh' }]
+            : ['Archiveren', () => setArchived('project', project.id, project.name, true), { icon: 'history' }]) : null,
+          mayManage ? ['Naar prullenbak…', () => moveToTrash('project', project.id, project.name, () => navigate('/projecten'), { deliveryWarning: project.deliveryCount ? `Dit project heeft ${plural(project.deliveryCount, 'vrijgegeven bestand', 'vrijgegeven bestanden')}. Zolang het in de prullenbak staat, werken de opleverlink en het klantportaal niet.` : null }), { icon: 'trash', danger: true }] : null,
+        ].filter(Boolean), 'Projectacties'),
       ],
     }),
     archived ? h('div', { class: 'notice notice-info page-notice' }, icon('history'),
@@ -853,8 +879,7 @@ async function viewVideo(id) {
   const tabs = [
     ['comments', 'Reacties', tabCount],
     ['versions', 'Versies', h('span', { class: 'tab-count' }, video.versions.length)],
-    ['rounds', 'Rondes', h('span', { class: 'tab-count' }, video.rounds.length || '')],
-    ['history', 'Geschiedenis', null],
+    ['info', 'Info', null],
   ];
   const tabButtons = tabs.map(([key, label, extra]) => h('button', {
     type: 'button', role: 'tab', id: `tab-${key}`, 'aria-controls': `tabpanel-${key}`,
@@ -872,11 +897,18 @@ async function viewVideo(id) {
     comments: h('div', { class: 'tabpanel tabpanel-comments', role: 'tabpanel', id: 'tabpanel-comments', 'aria-labelledby': 'tab-comments' },
       h('div', { class: 'panel-toolbar' }, filterBar), commentsEl, h('div', { class: 'panel-composer' }, composer.el)),
     versions: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-versions', 'aria-labelledby': 'tab-versions' }, h('div', { class: 'panel-scroll' }, versionsList(video, version))),
-    rounds: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-rounds', 'aria-labelledby': 'tab-rounds' }, h('div', { class: 'panel-scroll' }, roundsList(video, refresh, may))),
-    history: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-history', 'aria-labelledby': 'tab-history' }, h('div', { class: 'panel-scroll' }, historyList(version))),
+    // Info: vaste secties voor eigenschappen, rondes en geschiedenis van deze versie.
+    info: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-info', 'aria-labelledby': 'tab-info' }, h('div', { class: 'panel-scroll info-panel' },
+      h('section', { class: 'info-section', id: 'info-props', 'aria-labelledby': 'info-props-h' }, h('h3', { id: 'info-props-h' }, 'Eigenschappen'), propertiesBlock(video, version, may, player, refresh)),
+      h('section', { class: 'info-section', id: 'info-rounds', 'aria-labelledby': 'info-rounds-h' }, h('h3', { id: 'info-rounds-h' }, 'Reviewrondes', video.rounds.length ? h('span', { class: 'seg-count' }, video.rounds.length) : null), roundsList(video, refresh, may)),
+      h('section', { class: 'info-section', id: 'info-history', 'aria-labelledby': 'info-history-h' }, h('h3', { id: 'info-history-h' }, `Geschiedenis van versie ${version.number}`), historyList(version)))),
   };
   function selectTab(key) {
     tab = key;
+    // Het gekozen tabblad hoort bij het adres, zodat het na verversen of een actie open blijft.
+    const q = new URLSearchParams(location.search);
+    if (key === 'comments') q.delete('tab'); else q.set('tab', key);
+    history.replaceState(null, '', `${location.pathname}${q.toString() ? `?${q}` : ''}`);
     tabButtons.forEach((b) => { const on = b.id === `tab-${key}`; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; });
     Object.entries(panels).forEach(([k, p]) => { p.hidden = k !== key; });
   }
@@ -888,41 +920,34 @@ async function viewVideo(id) {
   versionSelect.addEventListener('change', () => navigate(`/video/${video.id}?v=${versionSelect.value}`));
 
   const shareBtn = can(level, 'publish') ? button('Delen', { icon: 'link', onClick: () => shareDialog(video, refresh) }) : null;
-  const newVersionBtn = may('upload') ? button('Nieuwe versie', { icon: 'layers', onClick: () => newVersionDialog(video) }) : null;
   if (archived) composer.setDisabled(true, 'Gearchiveerd: reageren is niet meer mogelijk.');
 
   const content = h('div', { class: 'workspace page-drop' },
     pageHeader({
-      crumbs: [{ label: 'Projecten', href: '/' }, { label: video.project.name, href: `/projecten/${video.project.id}` }],
+      crumbs: [{ label: 'Projecten', href: '/projecten' }, { label: video.project.name, href: `/projecten/${video.project.id}` }],
       title: titleEditor(video, may('upload')),
       meta: [
-        deliveryMeta(video, may('upload')),
-        h('span', { class: 'meta-item' }, h('span', { class: 'muted' }, 'Intern nieuwste: '), `Versie ${latest.number}`),
+        statusPill(version.status, { small: true }),
         h('span', { class: 'meta-item' }, icon('eye'), h('span', { class: 'muted' }, ' Klant ziet: '), clientVersion ? `Versie ${clientVersion.number}` : 'nog niets gedeeld'),
         video.delivery ? h('a', { class: `meta-item delivery-chip${video.delivery.available ? '' : ' is-blocked'}`, href: `/projecten/${video.project.id}/oplevering`, 'data-nav': true, title: video.delivery.available ? 'Definitief vrijgegeven aan de klant' : video.delivery.reasonText },
           icon(video.delivery.available ? 'package' : 'lock'), h('span', { class: 'muted' }, ' Opgeleverd: '), `Versie ${video.delivery.versionNumber}`, video.delivery.available ? '' : ' (geblokkeerd)') : null,
         roundIndicator(video),
       ],
-      actions: [versionSelect, newVersionBtn,
-        video.versions.length > 1 ? h('a', { class: 'btn btn-secondary', href: `/video/${video.id}/vergelijk?a=${video.versions.find((v) => v.id !== version.id)?.id}&b=${version.id}`, 'data-nav': true, title: 'Twee versies naast elkaar bekijken' }, icon('compare'), h('span', { class: 'btn-label' }, 'Vergelijken')) : null,
-        h('a', { class: 'btn btn-secondary', href: `/voorbeeld/video/${video.id}`, target: '_blank', rel: 'noopener', title: 'Zo ziet de klant deze video (alleen gepubliceerde versies, zonder interne notities)' }, icon('eye'), h('span', { class: 'btn-label' }, 'Klantweergave')),
-        shareBtn, moreMenu(video, version, { level, archived })],
+      actions: [versionSelect, shareBtn, moreMenu(video, version, { level, archived, refresh })],
     }),
     archived ? h('div', { class: 'notice notice-info page-notice' }, icon('history'), h('span', {}, h('strong', {}, 'Gearchiveerd. '), 'Deze video is alleen te bekijken. Klanten kunnen hun link nog openen, maar niet meer reageren of goedkeuren.')) : null,
     publishBar(video, version, latest, clientVersion, refresh, may),
     h('div', { class: 'workspace-grid' },
-      h('section', { class: 'stage', 'aria-label': 'Video' },
-        player.el,
-        h('div', { class: 'stage-meta' },
-          h('span', { class: 'truncate', title: version.file.originalFilename }, icon('film'), version.file.originalFilename),
-          h('span', {}, [formatBytes(version.file.size), version.width ? `${version.width}×${version.height}` : null, version.duration ? timecode(version.duration) : null].filter(Boolean).join(' · ')),
-          h('span', { class: 'kbd-hint' }, 'Spatie afspelen · ←/→ 5 s · , . beeld'))),
+      h('section', { class: 'stage', 'aria-label': 'Video' }, player.el),
       h('aside', { class: 'side-panel', 'aria-label': 'Reacties en details' },
         h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Paneel' }, tabButtons),
         Object.values(panels))));
   if (may('upload')) makeDropTarget(content, (files) => newVersionDialog(video, files[0]), `Loslaten als nieuwe versie (Versie ${latest.number + 1})`);
   mount(pageEl, content);
-  selectTab(['comments', 'versions', 'rounds', 'history'].includes(tab) ? tab : 'comments');
+  // Oude adressen (?tab=rounds / ?tab=history) openen het Info-paneel bij de juiste sectie.
+  const section = { rounds: 'info-rounds', history: 'info-history' }[tab];
+  selectTab(section ? 'info' : ['comments', 'versions', 'info'].includes(tab) ? tab : 'comments');
+  if (section) document.getElementById(section)?.scrollIntoView({ block: 'start' });
   drawComments();
   // Vanuit een overzicht: direct naar de reactie en het juiste moment.
   const focusId = Number(new URLSearchParams(location.search).get('c'));
@@ -942,6 +967,42 @@ async function viewVideo(id) {
 
 const KIND_LABELS = { main: 'Hoofdvideo', teaser: 'Teaser', cutdown: 'Cutdown', social: 'Social', other: 'Overig' };
 const ASPECTS = ['16:9', '9:16', '1:1', '4:5', '4:3', '21:9'];
+
+/** Info › Eigenschappen: gegevens van de video, het bestand van deze versie en de thumbnail. */
+function propertiesBlock(video, version, may, player, refresh) {
+  const f = version.file;
+  const posterImgEl = h('img', { class: 'info-poster', alt: `Thumbnail van versie ${version.number}`, src: `/api/versions/${version.id}/poster?t=${f.customPoster ? f.customPosterTime : 'auto'}` });
+  posterImgEl.addEventListener('error', () => posterImgEl.replaceWith(h('div', { class: 'info-poster poster-empty' }, icon('film'))));
+  const setFrame = async (btn) => {
+    const at = player.currentTime();
+    const restore = busy(btn);
+    try {
+      await api('POST', `/api/versions/${version.id}/poster`, { time: Math.round(at * 100) / 100 });
+      toast(`Thumbnail van versie ${version.number} ingesteld op ${timecode(at)}. Het videobestand blijft ongewijzigd.`, 'success');
+      refresh();
+    } catch (err) { toast(err.message, 'error'); restore(); }
+  };
+  const resetFrame = async (btn) => {
+    const restore = busy(btn);
+    try { await api('DELETE', `/api/versions/${version.id}/poster`); toast('Thumbnail staat weer op automatisch', 'success'); refresh(); } catch (err) { toast(err.message, 'error'); restore(); }
+  };
+  const row = (label, value) => h('div', { class: 'info-row' }, h('dt', {}, label), h('dd', {}, value));
+  return h('div', { class: 'info-props' },
+    h('dl', { class: 'info-list' },
+      row('Oplevering', deliveryMeta(video, may('upload'))),
+      row('Afgesproken rondes', video.roundsIncluded?.count ? `${video.roundsIncluded.count} ${video.roundsIncluded.source === 'video' ? '(voor deze video)' : '(projectstandaard)'}` : h('span', { class: 'muted' }, 'niet ingesteld')),
+      row('Oorspronkelijke naam', h('span', { class: 'info-filename', title: 'Deze naam krijgt het bestand bij downloaden, ook als je de titel wijzigt.' }, f.originalFilename)),
+      row('Bestand', [f.extension.toUpperCase(), formatBytes(f.size), version.width ? `${version.width}×${version.height}` : null, version.duration ? timecode(version.duration) : null].filter(Boolean).join(' · ')),
+      row('Geüpload', formatDate(version.createdAt))),
+    h('div', { class: 'info-thumb' },
+      posterImgEl,
+      h('div', { class: 'info-thumb-text' },
+        h('strong', {}, 'Thumbnail'),
+        h('p', { class: 'small muted' }, f.customPoster ? `Zelf gekozen frame op ${timecode(f.customPosterTime)} van versie ${version.number}.` : 'Automatisch gekozen frame.'),
+        may('upload') ? h('div', { class: 'info-thumb-actions' },
+          button('Huidig frame gebruiken', { size: 'sm', icon: 'image', title: 'Pauzeer de video op het gewenste beeld', onClick: (e) => setFrame(e.currentTarget) }),
+          f.customPoster ? button('Automatisch', { size: 'sm', variant: 'ghost', onClick: (e) => resetFrame(e.currentTarget) }) : null) : null)));
+}
 
 /** Type · verhouding · kanaal van de oplevering, met een knop om ze aan te passen. */
 function deliveryMeta(video, editable) {
@@ -1000,7 +1061,7 @@ async function viewCompare(id) {
   });
   mount(pageEl, h('div', { class: 'page page-wide' },
     pageHeader({
-      crumbs: [{ label: 'Projecten', href: '/' }, { label: video.project.name, href: `/projecten/${video.project.id}` }, { label: video.title, href: `/video/${video.id}` }],
+      crumbs: [{ label: 'Projecten', href: '/projecten' }, { label: video.project.name, href: `/projecten/${video.project.id}` }, { label: video.title, href: `/video/${video.id}` }],
       title: 'Versies vergelijken',
       meta: [h('span', {}, video.title), h('span', { class: 'muted' }, 'Alleen-lezen: reageren doe je in de werkplek')],
       actions: [h('a', { class: 'btn btn-secondary', href: `/video/${video.id}`, 'data-nav': true }, icon('arrowLeft'), h('span', { class: 'btn-label' }, 'Terug naar de werkplek'))],
@@ -1081,11 +1142,9 @@ function publishBar(video, version, latest, clientVersion, refresh, may) {
       actions.push(button(`Naar Versie ${latest.number}`, { icon: 'arrowLeft', onClick: () => navigate(`/video/${video.id}`) }));
     }
   }
-  const correct = may('manage') ? h('button', { type: 'button', class: 'link-btn', onClick: () => statusDialog(video, version, refresh) }, icon('edit'), `Status van Versie ${version.number} corrigeren`) : null;
   return h('section', { class: `publish-bar is-${version.status}${isLatest ? '' : ' is-old'}`, 'aria-label': 'Status en volgende stap' },
-    h('div', { class: 'publish-status' }, h('span', { class: 'publish-version' }, `Versie ${version.number}`), statusPill(version.status)),
-    h('p', { class: 'publish-text' }, text),
-    h('div', { class: 'publish-actions' }, correct, actions));
+    h('p', { class: 'publish-text' }, h('span', { class: 'publish-version' }, `Versie ${version.number}`), ' ', text),
+    actions.length ? h('div', { class: 'publish-actions' }, actions) : null);
 }
 
 // ---------- Reviewrondes ----------
@@ -1235,10 +1294,18 @@ async function apiWithRetryTeam(method, url, body) {
   }
 }
 
-function moreMenu(video, version, { level, archived }) {
+function moreMenu(video, version, { level, archived, refresh }) {
   const back = () => navigate(`/projecten/${video.project.id}`);
-  const items = [[`Download Versie ${version.number}`, () => { location.href = `/api/versions/${version.id}/download`; }, { icon: 'download' }],
-    ['Feedback exporteren…', () => exportDialog({ projectId: video.project.id, videos: [{ id: video.id, title: video.title }] }), { icon: 'fileDown' }]];
+  const other = video.versions.find((v) => v.id !== version.id);
+  const items = [
+    can(level, 'upload') && !archived ? ['Nieuwe versie uploaden…', () => newVersionDialog(video), { icon: 'layers' }] : null,
+    other ? ['Versies vergelijken', () => navigate(`/video/${video.id}/vergelijk?a=${other.id}&b=${version.id}`), { icon: 'compare' }] : null,
+    ['Klantweergave bekijken', () => window.open(`/voorbeeld/video/${video.id}`, '_blank', 'noopener'), { icon: 'eye' }],
+    [`Download Versie ${version.number}`, () => { location.href = `/api/versions/${version.id}/download`; }, { icon: 'download' }],
+    ['Feedback exporteren…', () => exportDialog({ projectId: video.project.id, videos: [{ id: video.id, title: video.title }] }), { icon: 'fileDown' }],
+    can(level, 'upload') && !archived ? ['Gegevens wijzigen…', () => detailsDialog(video), { icon: 'edit' }] : null,
+    can(level, 'manage') && !archived ? [`Status van Versie ${version.number} corrigeren…`, () => statusDialog(video, version, refresh), { icon: 'flag' }] : null,
+  ];
   if (can(level, 'manage')) {
     if (video.versions.length > 1) {
       items.push([`Versie ${version.number} naar prullenbak…`, () => moveToTrash('version', version.id, `${video.title} · versie ${version.number}`, () => navigate(`/video/${video.id}`),

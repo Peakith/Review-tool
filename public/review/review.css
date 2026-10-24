@@ -42,7 +42,7 @@
 .howto ol strong { color: var(--text); }
 
 .identity { display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px; }
-.identity.is-verified { display: flex; gap: 10px; align-items: flex-start; background: var(--st-approved-bg); border-color: rgba(87, 213, 147, .25); color: #9be8bd; }
+.identity.is-verified { display: flex; gap: 10px; align-items: flex-start; background: var(--st-approved-bg); border-color: var(--line-ok); color: var(--ok-text); }
 .identity.is-verified > .icon { margin-top: 2px; }
 .identity.is-verified strong { color: var(--text); }
 
@@ -50,7 +50,7 @@
 .r-comments-head h2 { font-size: 14px; color: var(--text-2); }
 
 /* ---------- Actiebalk ---------- */
-.r-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(19, 20, 23, .94); backdrop-filter: blur(10px); border-top: 1px solid var(--line-2); }
+.r-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--bar-bg); backdrop-filter: blur(10px); border-top: 1px solid var(--line-2); }
 .r-actions-inner { max-width: 1600px; margin: 0 auto; padding: 12px 24px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: flex-end; gap: 10px 18px; flex-wrap: wrap; }
 .r-actions-hint { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-3); margin-right: auto; }
 .r-actions-hint .icon { --icon-size: 15px; }
@@ -84,10 +84,10 @@ html { scroll-padding-bottom: 110px; }
 .r-meta-line { font-size: 12.5px; color: var(--text-3); margin-top: 3px; }
 
 /* ---------- Voorbeeldbalk (team) ---------- */
-.preview-bar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 24px; background: #2a2340; color: #e4ddff; font-size: 13.5px; border-bottom: 1px solid rgba(173, 159, 255, .35); }
+.preview-bar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 24px; background: var(--preview-bg); color: var(--preview-text); font-size: 13.5px; border-bottom: 1px solid rgba(173, 159, 255, .35); }
 .preview-bar > .icon { --icon-size: 17px; }
 .preview-bar > span:not(.icon) { flex: 1 1 260px; }
-.preview-bar strong { color: #fff; }
+.preview-bar strong { color: var(--text); }
 
 /* ---------- Klantportaal ---------- */
 .p-header .r-header-inner { padding-top: 12px; padding-bottom: 12px; }
@@ -107,7 +107,7 @@ html { scroll-padding-bottom: 110px; }
 .p-card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; color: var(--text); text-decoration: none !important; transition: border-color .12s, transform .12s; }
 a.p-card:hover { border-color: var(--line-2); transform: translateY(-1px); }
 a.p-card:focus-visible { box-shadow: var(--focus); outline: none; }
-.p-card.is-in_review { border-color: rgba(244, 190, 85, .35); }
+.p-card.is-in_review { border-color: var(--line-warn); }
 .p-thumb { position: relative; aspect-ratio: 16 / 9; background: var(--stage); display: grid; place-items: center; overflow: hidden; }
 .p-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .p-thumb.is-portrait img, .p-thumb.is-square img { object-fit: contain; }
@@ -119,7 +119,7 @@ a.p-card:focus-visible { box-shadow: var(--focus); outline: none; }
 .p-card-status { display: flex; }
 .p-note { display: flex; gap: 6px; align-items: flex-start; font-size: 12.5px; color: var(--text-3); }
 .p-note .icon { --icon-size: 14px; margin-top: 1px; }
-.p-note.is-ok { color: #9be8bd; }
+.p-note.is-ok { color: var(--ok-text); }
 .p-card-action { padding: 10px 14px 14px; }
 .p-card-action .btn { width: 100%; pointer-events: none; }
 .p-foot { display: flex; gap: 8px; align-items: flex-start; padding-top: 6px; border-top: 1px solid var(--line); }
@@ -183,7 +183,7 @@ a.brief-item:hover { border-color: var(--line-2); }
 .d-download.is-disabled { opacity: .55; cursor: not-allowed; }
 .d-unavailable { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); padding: 8px 10px; border-radius: var(--r); background: var(--surface-3); }
 .d-unavailable .icon { --icon-size: 15px; margin-top: 1px; flex-shrink: 0; }
-.d-error { margin: 0; color: #ffb4a8; text-align: right; }
+.d-error { margin: 0; color: var(--danger-text); text-align: right; }
 .p-delivery-card { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); color: var(--text); text-decoration: none !important; }
 .p-delivery-card:hover { border-color: var(--line-2); }
 .p-delivery-card .brief-icon { width: 40px; height: 40px; }

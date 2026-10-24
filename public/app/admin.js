@@ -110,10 +110,16 @@ function userMenu(u, isMe, reload) {
 }
 
 /** Kleine uitklapmenu-knop. items: [label, onClick, {danger}] */
-export function menuButton(items, label = 'Meer acties') {
-  const menu = h('div', { class: 'menu', role: 'menu', hidden: true }, items.map(([text, onClick, opts = {}]) =>
+/**
+ * Menu achter één knop. Standaard een ⋯-knop met alleen een toegankelijk label; met
+ * trigger: { label, icon } een gewone knop met zichtbare tekst (bijv. “Delen”).
+ */
+export function menuButton(items, label = 'Meer acties', trigger_ = null) {
+  const menu = h('div', { class: 'menu', role: 'menu', hidden: true }, items.filter(Boolean).map(([text, onClick, opts = {}]) =>
     h('button', { type: 'button', class: `menu-item${opts.danger ? ' is-danger' : ''}`, role: 'menuitem', onClick: () => { close(); onClick(); } }, opts.icon ? icon(opts.icon) : null, text)));
-  const trigger = button('', { icon: 'more', variant: 'ghost', size: 'sm', 'aria-label': label, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  const trigger = trigger_
+    ? button(trigger_.label, { icon: trigger_.icon, variant: trigger_.variant || 'secondary', 'aria-haspopup': 'menu', 'aria-expanded': 'false' })
+    : button('', { icon: 'more', variant: 'ghost', size: 'sm', 'aria-label': label, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const wrap = h('div', { class: 'menu-wrap' }, trigger, menu);
   const close = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', outside); };
   const outside = (e) => { if (!wrap.contains(e.target)) close(); };
@@ -165,7 +171,7 @@ async function accessDialog(user, projects, reload) {
   });
 }
 
-async function passwordDialog(user) {
+export async function passwordDialog(user) {
   const pw = h('input', { type: 'password', minlength: '10', required: true, autocomplete: 'new-password', autofocus: true });
   await openDialog({
     title: `Wachtwoord voor ${user.name}`,
@@ -177,7 +183,7 @@ async function passwordDialog(user) {
   });
 }
 
-async function viewMyAccount(ctx) {
+export async function viewMyAccount(ctx) {
   document.title = 'Mijn account — Studio Review';
   const [me] = await api('GET', '/api/users');
   mount(ctx.pageEl, h('div', { class: 'page page-narrow' },

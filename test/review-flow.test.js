@@ -117,15 +117,18 @@ test('titelwijziging breekt geen bestanden, links, reacties of versiegeschiedeni
   const comments = await client1.get(`/api/review/${token}/versions/${ver.id}/comments`);
   assert.equal(comments.data[0].body, 'Logo te klein');
 
-  // Download krijgt titel + echte extensie
+  // Bouwronde 5: de download houdt de oorspronkelijke uploadnaam; de titel verandert die niet.
   const dl = await team.get(`/api/versions/${ver.id}/download`);
   assert.equal(dl.status, 200);
   const disp = dl.headers.get('content-disposition');
-  assert.match(disp, /filename\*=UTF-8''Campagnefilm%20%E2%80%94%20Definitief%20-%20v1\.mp4/);
+  const original = encodeURIComponent(ver.file.originalFilename);
+  assert.ok(disp.endsWith(`filename*=UTF-8''${original}`), disp);
+  assert.ok(!/Definitief/.test(disp));
 
-  // Een titel met .mp4 erin krijgt bij download geen dubbele extensie
+  // Ook een titel met .mp4 erin verandert de downloadnaam niet
   await team.patch(`/api/videos/${videoId}`, { title: 'Teaser.mp4' });
   assert.equal((await team.get(`/api/videos/${videoId}`)).data.title, 'Teaser.mp4');
+  assert.ok((await team.get(`/api/versions/${ver.id}/download`)).headers.get('content-disposition').endsWith(`filename*=UTF-8''${original}`));
   const empty = await team.patch(`/api/videos/${videoId}`, { title: '   ' });
   assert.equal(empty.status, 400);
 });

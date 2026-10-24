@@ -267,6 +267,17 @@ CREATE TABLE IF NOT EXISTS client_activity (
   created_at TEXT NOT NULL
 );
 
+-- Opgeslagen zoekopdrachten per gebruiker (alleen de zoekvraag; resultaten worden altijd opnieuw
+-- en met de actuele rechten berekend).
+CREATE TABLE IF NOT EXISTS saved_searches (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  query TEXT NOT NULL,
+  filters TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+
 -- Instellingen die een beheerder kan wijzigen (bijv. bewaartermijn klantactiviteit).
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -339,6 +350,10 @@ const COLUMNS = [
   ['comments', 'annotation', 'TEXT'],
   // Bouwronde 4: definitieve opleveringen.
   ['projects', 'delivery_note', "TEXT NOT NULL DEFAULT ''"],
+  // Bouwronde 5: persoonlijke voorkeuren (thema, dashboard) en handmatige thumbnail per versie.
+  ['users', 'preferences', "TEXT NOT NULL DEFAULT '{}'"],
+  ['versions', 'custom_poster', 'INTEGER NOT NULL DEFAULT 0'],
+  ['versions', 'custom_poster_time', 'REAL'],
 ];
 
 const DEFAULT_BRANDS = [

@@ -50,7 +50,7 @@ test('goedgekeurde versie bewust vrijgeven; downloadnaam en inhoud kloppen; herh
   const cand = (await admin.get(`/api/projects/${p.projectId}/delivery-candidates`)).data.videos[0];
   assert.equal(cand.versions[0].eligible, true);
   assert.equal(cand.versions[0].approval.name, 'Joris');
-  assert.equal(cand.versions[0].file.filename, 'Hoofdfilm - v1.mp4');
+  assert.equal(cand.versions[0].file.filename, 'eind.mp4', 'oorspronkelijke uploadnaam (bouwronde 5)');
 
   assert.equal((await admin.post(`/api/projects/${p.projectId}/deliveries`, { items: [{ versionId: p.v1 }], requestId: rid() })).status, 400, 'zonder bevestiging');
   const requestId = rid();
@@ -78,7 +78,7 @@ test('goedgekeurde versie bewust vrijgeven; downloadnaam en inhoud kloppen; herh
   const dl = await client(srv.base).get(item.downloadUrl);
   assert.equal(dl.status, 200);
   assert.ok(Buffer.compare(dl.data, fs.readFileSync(file)) === 0, 'identieke inhoud');
-  assert.match(dl.headers.get('content-disposition'), /filename\*=UTF-8''Hoofdfilm%20-%20v1\.mp4/);
+  assert.match(dl.headers.get('content-disposition'), /filename\*=UTF-8''eind\.mp4$/);
   assert.equal(dl.headers.get('content-type'), 'video/mp4');
   // Grote bestanden: gestreamd met Range-ondersteuning (niet in één keer in het geheugen).
   const part = await client(srv.base).get(item.downloadUrl, { range: 'bytes=0-99' });
@@ -177,7 +177,7 @@ test('eindbestand bewust vervangen; oude oplevering niet meer te downloaden; ges
   assert.equal((await client(srv.base).get(oldUrl)).status, 404, 'oude oplevering');
   const dl = await client(srv.base).get(page.items[0].downloadUrl);
   assert.ok(Buffer.compare(dl.data, fs.readFileSync(file2)) === 0);
-  assert.match(dl.headers.get('content-disposition'), /Hoofdfilm%20-%20v2\.mp4/);
+  assert.match(dl.headers.get('content-disposition'), /filename\*=UTF-8''eind2\.mp4$/);
   const hist = (await admin.get(`/api/projects/${p.projectId}/deliveries`)).data.history;
   const old = hist.find((d) => d.id === first);
   assert.equal(old.withdrawnReason, 'Vervangen door versie 2');

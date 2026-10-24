@@ -4,6 +4,7 @@ const auth = require('../auth');
 const { HttpError, STATUSES } = require('../status');
 const { intParam } = require('../access');
 const { contentDisposition } = require('../media');
+const { posterKey } = require('../views');
 const {
   validApproval, releaseProblem, deliveryState, activeDeliveries, activeDeliveryOf, fileInfo,
   clientDeliveryDto, downloadableDelivery, REASON_TEAM,
@@ -62,7 +63,7 @@ function deliveryClientRoutes(router, db, config, { storage }) {
       const err = notAvailable(found);
       if (err) throw err;
       if (!found.version.has_poster) throw new HttpError(404, 'Geen voorvertoning');
-      await storage.send(res, `${found.version.stored_name}.jpg`, { 'Content-Type': 'image/jpeg', 'Cache-Control': NO_STORE });
+      await storage.send(res, posterKey(found.version), { 'Content-Type': 'image/jpeg', 'Cache-Control': NO_STORE });
     });
     router.get(`${filePath}/download`, async (req, res) => {
       const found = downloadableDelivery(db, req.project.id, req.params.deliveryId);

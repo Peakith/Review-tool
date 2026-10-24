@@ -131,6 +131,7 @@ function logo() {
 
   // Gegevens van de social video via het venster op de werkplek
   await page.goto(`${BASE}/video/${vSocial.id}`);
+  await page.click('#tab-info');
   await page.waitForSelector('.delivery-meta');
   check('verticale video: 9:16 automatisch herkend', /9:16 \(herkend\)/.test(await page.textContent('.delivery-meta')));
   await page.click('.delivery-meta button');
@@ -215,7 +216,8 @@ function logo() {
 
   // ---------- Klantportaal-link ----------
   await page.goto(`${BASE}/projecten/${projectId}`);
-  await page.click('button:has-text("Klantportaal")');
+  await page.click('.page-actions button:has-text("Delen")');
+  await page.click('.menu:not([hidden]) .menu-item:has-text("Klantportaal")');
   await page.click('dialog button:has-text("Projectlink maken")');
   await page.waitForSelector('dialog .link-url');
   const portalUrl = await page.inputValue('dialog .link-url');
@@ -365,7 +367,8 @@ function logo() {
   // ---------- Intrekken ----------
   const directUrl = (await apiT('GET', `/api/videos/${vSocial.id}`)).links.find((l) => l.role === 'reviewer').url.replace(/^https?:\/\/[^/]+/, BASE);
   await page.goto(`${BASE}/projecten/${projectId}`);
-  await page.click('button:has-text("Klantportaal")');
+  await page.click('.page-actions button:has-text("Delen")');
+  await page.click('.menu:not([hidden]) .menu-item:has-text("Klantportaal")');
   await page.waitForSelector('dialog .link-url');
   await page.click('dialog button:has-text("Intrekken")');
   check('intrekken: bevestiging noemt de afzonderlijke videolinks', /afzonderlijke videolinks blijven werken/.test(await page.textContent('dialog[open]:last-of-type')));

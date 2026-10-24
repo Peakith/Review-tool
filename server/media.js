@@ -42,6 +42,28 @@ function downloadFilename(title, extension) {
   return `${safe}${suffix}`;
 }
 
+/**
+ * Downloadnaam van een versie: de oorspronkelijke uploadnaam, met de echte extensie van het bestand.
+ * De titel in de app is vrij aanpasbaar en verandert de downloadnaam niet. Alleen als de oorspronkelijke
+ * naam onbruikbaar is (leeg na opschonen), valt de naam terug op "<titel> - v<nummer>.<extensie>".
+ * Paden, stuurtekens en tekens die in bestandsnamen niet mogen, worden verwijderd of vervangen.
+ */
+function originalDownloadName(version, video) {
+  let base = String(version.original_filename || '').split(/[\\/]/).pop()
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/[:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+  const ext = String(version.extension || '').toLowerCase();
+  // Alleen een extensie (".mp4") of alleen puntjes: geen bruikbare naam.
+  const stem = base.toLowerCase().endsWith(`.${ext}`) ? base.slice(0, -(ext.length + 1)) : base;
+  if (!stem.replace(/^\.+/, '').trim()) return downloadFilename(`${video?.title || 'video'} - v${version.number}`, ext);
+  base = base.replace(/^\.+/, '');
+  if (ext && !base.toLowerCase().endsWith(`.${ext}`)) base = `${base}.${ext}`;
+  return base;
+}
+
 function contentDisposition(filename) {
   // Terugval voor oudere clients: gangbare tekens omzetten, rest weglaten.
   const ascii = filename
@@ -152,7 +174,14 @@ async function makePoster(file, posterFile, duration, paths) {
   }
 }
 
+/** Eén frame uit een video als JPEG, met behoud van de volledige beeldverhouding (max. 1280 px). */
+async function makeFrame(file, out, at, paths) {
+  if (!paths.ffmpeg) throw new Error('ffmpeg ontbreekt; een frame kiezen is niet mogelijk.');
+  await run(paths.ffmpeg, ['-y', '-v', 'error', '-ss', String(Math.max(0, at)), '-i', file, '-frames:v', '1',
+    '-vf', 'scale=w=1280:h=1280:force_original_aspect_ratio=decrease', '-q:v', '3', out], 120_000);
+}
+
 module.exports = {
-  FORMATS, extensionOf, titleFromFilename, normalizeTitle, downloadFilename,
-  contentDisposition, probe, makePoster, resolveTools, toolStatus,
+  FORMATS, extensionOf, titleFromFilename, normalizeTitle, downloadFilename, originalDownloadName,
+  contentDisposition, probe, makePoster, makeFrame, resolveTools, toolStatus,
 };

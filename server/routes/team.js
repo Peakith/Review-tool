@@ -2,8 +2,8 @@
 const { now } = require('../db');
 const { STATUSES, HttpError, changeStatus } = require('../status');
 const auth = require('../auth');
-const { normalizeTitle, titleFromFilename, downloadFilename, contentDisposition } = require('../media');
-const { versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos } = require('../views');
+const { normalizeTitle, titleFromFilename, originalDownloadName, contentDisposition, makeFrame, resolveTools } = require('../media');
+const { versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos, posterKey } = require('../views');
 const { intParam } = require('../access');
 const { syncTaskFromComment } = require('./tasks');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
@@ -657,12 +657,41 @@ function teamRoutes(router, db, config, { finalize, access, storage }) {
   router.get('/versions/:id/poster', async (req, res) => {
     const { version: ver } = access.version(req, req.params.id, 'view');
     if (!ver.has_poster) throw new HttpError(404, 'Geen voorvertoning');
-    await storage.send(res, `${ver.stored_name}.jpg`, { 'Cache-Control': MEDIA_CACHE });
+    await storage.send(res, posterKey(ver), { 'Content-Type': 'image/jpeg', 'Cache-Control': MEDIA_CACHE });
+  });
+
+  // Thumbnail: zelf een frame uit precies deze versie kiezen, of terug naar de automatische keuze.
+  // Het bronbestand blijft onaangeroerd; het frame wordt een apart bestand bij deze versie.
+  router.post('/versions/:id/poster', async (req, res) => {
+    const { version: ver } = access.version(req, req.params.id, 'upload', { write: true });
+    const at = Number(req.body?.time);
+    if (!Number.isFinite(at) || at < 0 || (ver.duration_seconds && at > ver.duration_seconds + 0.5)) throw new HttpError(400, 'Kies een moment binnen de video.');
+    const tools = await resolveTools(config.tools);
+    if (!tools.ffmpeg || !storage.localPath) throw new HttpError(503, 'ffmpeg ontbreekt; een eigen thumbnail kiezen is nu niet mogelijk.');
+    const key = `${ver.stored_name}.custom.jpg`;
+    const tmp = `${storage.localPath(ver.stored_name)}.custom.tmp.jpg`;
+    try {
+      await makeFrame(storage.localPath(ver.stored_name), tmp, Math.min(at, Math.max(0, (ver.duration_seconds || at) - 0.05)), tools);
+      await storage.importFile(tmp, key);
+    } catch (err) {
+      await require('node:fs/promises').rm(tmp, { force: true });
+      throw new HttpError(500, `Het frame kon niet worden gemaakt: ${err.message}`);
+    }
+    db.prepare('UPDATE versions SET custom_poster = 1, custom_poster_time = ?, has_poster = 1 WHERE id = ?').run(at, ver.id);
+    res.json({ ok: true, time: at });
+  });
+
+  router.delete('/versions/:id/poster', async (req, res) => {
+    const { version: ver } = access.version(req, req.params.id, 'upload', { write: true });
+    db.prepare('UPDATE versions SET custom_poster = 0, custom_poster_time = NULL, has_poster = ? WHERE id = ?')
+      .run((await storage.exists(`${ver.stored_name}.jpg`)) ? 1 : 0, ver.id);
+    await storage.remove(`${ver.stored_name}.custom.jpg`).catch(() => {});
+    res.json({ ok: true });
   });
 
   router.get('/versions/:id/download', async (req, res) => {
     const { version: ver, video } = access.version(req, req.params.id, 'view');
-    const name = downloadFilename(`${video.title} - v${ver.number}`, ver.extension);
+    const name = originalDownloadName(ver, video);
     await storage.send(res, ver.stored_name, { 'Content-Type': ver.mime_type, 'Content-Disposition': contentDisposition(name), 'Cache-Control': MEDIA_CACHE });
   });
 }

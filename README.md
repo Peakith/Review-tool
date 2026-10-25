@@ -499,8 +499,8 @@ CHROME_PATH=/pad/naar/chrome npm run test:browser:klanten # klanten, klantportaa
 CHROME_PATH=/pad/naar/chrome npm run test:browser:inbox   # inbox, browsermeldingen (nagebootst), activiteitentijdlijn (24)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:kwaliteit # kwaliteitskeuze met hls.js, vertraagd netwerk, 4K/staand, geen origineel (23)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:ronde6  # ⌘K met toetsenbord en beperkte rechten, identieke uploads in de wachtrij, klantvraag, freelancer verloopt (24)
-npm run test:upgrade                                       # bijwerken vanaf 0.6.0 met echte gegevens, rollen omgezet, oude en nieuwe back-up terugzetten (47)
-npm run test:offline-update                                # ZIP-update vanaf 0.6.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (10)
+npm run test:upgrade                                       # bijwerken vanaf 0.6.0 met echte gegevens, rollen omgezet, oude en nieuwe back-up terugzetten (46)
+npm run test:offline-update                                # ZIP-update vanaf 0.6.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (11)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;

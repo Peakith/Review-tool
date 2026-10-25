@@ -126,32 +126,37 @@ function ensureShell() {
     openItem: (item) => navigate(item.target.kind === 'video' ? `/video/${item.result.videoId}` : `/video/${item.target.videoId}?v=${item.result.versionId}`),
     openPath: (path) => navigate(path),
   });
-  const menuBtn = button('', { icon: 'grid', variant: 'ghost', 'aria-label': 'Menu', class: 'btn btn-ghost btn-icon menu-btn', onClick: () => shellEl.classList.toggle('nav-open') });
+  const menuBtn = button('', { icon: 'grid', variant: 'ghost', 'aria-label': 'Menu', 'aria-expanded': 'false', class: 'btn btn-ghost btn-icon menu-btn', onClick: () => {
+    const open = shellEl.classList.toggle('nav-open');
+    menuBtn.setAttribute('aria-expanded', String(open));
+  } });
   const navLink = (href, section, iconName, label, extra) => h('a', { href, 'data-nav': true, dataset: { section } }, icon(iconName), h('span', { class: 'nav-label' }, label), extra);
-  const sidebar = h('aside', { class: 'sidebar' },
-    h('div', { class: 'side-top' },
-      h('a', { href: '/', 'data-nav': true, class: 'brand' }, h('span', { class: 'brand-mark' }, icon('play')), h('span', {}, 'Studio Review')),
-      menuBtn),
-    h('div', { class: 'side-scroll' },
-      searchBox({ navigate }),
-      h('button', { type: 'button', class: 'side-palette', onClick: () => openPalette(), 'aria-keyshortcuts': 'Meta+K Control+K' }, icon('command'), h('span', { class: 'side-palette-label' }, 'Opdrachten'), h('kbd', { class: 'side-kbd' }, paletteShortcut())),
-      h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
-        navLink('/', 'dashboard', 'grid', 'Dashboard'),
-        navLink('/projecten', 'projects', 'folder', 'Projecten'),
-        navLink('/klanten', 'clients', 'users', 'Klanten'),
-        navLink('/inbox', 'inbox', 'inbox', 'Inbox', h('span', { class: 'side-count', id: 'inbox-count', hidden: true, 'aria-label': 'ongelezen' }))),
-      h('nav', { class: 'side-nav side-nav-secondary', 'aria-label': 'Snel naar' },
-        navLink('/taken', 'tasks', 'tasks', 'Mijn taken', h('span', { class: 'side-count', id: 'my-task-count', hidden: true })))),
-    h('div', { class: 'side-foot' },
-      h('nav', { class: 'side-nav', 'aria-label': 'Instellingen' }, navLink('/instellingen', 'settings', 'wrench', 'Instellingen')),
-      systemStatus(),
-      profileMenu(),
-      h('div', { class: 'side-version', title: 'Versie van deze installatie' }, `Studio Review ${session.version?.label || ''}`)));
+  // Horizontale hoofdnavigatie: merk links, hoofdonderdelen in het midden, zoeken (⌘K) en profiel rechts.
+  const topbar = h('header', { class: 'topbar' },
+    h('div', { class: 'topbar-inner' },
+      h('a', { href: '/', 'data-nav': true, class: 'brand-lockup', 'aria-label': `${session.studio || 'Studio'} · Studio Review, naar het dashboard` },
+        h('span', { class: 'brand-word' }, session.studio || 'Studio Review'),
+        h('span', { class: 'brand-app' }, 'Studio Review')),
+      menuBtn,
+      h('div', { class: 'topbar-menu' },
+        h('nav', { class: 'side-nav top-nav', 'aria-label': 'Hoofdmenu' },
+          navLink('/', 'dashboard', 'grid', 'Dashboard'),
+          navLink('/projecten', 'projects', 'folder', 'Projecten'),
+          navLink('/klanten', 'clients', 'users', 'Klanten'),
+          navLink('/inbox', 'inbox', 'inbox', 'Inbox', h('span', { class: 'side-count', id: 'inbox-count', hidden: true, 'aria-label': 'ongelezen' })),
+          navLink('/taken', 'tasks', 'tasks', 'Mijn taken', h('span', { class: 'side-count', id: 'my-task-count', hidden: true }))),
+        h('div', { class: 'topbar-right' },
+          searchBox({ navigate, onShortcut: () => openPalette(), shortcutLabel: paletteShortcut() }),
+          h('nav', { class: 'side-nav top-settings', 'aria-label': 'Instellingen' }, navLink('/instellingen', 'settings', 'gear', 'Instellingen')),
+          profileMenu()))));
   pageEl = h('main', { class: 'page-host', id: 'main', tabindex: '-1' });
-  shellEl = h('div', { class: 'app' },
+  shellEl = h('div', { class: 'app has-topbar' },
     h('a', { class: 'skip-link', href: '#main' }, 'Naar inhoud'),
-    sidebar,
-    h('div', { class: 'main-col' }, systemBanner(), pageEl),
+    topbar,
+    h('div', { class: 'main-col' }, systemBanner(), pageEl,
+      h('footer', { class: 'app-foot' },
+        h('span', { class: 'side-version', title: 'Versie van deze installatie' }, `Studio Review ${session.version?.label || ''}`),
+        systemStatus())),
     tray);
   shellEl.addEventListener('click', (e) => { if (e.target.closest('.side-nav a, .suggest-item')) shellEl.classList.remove('nav-open'); });
   mount(root, shellEl);
@@ -203,7 +208,11 @@ function profileMenu() {
 const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
 
 function setActiveNav(section) {
-  shellEl.querySelectorAll('.side-nav a').forEach((a) => a.classList.toggle('is-active', a.dataset.section === section));
+  shellEl.querySelectorAll('.side-nav a').forEach((a) => {
+    const on = a.dataset.section === section;
+    a.classList.toggle('is-active', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
 }
 
 async function refreshSidebar() {

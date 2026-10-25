@@ -4,6 +4,7 @@ const { intParam, activeAt } = require('../access');
 const { commentDtos, posterKey } = require('../views');
 const { sharedVersions, videoMeta } = require('../client');
 const { hlsRoutes, playbackInfo } = require('../variants');
+const { coverDto, sendCover, pinnedSet } = require('../covers');
 
 /**
  * Freelanceromgeving: strikt alleen-lezen.
@@ -27,6 +28,7 @@ const ALLOWED = [
   ['GET', /^\/me\/preferences$/],
   ['PUT', /^\/me\/preferences$/],
   ['POST', /^\/users\/\d+\/password$/],
+  ['PUT', /^\/pins\/\d+$/],
 ];
 
 function freelanceGate(req, res, next) {
@@ -93,14 +95,18 @@ function freelanceRoutes(router, db, config, { storage }) {
   // Startpagina: gekoppelde projecten (alleen geldige koppelingen) met aantallen klantfeedback.
   router.get('/freelance/overview', (req, res) => {
     onlyFreelancer(req);
+    const pins = pinnedSet(db, req.user.id);
     const at = new Date().toISOString();
     const projects = db.prepare(`SELECT p.*, pm.expires_at AS member_expires_at FROM project_members pm JOIN projects p ON p.id = pm.project_id
       WHERE pm.user_id = ? AND p.trashed_at IS NULL ORDER BY p.created_at DESC, p.id DESC`).all(req.user.id)
       .filter((p) => activeAt({ expires_at: p.member_expires_at }, at))
       .map((p) => {
         const videos = videosOf(p);
-        return { id: p.id, name: p.name, clientName: p.client_name || '', archived: !!p.archived_at, ...expiry({ expires_at: p.member_expires_at }), videoCount: videos.length, feedback: videos.reduce((n, v) => n + v.feedback, 0) };
+        return { id: p.id, name: p.name, clientName: p.client_name || '', archived: !!p.archived_at, ...expiry({ expires_at: p.member_expires_at }), videoCount: videos.length, feedback: videos.reduce((n, v) => n + v.feedback, 0),
+          cover: coverDto(db, p, `/api/freelance/projects/${p.id}/cover`, { sharedOnly: true }), pinned: pins.has(p.id) };
       });
+    // Vastgezette projecten eerst (alleen geldige koppelingen staan in deze lijst).
+    projects.sort((a, b) => Number(b.pinned) - Number(a.pinned));
     res.json({ projects });
   });
 
@@ -122,7 +128,14 @@ function freelanceRoutes(router, db, config, { storage }) {
 
   router.get('/freelance/projects/:id', (req, res) => {
     const { project, member } = membership(req, intParam(req.params.id));
-    res.json({ project: { id: project.id, name: project.name, clientName: project.client_name || '', archived: !!project.archived_at, ...expiry(member) }, videos: videosOf(project) });
+    res.json({ project: { id: project.id, name: project.name, clientName: project.client_name || '', archived: !!project.archived_at, ...expiry(member),
+      cover: coverDto(db, project, `/api/freelance/projects/${project.id}/cover`, { sharedOnly: true }), pinned: pinnedSet(db, req.user.id).has(project.id) }, videos: videosOf(project) });
+  });
+
+  // Cover alleen uit een gedeelde versie (nooit een intern frame), bij een geldige koppeling.
+  router.get('/freelance/projects/:id/cover', async (req, res) => {
+    const { project } = membership(req, intParam(req.params.id));
+    await sendCover(res, storage, db, project, { sharedOnly: true });
   });
 
   // Eén video: gepubliceerde versies en klantfeedback bij de gekozen (of nieuwste gepubliceerde) versie.

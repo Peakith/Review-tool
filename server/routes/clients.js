@@ -45,6 +45,12 @@ function clientPortalRoutes(router, db, config, { storage }) {
     await storage.send(res, posterKey(ver), { 'Content-Type': 'image/jpeg', 'Cache-Control': NO_STORE });
   });
 
+  // Projectcover voor de klant: alleen uit een gedeelde versie van een project dat bij deze klant hoort.
+  router.get('/client/:token/projects/:projectId/cover', async (req, res) => {
+    const project = clientProject(db, req.clientLink, req.params.projectId);
+    await require('../covers').sendCover(res, storage, db, project, { sharedOnly: true });
+  });
+
   router.get('/client/:token/projects/:projectId/briefing/:itemId/file', async (req, res) => {
     const project = clientProject(db, req.clientLink, req.params.projectId);
     const item = db.prepare("SELECT * FROM briefing_items WHERE id = ? AND project_id = ? AND kind = 'file' AND visibility = 'client' AND trashed_at IS NULL")

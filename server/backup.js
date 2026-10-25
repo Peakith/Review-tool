@@ -92,6 +92,10 @@ function inspectDb(file) {
     if (has('brands')) {
       for (const b of db.prepare('SELECT logo_key FROM brands WHERE logo_key IS NOT NULL ORDER BY id').all()) files.push({ key: b.logo_key, expectedBytes: null });
     }
+    // Projectcovers met een eigen frame (bouwronde 7).
+    if (db.prepare('PRAGMA table_info(projects)').all().some((c) => c.name === 'cover_key')) {
+      for (const p of db.prepare('SELECT cover_key FROM projects WHERE cover_key IS NOT NULL ORDER BY id').all()) files.push({ key: p.cover_key, expectedBytes: null });
+    }
     return { integrityOk: Object.values(integrity)[0] === 'ok', counts, files };
   } finally {
     db.close();

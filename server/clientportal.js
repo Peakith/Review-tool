@@ -100,6 +100,7 @@ function clientPortalDto(db, client, clientLink) {
       briefing: dto.briefing,
       videos: dto.videos.map((v) => ({ ...v, canApprove: isDesignatedApprover(clientLink, db.prepare('SELECT approver_email FROM videos WHERE id = ?').get(v.id)) })),
       delivery: deliveries ? { count: deliveries, url: `/k/${clientLink.token}/oplevering/${p.id}` } : null,
+      cover: require('./covers').coverDto(db, p, `${base}/projects/${p.id}/cover`, { sharedOnly: true }),
     };
   });
   const { visibleQuestions, questionDto } = require('./questions');

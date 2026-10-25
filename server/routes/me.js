@@ -14,21 +14,25 @@ const THEMES = ['dark', 'light', 'system'];
 
 // Dashboardblokken. need: 'publish' = alleen projecten waar je mag publiceren/delen; 'admin' = beheerder.
 const WIDGETS = {
+  attention: { title: 'Aandacht nodig', description: 'Ontvangen feedback, versies die klaarstaan om te delen en je open taken.' },
+  pinned: { title: 'Vastgezet', description: 'Projecten die je zelf hebt vastgezet.' },
+  inbox: { title: 'Inbox', description: 'Je nieuwste ongelezen meldingen.' },
   tasks: { title: 'Mijn taken', description: 'Feedbacktaken die aan jou zijn toegewezen.' },
   feedback: { title: 'Nieuwe feedback', description: 'Feedback die klanten de afgelopen 30 dagen hebben verstuurd.' },
-  waiting: { title: 'Wacht op klant', description: 'Gepubliceerde versies die nog op review of goedkeuring wachten.' },
+  waiting: { title: 'Bij de klant', description: 'Gepubliceerde versies die op review of goedkeuring van de klant wachten.' },
   recent: { title: 'Recente projecten', description: 'Projecten met de meest recente activiteit.' },
   activity: { title: 'Klantactiviteit', description: 'Wat klanten recent openden, afspeelden of downloadden.', need: 'publish' },
   uploads: { title: 'Uploads en verwerking', description: 'Je lopende uploads en de verwerking van video’s.' },
   storage: { title: 'Opslag', description: 'Vrije schijfruimte en gebruik.', need: 'admin' },
 };
+// Bouwronde 7: standaard eerst wat aandacht vraagt, dan vastgezette projecten, inbox en wat bij de klant ligt.
 const DEFAULT_LAYOUT = [
-  { id: 'tasks', size: 'normal' }, { id: 'feedback', size: 'normal' },
-  { id: 'waiting', size: 'normal' }, { id: 'recent', size: 'normal' },
+  { id: 'attention', size: 'wide' }, { id: 'pinned', size: 'wide' },
+  { id: 'inbox', size: 'normal' }, { id: 'waiting', size: 'normal' },
 ];
 const SIZES = ['normal', 'wide'];
 
-function meRoutes(router, db, config, { access, storage, feedbackItems }) {
+function meRoutes(router, db, config, { access, storage, feedbackItems, notifier }) {
   const prefsOf = (userId) => {
     let p = {};
     try { p = JSON.parse(db.prepare('SELECT preferences FROM users WHERE id = ?').get(userId)?.preferences || '{}'); } catch { p = {}; }
@@ -90,7 +94,40 @@ function meRoutes(router, db, config, { access, storage, feedbackItems }) {
 
   // ---------- Dashboard ----------
 
+  const { coverDto, pinnedSet } = require('../covers');
   const widgetData = {
+    // Wat het team nu kan oppakken: feedback binnen, klaar om te delen, eigen open taken.
+    attention(user, ids) {
+      const levels = access.projectIdsFor(user);
+      const mayPublish = (pid) => !levels || atLeast(levels.get(pid), 'publish');
+      const latest = db.prepare(`SELECT ver.*, v.title AS video_title, v.id AS video_id, p.id AS project_id, p.name AS project_name
+        FROM versions ver JOIN videos v ON v.id = ver.video_id JOIN projects p ON p.id = v.project_id
+        WHERE ver.trashed_at IS NULL AND v.trashed_at IS NULL AND v.archived_at IS NULL AND p.trashed_at IS NULL AND p.archived_at IS NULL
+          AND ver.status IN ('changes_requested', 'ready_for_review') AND ${inList('p.id', ids)}
+          AND ver.number = (SELECT MAX(x.number) FROM versions x WHERE x.video_id = v.id AND x.trashed_at IS NULL)
+        ORDER BY ver.status = 'changes_requested' DESC, COALESCE(ver.shared_at, ver.created_at) DESC LIMIT 12`).all(...(ids || []));
+      const items = latest.filter((v) => v.status === 'changes_requested' || mayPublish(v.project_id)).slice(0, 8).map((v) => ({
+        kind: v.status, projectId: v.project_id, projectName: v.project_name, videoId: v.video_id, videoTitle: v.video_title, versionId: v.id, versionNumber: v.number,
+        label: v.status === 'changes_requested' ? 'Feedback ontvangen' : 'Klaar om te delen', href: `/video/${v.video_id}?v=${v.id}`,
+      }));
+      const tasks = feedbackItems({ projectIds: ids, filters: { assignee: 'me', status: 'active' }, userId: user.id });
+      return { items, taskCount: tasks.length };
+    },
+    pinned(user, ids) {
+      const pins = [...pinnedSet(db, user.id)];
+      const allowed = ids ? new Set(ids) : null;
+      // Alleen projecten die je nu nog mag zien (verlopen of ingetrokken = niet meer zichtbaar).
+      const rows = pins.filter((id) => !allowed || allowed.has(id)).map((id) => db.prepare('SELECT * FROM projects WHERE id = ? AND trashed_at IS NULL').get(id)).filter(Boolean);
+      return {
+        items: rows.map((p) => ({ id: p.id, name: p.name, clientName: p.client_name, archived: !!p.archived_at, cover: coverDto(db, p, `/api/projects/${p.id}/cover`),
+          videoCount: db.prepare('SELECT COUNT(*) AS n FROM videos WHERE project_id = ? AND trashed_at IS NULL').get(p.id).n })),
+      };
+    },
+    inbox(user) {
+      const rows = db.prepare('SELECT * FROM notifications WHERE user_id = ? AND read_at IS NULL ORDER BY id DESC LIMIT 60').all(user.id)
+        .filter((n) => n.project_id && notifier.canSee(user.id, n.project_id, n.type) && !db.prepare('SELECT trashed_at FROM projects WHERE id = ?').get(n.project_id)?.trashed_at);
+      return { unread: rows.length, items: rows.slice(0, 5).map((n) => ({ id: n.id, title: n.title, actor: n.actor_label, at: n.created_at, project: db.prepare('SELECT name FROM projects WHERE id = ?').get(n.project_id)?.name || '' })) };
+    },
     tasks(user, ids) {
       const items = feedbackItems({ projectIds: ids, filters: { assignee: 'me', status: 'active' }, userId: user.id });
       return { total: items.length, items: items.slice(0, 6) };

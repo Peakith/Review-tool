@@ -25,6 +25,7 @@ const { createNotifier } = require('./notify');
 const { freelanceRoutes, freelanceGate } = require('./routes/freelance');
 const { memberRoutes } = require('./routes/members');
 const { startHashBackfill } = require('./filehash');
+const { coverTeamRoutes } = require('./covers');
 const { questionTeamRoutes, questionClientRoutes } = require('./questions');
 const { inboxRoutes } = require('./routes/inbox');
 const { createVariants } = require('./variants');
@@ -127,6 +128,8 @@ function createApp(overrides = {}) {
       // Alleen het thema hoort al bij het laden van de pagina; de rest via /api/me/preferences.
       theme: preferences && ['dark', 'light', 'system'].includes(preferences.theme) ? preferences.theme : 'dark',
       version: versionInfo(),
+      // Naam van de studio voor het woordmerk in de bovenbalk (Instellingen › Merken).
+      studio: require('./client').studioName(db),
       media: user ? await mediaCheck() : undefined,
       system: user ? {
         storage: storage.status(),
@@ -206,12 +209,13 @@ function createApp(overrides = {}) {
   briefingRoutes(team, db, config, { access, storage, uploads });
   brandRoutes(team, db, config, { access, storage });
   const { feedbackItems } = taskRoutes(team, db, config, { access, notifier });
-  meRoutes(team, db, config, { access, storage, feedbackItems });
+  meRoutes(team, db, config, { access, storage, feedbackItems, notifier });
   exportRoutes(team, db, config, { access, storage, mode: 'team' });
   deliveryTeamRoutes(team, db, config, { access, storage, notifier });
   inboxRoutes(team, db, config, { access, notifier });
   memberRoutes(team, db, config, { access, notifier });
   questionTeamRoutes(team, db, config, { access, notifier });
+  coverTeamRoutes(team, db, config, { access, storage });
   activityRoutes(team, db, config, { access });
   clientTeamRoutes(team, db, config, { access });
   // Taken van wie inmiddels geen toegang meer heeft, losmaken (ook bij het starten).

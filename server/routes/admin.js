@@ -147,6 +147,9 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
       for (const b of db.prepare("SELECT * FROM briefing_items WHERE project_id = ? AND kind = 'file'").all(id)) {
         files.push({ key: b.file_key, label: b.title, kind: 'bijlage', originalFilename: b.file_name, bytes: await storage.size(b.file_key) });
       }
+      // Eigen frame als projectcover (indien gekozen).
+      const cover = db.prepare('SELECT cover_key FROM projects WHERE id = ?').get(id)?.cover_key;
+      if (cover) files.push({ key: cover, label: 'Projectcover', kind: 'cover', bytes: await storage.size(cover), optional: true });
     }
     return files;
   }

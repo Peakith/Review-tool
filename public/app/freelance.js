@@ -68,21 +68,22 @@ function buildShell(root, logout) {
   const link = (href, section, iconName, label, extra) => h('a', { href, 'data-nav': true, dataset: { section } }, icon(iconName), h('span', { class: 'nav-label' }, label), extra);
   pageEl = h('main', { class: 'page-host', id: 'main', tabindex: '-1' });
   const menuBtn = button('', { icon: 'grid', variant: 'ghost', 'aria-label': 'Menu', class: 'btn btn-ghost btn-icon menu-btn', onClick: () => shell.classList.toggle('nav-open') });
-  shell = h('div', { class: 'app is-freelance' },
+  // Zelfde bovenbalk als het team, maar alleen met wat een freelancer mag: projecten, inbox en account.
+  shell = h('div', { class: 'app has-topbar is-freelance' },
     h('a', { class: 'skip-link', href: '#main' }, 'Naar inhoud'),
-    h('aside', { class: 'sidebar' },
-      h('div', { class: 'side-top' }, h('a', { href: '/', 'data-nav': true, class: 'brand' }, h('span', { class: 'brand-mark' }, icon('play')), h('span', {}, 'Studio Review')), menuBtn),
-      h('div', { class: 'side-scroll' },
-        h('p', { class: 'side-role small' }, icon('eye'), 'Freelancer · alleen bekijken'),
-        h('button', { type: 'button', class: 'side-palette', onClick: () => openPalette(), 'aria-keyshortcuts': 'Meta+K Control+K' }, icon('command'), h('span', { class: 'side-palette-label' }, 'Zoeken'), h('kbd', { class: 'side-kbd' }, paletteShortcut())),
-        h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
-          link('/', 'home', 'folder', 'Mijn projecten'),
-          link('/inbox', 'inbox', 'inbox', 'Inbox', h('span', { class: 'side-count', id: 'inbox-count', hidden: true, 'aria-label': 'ongelezen' })))),
-      h('div', { class: 'side-foot' },
-        h('nav', { class: 'side-nav', 'aria-label': 'Account' }, link('/account', 'account', 'users', 'Mijn account')),
-        h('div', { class: 'side-user' }, h('span', { class: 'avatar', 'aria-hidden': 'true' }, session.user.name.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('')),
-          h('span', { class: 'side-user-text' }, h('span', { class: 'truncate' }, session.user.name), h('span', { class: 'truncate small muted' }, session.user.email))),
-        h('button', { type: 'button', class: 'btn btn-ghost btn-sm side-logout', onClick: logout }, icon('logout'), h('span', { class: 'btn-label' }, 'Uitloggen')))),
+    h('header', { class: 'topbar' },
+      h('div', { class: 'topbar-inner' },
+        h('a', { href: '/', 'data-nav': true, class: 'brand-lockup' }, h('span', { class: 'brand-word' }, session.studio || 'Studio Review'), h('span', { class: 'brand-app' }, 'Studio Review')),
+        menuBtn,
+        h('div', { class: 'topbar-menu' },
+          h('nav', { class: 'side-nav top-nav', 'aria-label': 'Hoofdmenu' },
+            link('/', 'home', 'folder', 'Mijn projecten'),
+            link('/inbox', 'inbox', 'inbox', 'Inbox', h('span', { class: 'side-count', id: 'inbox-count', hidden: true, 'aria-label': 'ongelezen' })),
+            link('/account', 'account', 'users', 'Mijn account')),
+          h('div', { class: 'topbar-right' },
+            h('span', { class: 'side-role small' }, icon('eye'), 'Freelancer · alleen bekijken'),
+            h('button', { type: 'button', class: 'btn btn-sm side-palette-btn', onClick: () => openPalette(), 'aria-keyshortcuts': 'Meta+K Control+K' }, icon('search'), h('span', { class: 'btn-label' }, 'Zoeken'), h('kbd', { class: 'kbd-btn' }, paletteShortcut())),
+            h('button', { type: 'button', class: 'btn btn-ghost btn-sm side-logout', onClick: logout }, icon('logout'), h('span', { class: 'btn-label' }, 'Uitloggen')))))),
     h('div', { class: 'main-col' }, pageEl));
   shell.addEventListener('click', (e) => { if (e.target.closest('.side-nav a')) shell.classList.remove('nav-open'); });
   mount(root, shell);

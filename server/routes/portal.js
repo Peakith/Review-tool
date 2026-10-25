@@ -65,7 +65,11 @@ function portalRoutes(router, db, config, { storage }) {
     });
     recordActivity(db, req, { projectId: req.project.id, type: 'portal_opened', src: portalSource(req.projectLink) });
     const { visibleQuestions, questionDto } = require('../questions');
-    res.json({ ...dto, questions: visibleQuestions(db, [req.project.id]).map((q) => ({ ...questionDto(db, q), projectName: req.project.name })), language: clientLanguage(db, req.project), linkExpiresAt: req.projectLink.expires_at || null, delivery: deliverySummary(db, req.project, `/p/${req.projectLink.token}/oplevering`) });
+    res.json({ ...dto, cover: require('../covers').coverDto(db, req.project, `${base}/cover`, { sharedOnly: true }), questions: visibleQuestions(db, [req.project.id]).map((q) => ({ ...questionDto(db, q), projectName: req.project.name })), language: clientLanguage(db, req.project), linkExpiresAt: req.projectLink.expires_at || null, delivery: deliverySummary(db, req.project, `/p/${req.projectLink.token}/oplevering`) });
+  });
+
+  router.get('/portal/:token/cover', async (req, res) => {
+    await require('../covers').sendCover(res, storage, db, req.project, { sharedOnly: true });
   });
 
   // Alleen de thumbnail van de gepubliceerde versie; nooit van een intern concept.

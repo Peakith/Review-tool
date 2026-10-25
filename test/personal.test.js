@@ -57,9 +57,9 @@ test('voorkeuren per gebruiker: thema en dashboard los per account, gevalideerd'
   assert.equal((await free.get('/api/session')).data.theme, 'system');
   assert.equal((await viewer.get('/api/session')).data.theme, 'dark');
   assert.equal((await free.put('/api/me/preferences', { theme: 'roze' })).status, 400);
-  // Dashboard: standaard vier blokken
+  // Dashboard: standaard vier blokken (bouwronde 7: Aandacht nodig, Vastgezet, Inbox, Bij de klant)
   const d = (await free.get('/api/me/preferences')).data.dashboard.widgets.map((w) => w.id);
-  assert.deepEqual(d, ['tasks', 'feedback', 'waiting', 'recent']);
+  assert.deepEqual(d, ['attention', 'pinned', 'inbox', 'waiting']);
   // Freelancer (geen publicatierecht, geen beheerder): geen klantactiviteit of opslag
   const avail = (await free.get('/api/dashboard')).data.available.map((w) => w.id);
   assert.ok(!avail.includes('storage') && !avail.includes('activity'), avail.join());
@@ -69,7 +69,7 @@ test('voorkeuren per gebruiker: thema en dashboard los per account, gevalideerd'
   const layout = [{ id: 'recent', size: 'wide' }, { id: 'tasks', size: 'normal' }, { id: 'uploads', size: 'normal' }];
   assert.equal((await free.put('/api/me/preferences', { dashboard: { widgets: layout } })).status, 200);
   assert.deepEqual((await free.get('/api/me/preferences')).data.dashboard.widgets, layout);
-  assert.deepEqual((await viewer.get('/api/me/preferences')).data.dashboard.widgets.map((w) => w.id), ['tasks', 'feedback', 'waiting', 'recent'], 'ander account ongewijzigd');
+  assert.deepEqual((await viewer.get('/api/me/preferences')).data.dashboard.widgets.map((w) => w.id), ['attention', 'pinned', 'inbox', 'waiting'], 'ander account ongewijzigd');
   assert.equal((await free.put('/api/me/preferences', { dashboard: { widgets: [{ id: 'tasks' }, { id: 'tasks' }] } })).status, 400, 'geen dubbele blokken');
   assert.equal((await free.put('/api/me/preferences', { dashboard: null })).status, 200, 'standaard herstellen');
 });

@@ -961,3 +961,110 @@ dialog.palette::backdrop { background: var(--backdrop); }
 @media (max-width: 640px) { .palette-foot { display: none; } .palette-sub { display: none; } }
 .tray-status.is-duplicate { color: var(--text); font-weight: 500; }
 .inline-form { display: flex; gap: 8px; align-items: center; max-width: 480px; }
+
+/* ==========================================================================
+   Bouwronde 7 — stijl 2 (nachtblauw): horizontale hoofdnavigatie, panelen met
+   gematigde afronding, blauwe selectie. Deze laag overschrijft de oudere regels hierboven.
+   ========================================================================== */
+.app.has-topbar { display: flex; flex-direction: column; min-height: 100vh; background: var(--bg); grid-template-columns: none; }
+.topbar { position: sticky; top: 0; z-index: 60; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.topbar-inner { max-width: 1600px; margin: 0 auto; height: 64px; padding: 0 28px; display: flex; align-items: center; gap: 24px; }
+.brand-lockup { display: inline-flex; align-items: baseline; gap: 12px; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+.brand-word { font-family: var(--font-display); font-weight: 800; font-size: 17px; letter-spacing: .02em; text-transform: uppercase; }
+.brand-app { font-size: 13px; color: var(--text-3); font-weight: 500; }
+.topbar-menu { flex: 1; display: flex; align-items: center; gap: 16px; min-width: 0; }
+.top-nav { display: flex; gap: 2px; margin: 0 auto; }
+.top-nav a, .top-settings a { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 64px; padding: 0 12px; color: var(--text-2); font-weight: 500; font-size: 14px; border-radius: 0; background: none; box-shadow: none; }
+.top-nav a:hover, .top-settings a:hover { color: var(--text); background: none; }
+.top-nav a.is-active, .top-settings a.is-active { color: var(--text); background: none; font-weight: 600; box-shadow: inset 0 -2px 0 var(--sel); border-radius: 0; }
+.top-nav a .icon, .top-settings a .icon { --icon-size: 17px; color: currentColor; }
+.top-nav a.is-active .icon { color: var(--sel); }
+.top-nav .side-count { margin-left: 2px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.top-settings a { width: 40px; justify-content: center; padding: 0; }
+.top-settings .nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.topbar .side-search { width: 260px; height: 40px; padding: 0 8px 0 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.topbar .side-search:focus-within { border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-soft); }
+.topbar .side-search input { border: 0; background: none; box-shadow: none !important; padding: 8px 6px; }
+.kbd-btn { border: 1px solid var(--line-2); background: var(--bg-2); color: var(--text-2); border-radius: var(--r-sm); font: 600 11px var(--mono); padding: 3px 6px; cursor: pointer; white-space: nowrap; }
+.kbd-btn:hover { color: var(--text); border-color: var(--sel); }
+.topbar .search-suggest { top: calc(100% + 6px); width: 420px; right: 0; left: auto; }
+.topbar .profile-wrap { position: relative; }
+.topbar .side-user { width: auto; gap: 6px; padding: 2px; border: 0; background: none; border-radius: 999px; cursor: pointer; color: var(--text-2); }
+.topbar .side-user .side-user-text { display: none; }
+.topbar .side-user:hover .avatar { box-shadow: 0 0 0 2px var(--line-2); }
+.topbar .avatar { width: 38px; height: 38px; background: var(--surface-2); color: var(--text); font-size: 13px; }
+.topbar .profile-menu { top: calc(100% + 8px); bottom: auto; right: 0; left: auto; min-width: 240px; }
+.main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.app-foot { display: flex; gap: 16px; align-items: center; justify-content: center; padding: 14px 20px 22px; color: var(--text-3); font-size: 12px; }
+.app-foot .side-status { padding: 0; }
+.app-foot .side-version { padding: 0; }
+.page { max-width: 1520px; padding: 28px 28px 56px; }
+.page-narrow { max-width: 980px; }
+.workspace { max-width: 1600px; height: calc(100vh - 65px); }
+.skip-link { background: var(--accent); color: var(--accent-ink); }
+
+/* Panelen (voorheen "kaarten" met een lijn erboven) */
+.card, .dash-card { background: var(--surface); border: 1px solid var(--line); border-top: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px 20px; margin-bottom: 18px; }
+.dialog .card, .card .card { background: var(--bg-2); border-color: var(--line); }
+.card-title { font-size: 15px; font-weight: 650; }
+.page-title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.people-form { border-top: 1px solid var(--line); }
+.steps li { border-left: 3px solid var(--sel); }
+.stat-tile.is-total { border-top: 2px solid var(--sel); }
+.version-item.is-current { box-shadow: inset 3px 0 0 var(--sel); }
+.dropzone:hover, .dropzone-big:hover { border-color: var(--sel); }
+.drop-overlay { border-color: var(--sel); }
+.drop-overlay .icon, .tray-head > .icon { color: var(--sel); }
+.auth-card { border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.auth-wrap { background: radial-gradient(1100px 600px at 50% -10%, #1C304C 0%, var(--bg) 60%); }
+:root[data-theme="light"] .auth-wrap { background: radial-gradient(1100px 600px at 50% -10%, #E8F0FB 0%, var(--bg) 60%); }
+.tab-static { border-bottom-color: var(--sel); }
+.tabs { background: var(--surface); }
+.tabs [role=tab][aria-selected=true] { color: var(--text); border-bottom-color: var(--sel); font-weight: 600; }
+.side-panel, .menu, dialog.palette { border-radius: var(--r-lg); }
+.menu { background: var(--surface); border-color: var(--line-2); box-shadow: var(--shadow); }
+.menu-item:hover, .menu-item:focus-visible { background: var(--surface-2); }
+dialog.palette { border: 1px solid var(--line-2); border-top: 1px solid var(--line-2); }
+.palette-item.is-active { background: var(--surface-2); color: var(--text); box-shadow: inset 2px 0 0 var(--sel); }
+.palette-item.is-active .icon { color: var(--sel); opacity: 1; }
+.side-count { background: var(--accent); color: var(--accent-ink); border-radius: 999px; }
+
+/* Tweede navigatierij (tabbladen van een project) */
+.page-tabs { border-bottom: 1px solid var(--line); }
+.page-tabs a { color: var(--text-2); }
+.page-tabs a:hover { color: var(--text); }
+.page-tabs a.is-active { color: var(--text); border-bottom-color: var(--sel) !important; font-weight: 600; }
+.page-tabs a.is-active .icon { color: var(--sel); }
+
+/* Lijsten in panelen: regels met subtiele scheiding */
+.video-list { border-top: 0; }
+.video-row { border-bottom: 1px solid var(--line); border-radius: 0; }
+
+/* Mobiel en smalle laptops */
+@media (max-width: 1180px) {
+  .topbar-inner { gap: 14px; padding: 0 18px; }
+  .brand-app { display: none; }
+  .topbar .side-search { width: 200px; }
+  .top-nav a { padding: 0 9px; }
+}
+@media (max-width: 980px) {
+  .top-nav .nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .top-nav a { padding: 0 10px; }
+}
+@media (max-width: 860px) {
+  .app.has-topbar { grid-template-rows: none; }
+  .topbar-inner { height: 56px; padding: 0 14px; }
+  .menu-btn { display: inline-flex; margin-left: auto; }
+  .topbar-menu { display: none; }
+  .app.nav-open .topbar-menu { display: flex; flex-direction: column; align-items: stretch; position: absolute; top: 56px; left: 0; right: 0; padding: 12px 14px 16px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); gap: 12px; }
+  .app.nav-open .top-nav { flex-direction: column; margin: 0; }
+  .app.nav-open .top-nav a { height: 46px; padding: 0 10px; border-radius: var(--r); }
+  .app.nav-open .top-nav .nav-label { position: static; width: auto; height: auto; clip: auto; }
+  .app.nav-open .top-nav a.is-active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--sel); }
+  .app.nav-open .topbar-right { flex-wrap: wrap; }
+  .topbar .side-search { width: 100%; flex: 1 1 100%; }
+  .page { padding: 18px 16px 40px; }
+  .workspace { height: auto; }
+}
+.is-freelance .side-role { margin: 0; color: var(--text-3); white-space: nowrap; }

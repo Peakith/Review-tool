@@ -5,6 +5,7 @@ const auth = require('../auth');
 const { normalizeTitle, titleFromFilename, originalDownloadName, contentDisposition, makeFrame, resolveTools } = require('../media');
 const { versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos, posterKey } = require('../views');
 const { intParam, atLeast } = require('../access');
+const { coverDto, pinnedSet } = require('../covers');
 const { syncTaskFromComment } = require('./tasks');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { KINDS, ASPECTS, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions } = require('../client');
@@ -87,6 +88,7 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier, v
     const includeArchived = req.query.archived === '1';
     const projects = db.prepare('SELECT * FROM projects WHERE trashed_at IS NULL ORDER BY created_at DESC').all()
       .filter((p) => (!allowed || allowed.has(p.id)) && (includeArchived || !p.archived_at));
+    const pins = pinnedSet(db, req.user.id);
     const result = projects.map((p) => {
       const videos = db.prepare('SELECT * FROM videos WHERE project_id = ? AND trashed_at IS NULL AND archived_at IS NULL').all(p.id).map(videoSummary);
       const statusCounts = Object.fromEntries(Object.keys(STATUSES).map((st) => [st, 0]));
@@ -105,6 +107,9 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier, v
         statusCounts,
         openComments: videos.reduce((n, v) => n + v.openComments, 0),
         posters: videos.filter((v) => v.posterVersionId).slice(0, 3).map((v) => v.posterVersionId),
+        cover: coverDto(db, p, `/api/projects/${p.id}/cover`),
+        pinned: pins.has(p.id),
+        clientVisibility: p.client_visibility,
       };
     });
     result.sort((a, b) => String(b.lastActivityAt).localeCompare(String(a.lastActivityAt)));
@@ -161,6 +166,8 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier, v
       createdAt: p.created_at,
       archivedAt: p.archived_at,
       myLevel: level,
+      cover: coverDto(db, p, `/api/projects/${p.id}/cover`),
+      pinned: pinnedSet(db, req.user.id).has(p.id),
       brandId: p.brand_id,
       brand: brandDto(db, p.brand_id),
       portalIntro: p.portal_intro || '',

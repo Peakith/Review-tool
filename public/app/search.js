@@ -19,7 +19,7 @@ const mark = (text, q) => {
 };
 
 /** Zoekveld in de zijbalk met suggesties (pijltjes + Enter, Escape sluit). */
-export function searchBox({ navigate }) {
+export function searchBox({ navigate, onShortcut = null, shortcutLabel = '/' }) {
   const input = h('input', { type: 'search', placeholder: 'Zoeken…', 'aria-label': 'Zoeken in projecten, video’s, bestanden, briefings en reacties', autocomplete: 'off', role: 'combobox', 'aria-expanded': 'false', 'aria-controls': 'search-suggest', 'aria-autocomplete': 'list' });
   const list = h('div', { class: 'search-suggest', id: 'search-suggest', role: 'listbox', hidden: true });
   let items = [];
@@ -81,7 +81,11 @@ export function searchBox({ navigate }) {
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && !e.target.closest?.('input, textarea, select, [contenteditable], dialog') && !document.querySelector('dialog[open]')) { e.preventDefault(); input.focus(); }
   });
-  return h('div', { class: 'side-search' }, icon('search'), input, h('kbd', { class: 'side-kbd', 'aria-hidden': 'true' }, '/'), list);
+  // Met opdrachtbalk: de sneltoetsknop opent die (⌘K/Ctrl+K); "/" focust gewoon het zoekveld.
+  const kbd = onShortcut
+    ? h('button', { type: 'button', class: 'side-kbd kbd-btn', title: `Opdrachtbalk (${shortcutLabel})`, 'aria-label': `Opdrachtbalk openen (${shortcutLabel})`, onClick: onShortcut }, shortcutLabel)
+    : h('kbd', { class: 'side-kbd', 'aria-hidden': 'true' }, '/');
+  return h('div', { class: 'side-search' }, icon('search'), input, kbd, list);
 }
 
 /** Resultatenpagina /zoeken. */

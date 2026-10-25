@@ -398,6 +398,14 @@ CREATE TABLE IF NOT EXISTS client_questions (
 CREATE INDEX IF NOT EXISTS idx_questions_project ON client_questions(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_questions_request ON client_questions(project_id, created_by, request_id) WHERE request_id IS NOT NULL;
 
+-- Bouwronde 7: persoonlijk vastgezette projecten (per gebruiker; verleent geen toegang).
+CREATE TABLE IF NOT EXISTS project_pins (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, project_id)
+);
+
 -- Instellingen die een beheerder kan wijzigen (bijv. bewaartermijn klantactiviteit).
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -498,6 +506,12 @@ const COLUMNS = [
   ['versions', 'sha256_error', 'TEXT'],
   ['versions', 'source_upload_id', 'TEXT'],
   ['uploads', 'sha256', 'TEXT'],
+  // Bouwronde 7: projectcover (auto, thumbnail van een versie of een eigen frame).
+  ['projects', 'cover_mode', "TEXT NOT NULL DEFAULT 'auto'"],
+  ['projects', 'cover_version_id', 'INTEGER'],
+  ['projects', 'cover_time', 'REAL'],
+  ['projects', 'cover_key', 'TEXT'],
+  ['projects', 'cover_updated_at', 'TEXT'],
 ];
 
 const DEFAULT_BRANDS = [

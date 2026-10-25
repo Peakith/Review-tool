@@ -288,3 +288,12 @@ html[lang="en"] .howto[open] summary::after { content: "Hide"; }
 .p-q-answer p { margin: 0; white-space: pre-line; }
 .p-q-form textarea { min-height: 76px; }
 @media (max-width: 640px) { .p-question { grid-template-columns: 36px minmax(0, 1fr); } }
+
+/* Bouwronde 6: regels in plaats van kaders op de klantpagina's. */
+.brief-item, .r-round, .d-item { background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding-left: 0; padding-right: 0; }
+.brief-item:first-child, .r-round:first-child, .d-item:first-child { border-top: 1px solid var(--line); }
+.brief-list, .d-list, .r-rounds { gap: 0 !important; }
+.gate-card { border-top: 4px solid var(--text); border-radius: var(--r); }
+.howto { background: none; border: 0; border-left: 3px solid var(--line-2); border-radius: 0; padding: 4px 0 4px 14px; }
+.identity:not(.is-verified) { background: none; border: 0; border-radius: 0; padding: 0; }
+.r-status { border-radius: var(--r); }

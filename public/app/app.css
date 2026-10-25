@@ -913,3 +913,25 @@ a.dash-row:hover { background: var(--surface-2); border-radius: 6px; }
 .question-answer { border-left: 3px solid var(--st-approved); padding-left: 10px; }
 .question-answer p { margin: 0; white-space: pre-line; }
 .question-item.is-withdrawn .question-body { color: var(--text-3); text-decoration: line-through; }
+
+/* ==========================================================================
+   Bouwronde 6: lijsten als regels in plaats van losse kaders (overal dezelfde opbouw).
+   Kaders blijven alleen voor invoer, keuzes in dialogen, scrollvakken en de speler.
+   ========================================================================== */
+.link-row, .brief-card, .bp-card, .fb-row, .round-item, .dl-row, .release-item, .client-row, .client-project, .inbox-item, .version-item {
+  background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding-left: 0; padding-right: 0;
+}
+.link-row:first-child, .brief-card:first-child, .bp-card:first-child, .fb-row:first-child, .round-item:first-child, .dl-row:first-child,
+.release-item:first-child, .client-row:first-child, .client-project:first-child, .inbox-item:first-child, .version-item:first-child { border-top: 1px solid var(--line); }
+.version-item { padding: 10px 6px; }
+.version-item.is-current { background: var(--active-bg); box-shadow: inset 3px 0 0 var(--text); border-color: var(--line); padding-left: 10px; }
+.link-row.is-revoked { opacity: .6; }
+.act-rows, .search-list { background: none; border: 0; border-radius: 0; border-top: 1px solid var(--line); }
+.dash-card { background: none; border: 0; border-top: 2px solid var(--text); border-radius: 0; padding: 12px 0 8px; }
+.steps li { background: none; border: 0; border-left: 3px solid var(--text); border-radius: 0; }
+.stat-tile { background: none; border: 0; border-top: 1px solid var(--line-2); border-radius: 0; padding: 10px 0; }
+.stat-tile.is-warn { border-top-color: var(--st-review); }
+.stat-tile.is-total { border-top: 2px solid var(--text); }
+/* Lijsten zonder tussenruimte (de regels scheiden de items). */
+.fb-list, .dl-list, .client-list, .inbox-list, .version-list, .brief-list, .link-list, .round-list, .release-list, .client-projects { gap: 0 !important; }
+.fb-row:hover, .client-row:hover, .inbox-item:hover { background: var(--row-hover); }

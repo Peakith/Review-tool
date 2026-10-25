@@ -54,7 +54,7 @@ function stateLabel(c, opts) {
     return h('span', { class: 'comment-state is-pending', title: tr('Hoort nog niet bij een verstuurde feedbackronde') },
       icon('clock'), c.mine ? tr('Nog niet verstuurd') : tr('Nog niet verstuurd door reviewer'));
   }
-  if (c.authorType === 'team') return null;
+  if (c.authorType === 'team' || opts.mode === 'read') return null;
   if (opts.mode === 'client') {
     return c.sent
       ? h('span', { class: 'comment-state is-open' }, icon('send'), tr('Verstuurd als feedback'))
@@ -79,7 +79,7 @@ function commentCard(c, opts, isReply) {
   if (!isReply && opts.mode === 'team' && opts.onTask) {
     foot.append(h('button', { type: 'button', class: 'link-btn', onClick: () => opts.onTask(c) }, icon('tasks'), c.task ? 'Taak' : 'Taak maken'));
   }
-  if (!isReply && opts.mode === 'team') {
+  if (!isReply && opts.mode === 'team' && opts.canResolve !== false) {
     foot.append(h('button', {
       type: 'button',
       class: `link-btn${c.resolved ? '' : ' is-accent'}`,

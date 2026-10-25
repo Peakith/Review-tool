@@ -64,7 +64,8 @@ function portalRoutes(router, db, config, { storage }) {
       fileUrl: (b) => `${base}/briefing/${b.id}/file`,
     });
     recordActivity(db, req, { projectId: req.project.id, type: 'portal_opened', src: portalSource(req.projectLink) });
-    res.json({ ...dto, language: clientLanguage(db, req.project), linkExpiresAt: req.projectLink.expires_at || null, delivery: deliverySummary(db, req.project, `/p/${req.projectLink.token}/oplevering`) });
+    const { visibleQuestions, questionDto } = require('../questions');
+    res.json({ ...dto, questions: visibleQuestions(db, [req.project.id]).map((q) => ({ ...questionDto(db, q), projectName: req.project.name })), language: clientLanguage(db, req.project), linkExpiresAt: req.projectLink.expires_at || null, delivery: deliverySummary(db, req.project, `/p/${req.projectLink.token}/oplevering`) });
   });
 
   // Alleen de thumbnail van de gepubliceerde versie; nooit van een intern concept.

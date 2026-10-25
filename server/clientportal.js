@@ -102,9 +102,12 @@ function clientPortalDto(db, client, clientLink) {
       delivery: deliveries ? { count: deliveries, url: `/k/${clientLink.token}/oplevering/${p.id}` } : null,
     };
   });
+  const { visibleQuestions, questionDto } = require('./questions');
+  const names = new Map(projects.map((p) => [p.id, p.name]));
   return {
     client: { name: client.name },
     studio: studioName(db),
+    questions: visibleQuestions(db, projects.map((p) => p.id)).map((q) => ({ ...questionDto(db, q), projectName: names.get(q.project_id) })),
     brand: brandDto(db, client.brand_id),
     language: LANGUAGES.includes(client.language) ? client.language : 'nl',
     identity: clientLink.approver_email ? { name: clientLink.approver_name, personal: true } : null,

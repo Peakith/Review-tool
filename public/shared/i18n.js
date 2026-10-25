@@ -105,6 +105,23 @@ export const EN = {
   'Reactie graag vóór {date}': 'Please respond by {date}',
   'Goedkeuren kan bij de video’s waarvoor jij de akkoordgever bent.': 'You can approve the videos for which you are the approver.',
 
+  'En 1 vraag van het team.': 'And 1 question from the team.',
+  'En {n} vragen van het team.': 'And {n} questions from the team.',
+  'Het team heeft 1 vraag voor je.': 'The team has 1 question for you.',
+  'Het team heeft {n} vragen voor je.': 'The team has {n} questions for you.',
+  'Beantwoorde vragen': 'Answered questions',
+  'Vraag van het team · {date}': 'Question from the team · {date}',
+  'Beantwoord door {name} · {date}': 'Answered by {name} · {date}',
+  'Beantwoord door {name} (naam zelf ingevuld) · {date}': 'Answered by {name} (name entered by visitor) · {date}',
+  'Antwoord versturen': 'Send answer',
+  Beantwoorden: 'Answer',
+  'Jouw antwoord': 'Your answer',
+  'Je naam': 'Your name',
+  'Je antwoordt als {name}.': 'You are answering as {name}.',
+  'Voorbeeld: antwoorden kan alleen de klant.': 'Preview: only the client can answer.',
+  'Deze vraag is al beantwoord.': 'This question has already been answered.',
+  'Het team heeft deze vraag ingetrokken.': 'The team has withdrawn this question.',
+
   // Portaal
   'Wacht op jouw review': 'Waiting for your review',
   'Bekijk deze video’s, plaats je opmerkingen en verstuur je feedback.': 'Watch these videos, add your comments and send your feedback.',

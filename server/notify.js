@@ -24,6 +24,7 @@ const TYPES = {
   approval: { label: 'Goedkeuring', pref: 'approvals' },
   approval_revoked: { label: 'Goedkeuring ingetrokken', pref: 'approvals' },
   delivery: { label: 'Oplevering', pref: 'deliveries' },
+  question_answered: { label: 'Antwoord van klant', pref: 'questions' },
 };
 const PREFS = {
   tasks: 'Taken die aan mij worden toegewezen',
@@ -32,6 +33,7 @@ const PREFS = {
   feedback: 'Klantfeedback in projecten die ik volg',
   approvals: 'Goedkeuringen (en intrekkingen) in projecten die ik volg',
   deliveries: 'Vrijgaven en teruggenomen opleveringen in projecten die ik volg',
+  questions: 'Antwoorden van de klant op vragen (eigen vragen en projecten die ik volg)',
 };
 
 function userPrefs(db, userId) {
@@ -45,11 +47,18 @@ const wants = (db, userId, type) => userPrefs(db, userId)[TYPES[type].pref] !== 
 function createNotifier(db, access) {
   const userOf = (id) => {
     const u = db.prepare('SELECT id, role, disabled_at FROM users WHERE id = ?').get(id);
-    return u && !u.disabled_at ? { id: u.id, isAdmin: u.role === 'admin' } : null;
+    return u && !u.disabled_at ? { id: u.id, role: u.role, isAdmin: u.role === 'admin', isFreelancer: u.role === 'freelancer' } : null;
   };
-  const canSee = (userId, projectId) => {
+  /**
+   * Mag deze persoon een melding van deze soort over dit project krijgen/zien? Teamleden vanaf
+   * Meekijker: alle soorten. Freelancers: alleen verstuurde klantfeedback, en alleen zolang hun
+   * (tijdelijke) toegang tot het project geldt.
+   */
+  const canSee = (userId, projectId, type = null) => {
     const u = userOf(userId);
-    return !!u && !!access.levelFor(u, projectId);
+    if (!u) return false;
+    if (u.isFreelancer) return type === 'feedback' && access.canAccess(u, projectId, 'feedback');
+    return access.canAccess(u, projectId, 'read');
   };
 
   /** Volgen aan/uit. auto: alleen zetten als er nog geen bewuste keuze is. */
@@ -84,7 +93,7 @@ function createNotifier(db, access) {
     let n = 0;
     for (const userId of new Set(recipients)) {
       if (!userId || userId === actorUserId) continue;
-      if (!canSee(userId, projectId) || !wants(db, userId, type)) continue;
+      if (!canSee(userId, projectId, type) || !wants(db, userId, type)) continue;
       const r = db.prepare(`INSERT OR IGNORE INTO notifications (user_id, type, project_id, video_id, version_id, comment_id, task_id, delivery_id, actor_label, title, body, dedupe_key, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(userId, type, projectId, videoId, versionId, commentId, taskId, deliveryId, String(actorLabel).slice(0, 120), String(title).slice(0, 300), String(body).slice(0, 400), key, now());
       n += Number(r.changes);
@@ -104,7 +113,7 @@ function createNotifier(db, access) {
     return db.prepare('SELECT id, name, email FROM users WHERE disabled_at IS NULL').all().filter((u) => {
       const local = u.email.split('@')[0].toLowerCase();
       const name = u.name.toLowerCase();
-      return (lower.includes(`@${name}`) || new RegExp(`@${local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w.-])`).test(lower)) && canSee(u.id, projectId);
+      return (lower.includes(`@${name}`) || new RegExp(`@${local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w.-])`).test(lower)) && canSee(u.id, projectId, 'mention');
     }).map((u) => u.id);
   }
 
@@ -185,12 +194,24 @@ function createNotifier(db, access) {
     });
   }
 
+  /** Klant beantwoordde een vraag: wie de vraag stelde en de volgers van het project. */
+  function questionAnswered({ questionId }) {
+    const q = db.prepare('SELECT * FROM client_questions WHERE id = ?').get(questionId);
+    if (!q) return 0;
+    const v = q.video_id ? db.prepare('SELECT title FROM videos WHERE id = ?').get(q.video_id) : null;
+    const p = db.prepare('SELECT name FROM projects WHERE id = ?').get(q.project_id);
+    return send({
+      type: 'question_answered', recipients: [q.created_by, ...projectFollowers(q.project_id)], actorLabel: q.answer_name || 'Klant', projectId: q.project_id, videoId: q.video_id, versionId: q.version_id,
+      title: `${q.answer_name || 'De klant'} beantwoordde je vraag over ${v?.title || p?.name || 'het project'}`, body: snippet(q.answer), key: `question:${q.id}:answered`,
+    });
+  }
+
   /** Een melding mag de eigenlijke actie nooit laten mislukken. */
   function emit(name, args) {
     try { return api[name](args); } catch (err) { console.error(`Melding (${name}) maken mislukt:`, err); return 0; }
   }
 
-  const api = { taskAssigned, commentPosted, feedbackSent, approvalGiven, approvalRevoked, deliveryChanged };
+  const api = { taskAssigned, commentPosted, feedbackSent, approvalGiven, approvalRevoked, deliveryChanged, questionAnswered };
   return { TYPES, PREFS, emit, send, setFollow, followState, canSee, taskAssigned, commentPosted, feedbackSent, approvalGiven, approvalRevoked, deliveryChanged };
 }
 

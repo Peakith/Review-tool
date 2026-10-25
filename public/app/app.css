@@ -853,3 +853,63 @@ a.dash-row:hover { background: var(--surface-2); border-radius: 6px; }
 .pb-note { flex-basis: 100%; }
 .pb-failed { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .dl-zip { margin-left: auto; }
+
+/* ---------- Gedeelde lijstregels (bouwronde 6) ---------- */
+.lede { font-size: 15px; max-width: 640px; margin: -8px 0 24px; }
+.row-list { display: grid; border-top: 1px solid var(--line); }
+.list-row { display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 10px 4px 10px 0; border-bottom: 1px solid var(--line); color: var(--text); }
+.list-row:hover { background: var(--row-hover); }
+.list-row:hover .list-row-title { text-decoration: underline; text-underline-offset: 3px; }
+.list-row > .icon:last-child { color: var(--text-3); }
+.list-row-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.list-row-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-row-note { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); white-space: nowrap; }
+.list-row-note .icon { --icon-size: 14px; }
+.list-row-count { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.list-row-count .icon { --icon-size: 15px; color: var(--text-3); }
+.stack-form { display: grid; gap: 8px; max-width: 420px; }
+
+/* ---------- Freelanceromgeving ---------- */
+.side-role { display: flex; align-items: center; gap: 6px; margin: 4px 10px 12px; color: var(--text-2); font-weight: 600; }
+.side-role .icon { --icon-size: 14px; }
+.side-logout { justify-content: flex-start; }
+.tab-static { display: inline-flex; align-items: center; gap: 8px; padding: 10px; font-weight: 700; border-bottom: 2px solid var(--text); margin-bottom: -1px; }
+.panel-note { display: flex; gap: 6px; align-items: flex-start; margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); }
+.panel-note .icon { --icon-size: 14px; margin-top: 2px; }
+.is-freelance .video-row { color: var(--text); }
+@media (max-width: 640px) {
+  .list-row { flex-wrap: wrap; gap: 6px 12px; }
+  .list-row-main { flex-basis: calc(100% - 40px); }
+}
+
+/* ---------- Personen in een project ---------- */
+.people-list { margin-bottom: 18px; }
+.people-admins { display: flex; gap: 6px; align-items: center; margin-top: 10px; }
+.people-admins .icon { --icon-size: 14px; }
+.people-form { display: grid; gap: 10px; padding-top: 16px; border-top: 2px solid var(--text); }
+.people-form h3 { font-size: 16px; font-weight: 800; }
+.people-until { display: grid; gap: 4px; max-width: 360px; }
+.expiry { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); }
+.expiry .icon { --icon-size: 14px; }
+.expiry.is-expired { color: var(--st-changes); }
+.access-row-3 { grid-template-columns: minmax(0, 1fr) 180px 200px; }
+.meta-people { font-size: 13px; }
+.roles-notice ul { margin: 6px 0 10px; padding-left: 18px; }
+.rights-table td, .rights-table th { white-space: normal; }
+.rights-table tbody th { display: table-cell; font-weight: 600; max-width: none; }
+@media (max-width: 860px) { .access-row-3 { grid-template-columns: 1fr; } }
+
+/* ---------- Vragen aan de klant ---------- */
+.questions-block { display: grid; gap: 10px; justify-items: start; }
+.question-list { list-style: none; margin: 0; padding: 0; display: grid; width: 100%; border-top: 1px solid var(--line); }
+.question-item { display: grid; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--line); justify-items: start; }
+.question-head { display: flex; gap: 6px 12px; align-items: center; flex-wrap: wrap; }
+.question-status { display: inline-flex; gap: 5px; align-items: center; font-size: 12.5px; font-weight: 700; }
+.question-status .icon { --icon-size: 14px; }
+.question-status.is-open .icon { color: var(--st-review); }
+.question-status.is-answered .icon { color: var(--st-approved); }
+.question-status.is-withdrawn { color: var(--text-3); }
+.question-body { margin: 0; font-weight: 600; white-space: pre-line; }
+.question-answer { border-left: 3px solid var(--st-approved); padding-left: 10px; }
+.question-answer p { margin: 0; white-space: pre-line; }
+.question-item.is-withdrawn .question-body { color: var(--text-3); text-decoration: line-through; }

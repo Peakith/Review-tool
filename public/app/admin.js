@@ -5,16 +5,12 @@ import {
 } from '/shared/util.js';
 import { applyBrand, brandMark, palette } from '/shared/brand.js';
 import { clientPill } from '/shared/client.js';
+import { ROLE_LABEL, ACCOUNT_LABEL, rolesFor, expiryLabel, toLocalInput, fromLocalInput, rightsMatrix, timeZone } from './roles.js';
 
-export const LEVELS = [
-  ['view', 'Bekijken en reageren', 'Afspelen, downloaden, reageren, reacties afhandelen en de briefing lezen'],
-  ['upload', 'Uploaden', '+ video’s, nieuwe versies en (interne) briefingonderdelen toevoegen, titels en gegevens wijzigen, klaarzetten'],
-  ['publish', 'Publiceren en delen', '+ publiceren naar de klant, reviewlinks, klantportaal, akkoordgever en briefing delen'],
-  ['manage', 'Beheren', '+ project bewerken, status corrigeren, archiveren, prullenbak'],
-];
-const LEVEL_LABEL = Object.fromEntries(LEVELS.map(([k, l]) => [k, l]));
-const rank = (l) => LEVELS.findIndex(([k]) => k === l);
-export const can = (level, need) => rank(level) >= rank(need);
+// Niveaus in volgorde (zie server/access.js). Rollen en uitleg staan in roles.js.
+export const LEVELS = ['feedback', 'read', 'view', 'upload', 'publish', 'manage'];
+const rank = (l) => LEVELS.indexOf(l);
+export const can = (level, need) => !!level && rank(level) >= rank(need);
 
 const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
 
@@ -24,7 +20,7 @@ export async function viewTeam(ctx) {
   const { session } = ctx;
   if (!session.user.isAdmin) return viewMyAccount(ctx);
   document.title = 'Team & rechten — Studio Review';
-  const [users, projects, freshSession] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/projects?archived=1'), api('GET', '/api/session')]);
+  const [users, projects, freshSession, { notice: rolesNotice }] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/projects?archived=1'), api('GET', '/api/session'), api('GET', '/api/system/roles-notice').catch(() => ({ notice: null }))]);
   ctx.session.media = freshSession.media;
   const reload = () => ctx.refresh();
 
@@ -33,25 +29,25 @@ export async function viewTeam(ctx) {
     const scope = u.role === 'admin'
       ? h('span', { class: 'muted' }, 'Alle projecten en instellingen')
       : u.projects.length
-        ? h('span', {}, u.projects.slice(0, 3).map((p) => `${p.name} (${LEVEL_LABEL[p.level].toLowerCase()})`).join(' · '), u.projects.length > 3 ? ` · +${u.projects.length - 3}` : '')
+        ? h('span', {}, u.projects.slice(0, 3).map((p) => `${p.name} (${(ROLE_LABEL[p.role] || p.level).toLowerCase()}${p.expired ? ', verlopen' : p.expiresAt ? ', tijdelijk' : ''})`).join(' · '), u.projects.length > 3 ? ` · +${u.projects.length - 3}` : '')
         : h('span', { class: 'warn-text' }, icon('alert'), 'Nog geen projecten');
     return h('li', { class: `member-row${u.disabled ? ' is-disabled' : ''}` },
       h('span', { class: 'avatar' }, initials(u.name)),
       h('div', { class: 'member-main' },
         h('div', { class: 'member-name' }, h('strong', { class: 'truncate' }, u.name), isMe ? h('span', { class: 'muted' }, ' (jij)') : null,
-          h('span', { class: `badge ${u.role === 'admin' ? 'badge-accent' : 'badge-neutral'}` }, u.role === 'admin' ? 'Beheerder' : 'Teamlid'),
+          h('span', { class: `badge ${u.role === 'admin' ? 'badge-accent' : 'badge-neutral'}` }, ACCOUNT_LABEL[u.role] || u.role),
           u.disabled ? h('span', { class: 'badge badge-guest' }, 'Uitgeschakeld') : null),
         h('div', { class: 'small muted truncate' }, u.email),
         h('div', { class: 'small member-scope' }, scope)),
       h('div', { class: 'member-actions' },
-        u.role !== 'admin' ? button('Projecttoegang', { icon: 'lock', size: 'sm', onClick: () => accessDialog(u, projects, reload) }) : null,
+        u.role !== 'admin' ? button('Projecten', { icon: 'lock', size: 'sm', onClick: () => accessDialog(u, projects, reload), 'aria-label': `Projecten en rollen van ${u.name}` }) : null,
         userMenu(u, isMe, reload)));
   };
 
   const name = h('input', { required: true, autocomplete: 'off' });
   const email = h('input', { type: 'email', required: true, autocomplete: 'off' });
   const password = h('input', { type: 'password', minlength: '10', required: true, autocomplete: 'new-password' });
-  const role = h('select', {}, h('option', { value: 'member' }, 'Teamlid — alleen toegewezen projecten'), h('option', { value: 'admin' }, 'Beheerder — alles'));
+  const role = h('select', {}, h('option', { value: 'member' }, 'Teamlid — alleen toegewezen projecten'), h('option', { value: 'freelancer' }, 'Freelancer — alleen klantfeedback bekijken'), h('option', { value: 'admin' }, 'Beheerder — alles'));
   const submit = h('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), h('span', { class: 'btn-label' }, 'Toevoegen'));
   const form = h('form', { class: 'card', onSubmit: async (e) => {
     e.preventDefault();
@@ -59,14 +55,14 @@ export async function viewTeam(ctx) {
     try {
       const { id } = await api('POST', '/api/users', { name: name.value, email: email.value, password: password.value, role: role.value });
       toast(`${name.value} is toegevoegd. Deel het tijdelijke wachtwoord via een veilig kanaal.`, 'success');
-      if (role.value === 'member') {
+      if (role.value !== 'admin') {
         const fresh = (await api('GET', '/api/users')).find((x) => x.id === id);
         await accessDialog(fresh, projects, () => {});
       }
       reload();
     } catch (err) { toast(err.message, 'error'); restore(); }
   } },
-  h('h2', { class: 'card-title' }, 'Teamlid of freelancer toevoegen'),
+  h('h2', { class: 'card-title' }, 'Account toevoegen'),
   h('div', { class: 'form-grid form-grid-4' }, field('Naam', name), field('E-mailadres', email), field('Tijdelijk wachtwoord', password, 'Minimaal 10 tekens.'), field('Rol', role)),
   submit);
 
@@ -75,15 +71,16 @@ export async function viewTeam(ctx) {
     h('div', {}, h('strong', {}, label), h('div', { class: 'small muted mono' }, ok ? p : missing)));
 
   mount(ctx.pageEl, h('div', { class: 'page page-narrow' },
-    ctx.pageHeader({ title: 'Team & rechten', meta: `${plural(users.filter((u) => !u.disabled).length, 'actief teamlid', 'actieve teamleden')}` }),
+    ctx.pageHeader({ title: 'Team & rechten', meta: `${plural(users.filter((u) => !u.disabled).length, 'actief account', 'actieve accounts')}` }),
+    rolesNotice ? rolesNoticeBox(rolesNotice, reload) : null,
     h('section', { class: 'card' },
       h('h2', { class: 'card-title' }, 'Teamleden'),
       h('ul', { class: 'member-list' }, users.map(row))),
     form,
     h('section', { class: 'card' },
-      h('h2', { class: 'card-title' }, 'Wat mag elk niveau?'),
-      h('p', { class: 'small muted' }, 'Teamleden zien alleen de projecten waar je ze toegang toe geeft. Elk niveau omvat het vorige. Beheerders zien alles en beheren teamleden, opslag, back-ups en definitief verwijderen. Klantlinks en akkoordgevers werken los hiervan, zonder account.'),
-      h('dl', { class: 'level-list' }, LEVELS.map(([k, label, desc]) => [h('dt', {}, label), h('dd', {}, desc)]))),
+      h('h2', { class: 'card-title' }, 'Rollen en rechten'),
+      h('p', { class: 'small muted' }, 'Teamleden en freelancers zien alleen de projecten waaraan ze zijn gekoppeld; een rol in het ene project geeft niets in een ander project. Klanten en akkoordgevers werken los hiervan via hun eigen links, zonder account.'),
+      rightsMatrix()),
     h('section', { class: 'card', id: 'systeem' }, h('h2', { class: 'card-title' }, 'Systeem'),
       h('ul', { class: 'system-list' },
         tool('ffprobe · inhoudscontrole van uploads', m?.ffprobe, m?.paths?.ffprobe, 'Niet gevonden. Installeer ffmpeg (macOS: brew install ffmpeg) en herstart.'),
@@ -93,10 +90,15 @@ export async function viewTeam(ctx) {
 
 function userMenu(u, isMe, reload) {
   const act = async (fn, msg) => { try { await fn(); toast(msg, 'success'); reload(); } catch (err) { toast(err.message, 'error'); } };
+  const setRole = (role, msg, body) => async () => {
+    if (await confirmDialog({ title: `${u.name}: ${ACCOUNT_LABEL[role]}?`, body, confirmLabel: `${ACCOUNT_LABEL[role]} maken` })) act(() => api('PATCH', `/api/users/${u.id}`, { role }), msg);
+  };
   const items = [
     u.role === 'admin'
       ? ['Teamlid maken (geen beheer)', () => act(() => api('PATCH', `/api/users/${u.id}`, { role: 'member' }), `${u.name} is nu teamlid`)]
-      : ['Beheerder maken', () => act(() => api('PATCH', `/api/users/${u.id}`, { role: 'admin' }), `${u.name} is nu beheerder`)],
+      : ['Beheerder maken…', setRole('admin', `${u.name} is nu beheerder`, 'Een beheerder heeft toegang tot alle projecten, accounts, merken, opslag en back-ups.')],
+    u.role === 'member' ? ['Freelancer maken…', setRole('freelancer', `${u.name} is nu freelancer`, 'In alle gekoppelde projecten wordt de rol Freelancer: alleen verstuurde klantfeedback bekijken. Toewijzingen van taken vervallen.')] : null,
+    u.role === 'freelancer' ? ['Teamlid maken…', setRole('member', `${u.name} is nu teamlid`, 'In de gekoppelde projecten begint deze persoon als Meekijker (alleen kijken). Breid de rol daarna per project bewust uit.')] : null,
     ['Wachtwoord instellen…', () => passwordDialog(u)],
     !isMe ? (u.disabled
       ? ['Weer inschakelen', () => act(() => api('PATCH', `/api/users/${u.id}`, { disabled: false }), `${u.name} kan weer inloggen`)]
@@ -141,34 +143,58 @@ export function menuButton(items, label = 'Meer acties', trigger_ = null) {
 }
 
 async function accessDialog(user, projects, reload) {
-  const current = new Map(user.projects.map((p) => [p.projectId, p.level]));
-  const selects = projects.map((p) => {
-    const sel = h('select', { 'aria-label': `Toegang tot ${p.name}` },
+  const current = new Map(user.projects.map((p) => [p.projectId, p]));
+  const roles = rolesFor(user.role);
+  const rows = projects.map((p) => {
+    const cur = current.get(p.id);
+    const sel = h('select', { 'aria-label': `Rol in ${p.name}` },
       h('option', { value: '' }, 'Geen toegang'),
-      LEVELS.map(([k, label]) => h('option', { value: k }, label)));
-    sel.value = current.get(p.id) || '';
-    return [p, sel];
+      roles.map((r) => h('option', { value: r.key }, r.label)));
+    sel.value = cur ? (user.role === 'freelancer' ? 'freelancer' : cur.role) : '';
+    const until = h('input', { type: 'datetime-local', value: toLocalInput(cur?.expiresAt), 'aria-label': `Toegang tot (optioneel) voor ${p.name}`, title: `Tijdzone: ${timeZone()}` });
+    return { p, sel, until, cur };
   });
   await openDialog({
-    title: `Projecttoegang voor ${user.name}`,
+    title: `Projecten van ${user.name}`,
     wide: true,
     body: [
-      h('p', {}, 'Kies per project wat deze persoon mag. Wijzigingen gelden direct, ook voor een sessie die al open staat.'),
+      h('p', {}, user.role === 'freelancer'
+        ? 'Freelancers kunnen alleen verstuurde klantfeedback bekijken. Geef per project toegang, eventueel tot een einddatum.'
+        : 'Kies per project een rol. Een einddatum is optioneel. Wijzigingen gelden direct, ook voor een sessie die al open staat.'),
+      h('p', { class: 'small muted' }, `Einddatums in tijdzone ${timeZone()}.`),
       projects.length
-        ? h('div', { class: 'access-list' }, selects.map(([p, sel]) => h('label', { class: 'access-row' },
-          h('span', { class: 'access-project' }, h('strong', { class: 'truncate' }, p.name), p.clientName ? h('span', { class: 'small muted truncate' }, p.clientName) : null, p.archivedAt ? h('span', { class: 'badge badge-neutral' }, 'Gearchiveerd') : null),
-          sel)))
+        ? h('div', { class: 'access-list' }, rows.map(({ p, sel, until, cur }) => h('div', { class: 'access-row access-row-3' },
+          h('span', { class: 'access-project' }, h('strong', { class: 'truncate' }, p.name), p.clientName ? h('span', { class: 'small muted truncate' }, p.clientName) : null,
+            p.archivedAt ? h('span', { class: 'badge badge-neutral' }, 'Gearchiveerd') : null, cur?.expiresAt ? expiryLabel(cur.expiresAt) : null),
+          sel, until)))
         : h('p', { class: 'muted' }, 'Er zijn nog geen projecten.'),
     ],
-    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, 'Toegang opslaan'))],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, 'Opslaan'))],
     onSubmit: async () => {
       try {
-        await api('PUT', `/api/users/${user.id}/projects`, { projects: selects.map(([p, sel]) => ({ projectId: p.id, level: sel.value || null })).filter((x) => x.level) });
-        toast(`Projecttoegang van ${user.name} opgeslagen`, 'success');
+        const list = rows.filter((r) => r.sel.value).map(({ p, sel, until, cur }) => {
+          const iso = fromLocalInput(until.value);
+          // Ongewijzigde (ook verlopen) einddatum blijft staan zoals hij was.
+          const same = cur?.expiresAt && toLocalInput(cur.expiresAt) === until.value;
+          return { projectId: p.id, role: sel.value, expiresAt: same ? cur.expiresAt : iso };
+        });
+        await api('PUT', `/api/users/${user.id}/projects`, { projects: list });
+        toast(`Projecten van ${user.name} opgeslagen`, 'success');
         reload();
       } catch (err) { toast(err.message, 'error'); return false; }
     },
   });
+}
+
+/** Na de update: wiens rechten zijn omgezet naar de nieuwe rollen (nooit uitgebreid). */
+function rolesNoticeBox(notice, reload) {
+  const fromLabel = { view: 'Bekijken en reageren', publish: 'Publiceren en delen' };
+  return h('section', { class: 'notice notice-info roles-notice', 'aria-label': 'Rechten omgezet naar rollen' }, icon('info'),
+    h('div', {},
+      h('strong', {}, 'Rechten zijn omgezet naar de nieuwe rollen. '),
+      'Niemand heeft er rechten bij gekregen. Bij deze personen is een recht vervallen; geef de juiste rol bewust opnieuw als dat nodig is:',
+      h('ul', { class: 'small' }, notice.changes.map((c) => h('li', {}, h('strong', {}, c.name), ` in ${c.project}: ${fromLabel[c.from] || c.from} → ${ROLE_LABEL[c.to === 'read' ? 'meekijker' : 'editor']}`))),
+      button('Begrepen', { size: 'sm', onClick: async () => { await api('POST', '/api/system/roles-notice/dismiss'); reload(); } })));
 }
 
 export async function passwordDialog(user) {
@@ -190,7 +216,7 @@ export async function viewMyAccount(ctx) {
     ctx.pageHeader({ title: 'Mijn account', meta: me.email }),
     h('section', { class: 'card' }, h('h2', { class: 'card-title' }, 'Mijn projecten'),
       me.projects.length
-        ? h('ul', { class: 'plain-list' }, me.projects.map((p) => h('li', {}, h('a', { href: `/projecten/${p.projectId}`, 'data-nav': true }, p.name), h('span', { class: 'badge badge-neutral' }, LEVEL_LABEL[p.level]))))
+        ? h('ul', { class: 'plain-list' }, me.projects.map((p) => h('li', {}, h('a', { href: `/projecten/${p.projectId}`, 'data-nav': true }, p.name), h('span', {}, p.expiresAt ? expiryLabel(p.expiresAt) : null, ' ', h('span', { class: 'badge badge-neutral' }, ROLE_LABEL[p.role] || p.level)))))
         : h('p', { class: 'muted' }, 'Je hebt nog geen toegang tot projecten. Vraag een beheerder om je toe te voegen.')),
     h('section', { class: 'card' }, h('h2', { class: 'card-title' }, 'Wachtwoord'),
       h('p', { class: 'small muted' }, 'Na het wijzigen log je opnieuw in.'),

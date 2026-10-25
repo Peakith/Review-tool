@@ -40,10 +40,15 @@ function validateNewUser({ email, name, password }) {
   if (!password || String(password).length < 10) throw new HttpError(400, 'Kies een wachtwoord van minimaal 10 tekens');
 }
 
-/** role: 'admin' (beheerder, alle projecten en instellingen) of 'member' (alleen toegewezen projecten). */
+/**
+ * role: 'admin' (beheerder, alle projecten en instellingen), 'member' (teamlid, alleen toegewezen projecten)
+ * of 'freelancer' (alleen klantfeedback bekijken in expliciet toegewezen projecten, nooit iets wijzigen).
+ */
+const ROLES = ['admin', 'member', 'freelancer'];
+
 function createUser(db, { email, name, password, role = 'member' }) {
   validateNewUser({ email, name, password });
-  if (!['admin', 'member'].includes(role)) throw new HttpError(400, 'Onbekende rol');
+  if (!ROLES.includes(role)) throw new HttpError(400, 'Onbekende rol');
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (exists) throw new HttpError(409, 'Er bestaat al een account met dit e-mailadres');
   const info = db.prepare('INSERT INTO users (email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)')
@@ -80,7 +85,7 @@ function sessionUser(db, req) {
     db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha256(token));
     return null;
   }
-  return { id: row.id, email: row.email, name: row.name, role: row.role, isAdmin: row.role === 'admin' };
+  return { id: row.id, email: row.email, name: row.name, role: row.role, isAdmin: row.role === 'admin', isFreelancer: row.role === 'freelancer' };
 }
 
 function requireTeam(db) {
@@ -112,6 +117,7 @@ function loginLimiter() {
 }
 
 module.exports = {
+  ROLES,
   hashPassword, verifyPassword, sha256, randomToken, safeEqual, createUser, setPassword, createSession,
   destroySession, sessionUser, requireTeam, loginLimiter,
 };

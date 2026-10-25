@@ -374,6 +374,30 @@ CREATE TABLE IF NOT EXISTS saved_searches (
   created_at TEXT NOT NULL
 );
 
+-- Bouwronde 6: vragen van het team aan de klant (los van interne feedbacktaken).
+CREATE TABLE IF NOT EXISTS client_questions (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  video_id INTEGER REFERENCES videos(id) ON DELETE CASCADE,
+  version_id INTEGER REFERENCES versions(id) ON DELETE SET NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  request_id TEXT,
+  withdrawn_at TEXT,
+  withdrawn_by INTEGER,
+  answer TEXT,
+  answered_at TEXT,
+  answer_name TEXT,
+  answer_verified INTEGER NOT NULL DEFAULT 0,
+  answer_source TEXT,
+  answer_link_key TEXT,
+  answer_request_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_questions_project ON client_questions(project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_questions_request ON client_questions(project_id, created_by, request_id) WHERE request_id IS NOT NULL;
+
 -- Instellingen die een beheerder kan wijzigen (bijv. bewaartermijn klantactiviteit).
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -465,6 +489,10 @@ const COLUMNS = [
   ['delivery_links', 'expires_at', 'TEXT'],
   // Bezoek van een ingelogd teamlid via een klantlink (eigen testbezoek): apart gemarkeerd.
   ['client_activity', 'team', 'INTEGER NOT NULL DEFAULT 0'],
+  // Bouwronde 6: tijdelijke projecttoegang (einddatum per projectkoppeling) en wie koppelde.
+  ['project_members', 'expires_at', 'TEXT'],
+  ['project_members', 'added_by', 'INTEGER'],
+  ['project_members', 'updated_at', 'TEXT'],
 ];
 
 const DEFAULT_BRANDS = [
@@ -484,6 +512,31 @@ const ONCE = {
     }
   },
 };
+
+/**
+ * Bouwronde 6: projectrollen. Oude niveaus worden omgezet naar de nieuwe rollen zonder dat iemand
+ * er rechten bij krijgt:
+ *   manage  → Projectleider (manage, ongewijzigd)
+ *   upload  → Editor (upload, ongewijzigd)
+ *   publish → Editor (upload): publiceren en delen vervalt; een beheerder kan iemand bewust Projectleider maken
+ *   view    → Meekijker (read): reageren en afhandelen vervalt; een beheerder kan iemand bewust Editor maken
+ * Beheerders houden alles. Wat er is veranderd, wordt bewaard voor een melding in Team.
+ */
+function migrateRolesV6(db) {
+  const rows = db.prepare(`SELECT pm.project_id, pm.user_id, pm.level, u.name, u.email, u.role, p.name AS project
+    FROM project_members pm JOIN users u ON u.id = pm.user_id JOIN projects p ON p.id = pm.project_id WHERE pm.level IN ('publish', 'view')`).all();
+  const to = { publish: 'upload', view: 'read' };
+  const changes = [];
+  for (const r of rows) {
+    db.prepare('UPDATE project_members SET level = ?, updated_at = ? WHERE project_id = ? AND user_id = ?').run(to[r.level], new Date().toISOString(), r.project_id, r.user_id);
+    // Voor beheerders verandert er feitelijk niets (die hebben overal alle rechten).
+    if (r.role !== 'admin') changes.push({ userId: r.user_id, name: r.name, email: r.email, projectId: r.project_id, project: r.project, from: r.level, to: to[r.level] });
+  }
+  if (changes.length) {
+    db.prepare("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('roles-v6-notice', ?)").run(JSON.stringify({ at: new Date().toISOString(), changes }));
+  }
+}
+ONCE['roles-v6'] = migrateRolesV6;
 
 function migrate(db) {
   for (const [table, column, type] of COLUMNS) {

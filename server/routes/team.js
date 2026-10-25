@@ -4,7 +4,7 @@ const { STATUSES, HttpError, changeStatus } = require('../status');
 const auth = require('../auth');
 const { normalizeTitle, titleFromFilename, originalDownloadName, contentDisposition, makeFrame, resolveTools } = require('../media');
 const { versionDto, versionFileDto, commentDtos, eventDtos, approvalDto, roundDtos, posterKey } = require('../views');
-const { intParam } = require('../access');
+const { intParam, atLeast } = require('../access');
 const { syncTaskFromComment } = require('./tasks');
 const { cleanAnnotation, cleanTimes } = require('../annotations');
 const { KINDS, ASPECTS, videoMeta, brandDto, clientVideoInfo, portalDto, sharedVersions } = require('../client');
@@ -292,7 +292,7 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier, v
         commentCount: db.prepare('SELECT COUNT(*) AS n FROM comments WHERE version_id = ?').get(ver.id).n,
       })),
       // Links alleen voor wie mag delen: de URL's geven klanttoegang.
-      links: level === 'view' || level === 'upload' ? [] : links.map((l) => ({
+      links: !atLeast(level, 'publish') ? [] : links.map((l) => ({
         id: l.id,
         role: l.role,
         label: l.label,
@@ -649,6 +649,7 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier, v
         fileUrl: (b) => `/api/briefing/${b.id}/file`,
       }),
       delivery: require('./portal').deliverySummary(db, p, `/voorbeeld/oplevering/${p.id}`),
+      questions: require('../questions').visibleQuestions(db, [p.id]).map((q) => ({ ...require('../questions').questionDto(db, q), projectName: p.name })),
       language: clientLanguage(db, p),
       preview: { projectId: p.id, portalLinkActive: !!activePortalLink(p.id) },
     });

@@ -92,20 +92,25 @@ const apiOf = (page, base) => ({
   await page.click('.side-nav a:has-text("Instellingen")');
   await page.click('.settings-nav a:has-text("Team & rechten")');
   await page.waitForSelector('.member-list');
-  const form = page.locator('form.card:has-text("Teamlid of freelancer toevoegen")');
+  // Bouwronde 6: een freelancer is een eigen accountsoort (alleen klantfeedback bekijken).
+  const form = page.locator('form.card:has-text("Account toevoegen")');
   await form.locator('input').nth(0).fill('Freek Freelancer');
   await form.locator('input[type=email]').fill('freek@freelance.nl');
   await form.locator('input[type=password]').fill('een-lang-wachtwoord');
+  await form.locator('select').selectOption('freelancer');
   await form.locator('button[type=submit]').click();
   await page.waitForSelector('dialog .access-list');
-  await page.selectOption('dialog select[aria-label="Toegang tot Voorjaarscampagne 2026"]', 'view');
+  const roleOptions = await page.locator('dialog select[aria-label="Rol in Voorjaarscampagne 2026"] option').allTextContents();
+  check('freelanceraccount: per project alleen “Geen toegang” of “Freelancer”', JSON.stringify(roleOptions) === JSON.stringify(['Geen toegang', 'Freelancer']), roleOptions.join(' | '));
+  await page.selectOption('dialog select[aria-label="Rol in Voorjaarscampagne 2026"]', 'freelancer');
   await shot(page, '21-rechten-dialoog');
-  await page.click('dialog button:has-text("Toegang opslaan")');
-  await page.waitForSelector('.member-row:has-text("Freek Freelancer") .member-scope:has-text("Voorjaarscampagne 2026")');
-  check('freelancer toegevoegd met projecttoegang', true);
+  await page.click('dialog button:has-text("Opslaan")');
+  await page.waitForSelector('.member-row:has-text("Freek Freelancer") .member-scope:has-text("Voorjaarscampagne 2026 (freelancer)")');
+  check('freelancer toegevoegd met projecttoegang', await page.isVisible('.member-row:has-text("Freek Freelancer") .badge:has-text("Freelancer")'));
+  check('rechtenmatrix op de teampagina', await page.isVisible('.rights-table th:has-text("Freelancer")'));
   await shot(page, '20-team-en-rechten', { fullPage: true });
 
-  // ---------- Freelancer ziet alleen wat mag ----------
+  // ---------- Freelancer: eigen alleen-lezen omgeving ----------
   const fctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const f = await fctx.newPage();
   watch(f, 'freelancer');
@@ -113,47 +118,24 @@ const apiOf = (page, base) => ({
   await f.fill('input[name=email]', 'freek@freelance.nl');
   await f.fill('input[name=password]', 'een-lang-wachtwoord');
   await f.click('button[type=submit]');
-  await f.waitForSelector('.dash-card');
-  check('freelancer: dashboard toont alleen eigen project', (await f.textContent('.dash-card:has-text("Recente projecten")')).includes('Voorjaarscampagne') && !(await f.textContent('.dash-grid')).includes('Van Dijk'));
-  await f.click('.side-nav a:has-text("Projecten")');
-  await f.waitForSelector('.project-card');
-  const names = await f.locator('.project-name').allTextContents();
-  check('freelancer ziet alleen toegewezen project', names.length === 1 && names[0] === 'Voorjaarscampagne 2026', names.join(', '));
-  const fNoNew = !(await f.isVisible('text=Nieuw project'));
-  await f.click('.side-nav a:has-text("Instellingen")');
-  await f.waitForSelector('.settings-nav');
-  check('freelancer: geen "Nieuw project", "Opslag" of beheer', fNoNew && !(await f.isVisible('.settings-nav a:has-text("Opslag")')) && !(await f.isVisible('.settings-nav a:has-text("Team & rechten")')) && await f.isVisible('.settings-nav a:has-text("Mijn account")'));
-  const fOpslag = await f.request.get(`${srv.base}/api/storage`);
-  check('freelancer: opslag ook rechtstreeks geweigerd', fOpslag.status() === 403, String(fOpslag.status()));
-  await f.click('.side-nav a:has-text("Projecten")');
-  await f.waitForSelector('.project-card');
-  await f.click('.project-card');
-  await f.waitForSelector('.video-row');
-  await f.click('button[aria-label="Projectacties"]');
-  const fMenu = await f.textContent('.menu:not([hidden])');
-  await f.keyboard.press('Escape');
-  check('freelancer (bekijken): geen upload- of beheerknoppen', !(await f.isVisible('button:has-text("Nieuwe video")')) && !(await f.isVisible('.page-actions button:has-text("Delen")'))
-    && !/Project bewerken|Archiveren|prullenbak/.test(fMenu) && /Feedback exporteren/.test(fMenu), fMenu);
-  await f.click('.video-row-title');
-  await f.waitForSelector('.publish-bar');
-  check('freelancer (bekijken): geen Delen, Nieuwe versie of Status corrigeren',
-    !(await f.isVisible('.page-actions button:has-text("Delen")')) && await (async () => {
-      await f.click('button[aria-label="Meer acties"]');
-      const ok = !(await f.isVisible('.menu-item:has-text("Nieuwe versie")')) && !(await f.isVisible('.menu-item:has-text("Status van Versie")')) && await f.isVisible('.menu-item:has-text("Download")');
-      await f.keyboard.press('Escape');
-      return ok;
-    })());
-  await f.click('.composer textarea');
-  await f.fill('.composer textarea', 'Kleurcorrectie in dit shot nog checken.');
-  await f.click('.composer button[type=submit]');
-  await f.waitForSelector('.comment:has-text("Kleurcorrectie")');
-  check('freelancer kan reageren', true);
-  await shot(f, '22-freelancer-videowerkplek');
-  await f.goto(`${srv.base}/projecten/${pB}`);
+  await f.waitForSelector('.is-freelance .page-title:has-text("Klantfeedback")');
+  const fText = await f.textContent('main');
+  check('freelancer: start toont alleen het eigen project', fText.includes('Voorjaarscampagne') && !fText.includes('Van Dijk'));
+  check('freelancer: geen teammenu (dashboard, klanten, instellingen, nieuw project)', !(await f.isVisible('.side-nav a:has-text("Klanten")')) && !(await f.isVisible('.side-nav a:has-text("Instellingen")')) && !(await f.isVisible('text=Nieuw project')));
+  for (const url of ['/api/storage', '/api/projects', `/api/versions/${vB.versionId}/media`, `/api/projects/${pB}`]) {
+    const r = await f.request.get(`${srv.base}${url}`);
+    check(`freelancer: ${url} rechtstreeks geweigerd`, r.status() === 403, String(r.status()));
+  }
+  await f.click('.list-row');
   await f.waitForSelector('.page-title');
-  check('freelancer: ander project via URL → niet gevonden', (await f.textContent('.page-title')).includes('Niet gevonden'));
-  const direct = await f.request.get(`${srv.base}/api/versions/${vB.versionId}/media`);
-  check('freelancer: videobestand van ander project rechtstreeks → 404', direct.status() === 404, `status ${direct.status()}`);
+  check('freelancer: projectpagina zonder upload-, deel- of beheerknoppen', !(await f.isVisible('button:has-text("Nieuwe video")')) && !(await f.isVisible('button:has-text("Delen")')) && !(await f.isVisible('button[aria-label="Projectacties"]')));
+  await shot(f, '22-freelancer-project');
+  await f.goto(`${srv.base}/projecten/${pB}`);
+  await f.waitForSelector('.empty-title');
+  check('freelancer: ander project via URL → geen toegang', /Geen toegang/.test(await f.textContent('main')));
+  await f.goto(`${srv.base}/instellingen/opslag`);
+  await f.waitForSelector('.empty-title');
+  check('freelancer: beheerpagina niet beschikbaar', /niet beschikbaar in je rol/.test(await f.textContent('main')));
 
   // ---------- Opslag & back-ups ----------
   await page.click('.side-nav a:has-text("Instellingen")');

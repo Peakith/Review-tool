@@ -4,7 +4,8 @@ const os = require('node:os');
 const { now } = require('../db');
 const { HttpError } = require('../status');
 const auth = require('../auth');
-const { LEVELS, intParam } = require('../access');
+const { roleOfLevel, intParam } = require('../access');
+const { parseExpiry, checkRole } = require('./members');
 const { diskFree } = require('../storage');
 const { createBackup, listBackups } = require('../backup');
 const { versionInfo } = require('../build');
@@ -20,9 +21,11 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     role: u.role,
     disabled: !!u.disabled_at,
     createdAt: u.created_at,
-    projects: db.prepare(`SELECT pm.project_id AS projectId, pm.level, p.name FROM project_members pm
-      JOIN projects p ON p.id = pm.project_id WHERE pm.user_id = ? ORDER BY p.name`).all(u.id),
+    projects: db.prepare(`SELECT pm.project_id AS projectId, pm.level, pm.expires_at AS expiresAt, p.name FROM project_members pm
+      JOIN projects p ON p.id = pm.project_id WHERE pm.user_id = ? ORDER BY p.name`).all(u.id)
+      .map((m) => ({ ...m, role: u.role === 'freelancer' ? 'freelancer' : roleOfLevel(m.level), expired: !!m.expiresAt && m.expiresAt <= new Date().toISOString() })),
   });
+  const accountRole = (value, fallback) => (['admin', 'member', 'freelancer'].includes(value) ? value : fallback);
   const activeAdmins = () => db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND disabled_at IS NULL").get().n;
   const getUser = (id) => {
     const u = db.prepare('SELECT * FROM users WHERE id = ?').get(intParam(id));
@@ -30,16 +33,38 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     return u;
   };
 
+  /**
+   * Alle projectkoppelingen van één persoon in één keer (Team & rechten). Per project een rol
+   * (producer, editor, meekijker, freelancer) en optioneel een einddatum. Bestaande einddatums
+   * blijven staan als de lijst er geen noemt.
+   */
   function setMemberships(userId, list) {
     if (!Array.isArray(list)) throw new HttpError(400, 'Ongeldige lijst met projecten');
+    const u = db.prepare('SELECT role FROM users WHERE id = ?').get(userId);
+    const old = new Map(db.prepare('SELECT * FROM project_members WHERE user_id = ?').all(userId).map((m) => [m.project_id, m]));
     db.prepare('DELETE FROM project_members WHERE user_id = ?').run(userId);
+    if (u.role === 'admin') return; // beheerders hebben overal toegang
     for (const item of list) {
-      if (!item?.level) continue;
-      if (!LEVELS.includes(item.level)) throw new HttpError(400, `Onbekend toegangsniveau: ${item.level}`);
+      const role = item?.role || (item?.level ? roleOfLevel(item.level) : null);
+      if (!role) continue;
+      const level = checkRole(role, u.role);
       const p = db.prepare('SELECT id FROM projects WHERE id = ?').get(intParam(item.projectId));
       if (!p) throw new HttpError(400, 'Onbekend project in de lijst');
-      db.prepare('INSERT INTO project_members (project_id, user_id, level, created_at) VALUES (?, ?, ?, ?)').run(p.id, userId, item.level, now());
+      const prev = old.get(p.id);
+      const expiresAt = item.expiresAt !== undefined ? parseExpiry(item.expiresAt, { allowPast: !!prev && item.expiresAt === prev.expires_at }) : (prev?.expires_at || null);
+      db.prepare('INSERT INTO project_members (project_id, user_id, level, created_at, expires_at, added_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(p.id, userId, level, prev?.created_at || now(), expiresAt, prev?.added_by ?? null, now());
+      // Freelancers volgen hun project automatisch (meldingen over verstuurde klantfeedback).
+      if (u.role === 'freelancer') db.prepare("INSERT OR IGNORE INTO follows (user_id, kind, target_id, state, auto, created_at) VALUES (?, 'project', ?, 'on', 1, ?)").run(userId, p.id, now());
     }
+  }
+
+  /** Accountrol wijzigen: koppelingen gaan mee, zonder dat iemand er rechten bij krijgt. */
+  function applyAccountRole(userId, from, to) {
+    if (from === to) return;
+    if (to === 'freelancer') db.prepare("UPDATE project_members SET level = 'feedback', updated_at = ? WHERE user_id = ?").run(now(), userId);
+    // Van freelancer naar teamlid: begint als Meekijker (alleen kijken); daarna bewust uitbreiden.
+    if (from === 'freelancer' && to === 'member') db.prepare("UPDATE project_members SET level = 'read', updated_at = ? WHERE user_id = ?").run(now(), userId);
   }
 
   router.get('/users', (req, res) => {
@@ -51,7 +76,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
 
   router.post('/users', (req, res) => {
     access.requireAdmin(req);
-    const role = req.body?.role === 'admin' ? 'admin' : 'member';
+    const role = accountRole(req.body?.role, 'member');
     const id = db.tx(() => {
       const userId = auth.createUser(db, { ...(req.body || {}), role });
       if (req.body?.projects) setMemberships(userId, req.body.projects);
@@ -64,7 +89,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     access.requireAdmin(req);
     const u = getUser(req.params.id);
     const body = req.body || {};
-    const role = body.role !== undefined ? (body.role === 'admin' ? 'admin' : 'member') : u.role;
+    const role = body.role !== undefined ? accountRole(body.role, u.role) : u.role;
     const disabled = body.disabled !== undefined ? !!body.disabled : !!u.disabled_at;
     const name = body.name !== undefined ? String(body.name).trim().slice(0, 200) : u.name;
     if (!name) throw new HttpError(400, 'Vul een naam in');
@@ -75,6 +100,7 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
     }
     db.tx(() => {
       db.prepare('UPDATE users SET name = ?, role = ?, disabled_at = ? WHERE id = ?').run(name, role, disabled ? (u.disabled_at || now()) : null, u.id);
+      applyAccountRole(u.id, u.role, role);
       if (disabled) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
       reconcileAssignees(db, access);
     });
@@ -360,6 +386,19 @@ function adminRoutes(router, db, config, { access, storage, uploads }) {
   // ---------- Systeem ----------
 
   // Melding na het terugzetten van een back-up wegklikken (alleen beheerder).
+  // Melding na de update naar bouwronde 6: wiens rechten zijn omgezet (nooit uitgebreid).
+  router.get('/system/roles-notice', (req, res) => {
+    access.requireAdmin(req);
+    let notice = null;
+    try { notice = JSON.parse(db.prepare("SELECT value FROM app_meta WHERE key = 'roles-v6-notice'").get()?.value || 'null'); } catch { notice = null; }
+    res.json({ notice });
+  });
+  router.post('/system/roles-notice/dismiss', (req, res) => {
+    access.requireAdmin(req);
+    db.prepare("DELETE FROM app_meta WHERE key = 'roles-v6-notice'").run();
+    res.json({ ok: true });
+  });
+
   router.post('/system/restore-notice/dismiss', (req, res) => {
     access.requireAdmin(req);
     db.prepare("DELETE FROM app_meta WHERE key = 'restore-notice'").run();

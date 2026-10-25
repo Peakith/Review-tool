@@ -22,6 +22,9 @@ import { protectionBadges, protectionButton } from './linkprotect.js';
 import { viewClients, viewClient, clientSection } from './clients.js';
 import { brandChip } from './brandchip.js';
 import { viewInbox, startInboxPolling, refreshInboxCount } from './inbox.js';
+import { routeFreelance } from './freelance.js';
+import { peopleDialog } from './people.js';
+import { askDialog, questionsBlock } from './questions.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -57,6 +60,15 @@ async function route() {
   if (!session.user) { shellEl = null; return session.needsSetup ? viewSetup() : viewLogin(); }
   // Thema van dit account (ook direct na inloggen, zonder herladen).
   if (session.theme && session.theme !== themePref()) applyTheme(session.theme);
+  // Freelancers krijgen hun eigen, alleen-lezen omgeving (geen teamschermen).
+  if (session.user.role === 'freelancer') {
+    try {
+      return await routeFreelance({ root, session, navigate, pageHeader, logout });
+    } catch (err) {
+      if (err.status === 401) { session = null; return route(); }
+      throw err;
+    }
+  }
   configureUploads(session);
   ensureShell();
   const path = location.pathname;
@@ -668,6 +680,7 @@ async function viewProject(id, tab = 'videos') {
         project.clientVisibility === 'off' ? h('span', { class: 'badge badge-danger', title: 'Geen enkele klantlink werkt voor dit project' }, icon('lock'), 'klanttoegang uit') : null,
         h('span', {}, plural(project.videos.length, 'video', 'video’s')),
         brandChip(project.brand),
+        mayManage ? h('button', { type: 'button', class: 'link-btn meta-people', onClick: () => peopleDialog(project).then(() => route()), title: 'Personen koppelen, rol en einddatum' }, icon('users'), 'Personen') : null,
       ],
       actions: [
         followButton(project),
@@ -676,11 +689,13 @@ async function viewProject(id, tab = 'videos') {
           ['Klantportaal (projectlink)…', () => portalDialog(project), { icon: 'globe' }],
           ['Opleverlink en oplevering', () => navigate(`/projecten/${project.id}/oplevering`), { icon: 'package' }],
           ['Klantweergave bekijken', () => window.open(`/voorbeeld/project/${project.id}`, '_blank', 'noopener'), { icon: 'eye' }],
+          !archived ? ['Vraag aan klant…', () => askDialog({ project, videos: project.videos, onDone: () => navigate(`/projecten/${project.id}/feedback`) }), { icon: 'help' }] : null,
           mayManage ? ['Klant en klanttoegang…', () => clientSection(project, () => route()), { icon: 'users' }] : null,
         ].filter(Boolean), 'Delen', { label: 'Delen', icon: 'link' }) : null,
         menuButton([
           project.videos.length ? ['Feedback exporteren…', () => exportDialog({ projectId: project.id, videos: project.videos }), { icon: 'fileDown' }] : null,
           ['Klantweergave bekijken', () => window.open(`/voorbeeld/project/${project.id}`, '_blank', 'noopener'), { icon: 'eye' }],
+          mayManage ? ['Personen en toegang…', () => peopleDialog(project).then(() => route()), { icon: 'users' }] : null,
           mayManage ? ['Project bewerken…', () => editProject(project), { icon: 'edit' }] : null,
           mayManage ? (archived ? ['Uit archief halen', () => setArchived('project', project.id, project.name, false), { icon: 'refresh' }]
             : ['Archiveren', () => setArchived('project', project.id, project.name, true), { icon: 'history' }]) : null,
@@ -694,7 +709,7 @@ async function viewProject(id, tab = 'videos') {
     project.clientVisibility === 'off' ? h('div', { class: 'notice notice-warn page-notice' }, icon('lock'),
       h('span', {}, h('strong', {}, 'Klanttoegang staat uit. '), 'Geen enkele klantlink werkt voor dit project: klantportaal, projectlink, review- en akkoordlinks, opleverlink en directe bestandsadressen.'),
       mayManage ? button('Wijzigen', { size: 'sm', onClick: () => clientSection(project, () => route()) }) : null) : null,
-    !can(project.myLevel, 'upload') && !archived ? h('p', { class: 'small muted page-notice' }, icon('lock'), `Je rechten in dit project: ${({ view: 'bekijken en reageren', publish: 'publiceren en delen' })[project.myLevel] || project.myLevel}.`) : null,
+    !can(project.myLevel, 'upload') && !archived ? h('p', { class: 'small muted page-notice' }, icon('lock'), `Je rol in dit project: ${({ read: 'Meekijker (alleen bekijken)', view: 'bekijken en reageren', publish: 'publiceren en delen' })[project.myLevel] || project.myLevel}.`) : null,
     tabs,
     isVideos ? [
       project.videos.length ? h('div', { class: 'toolbar' }, h('div', { class: 'search toolbar-search' }, icon('search'), search), filterBar) : null,
@@ -707,7 +722,12 @@ async function viewProject(id, tab = 'videos') {
   mount(pageEl, content);
   if (isVideos) draw();
   else if (tab === 'feedback') {
-    await viewFeedback({ project, host: briefingHost, session });
+    // Vragen aan de klant staan boven de (interne) feedbacktaken, maar los ervan.
+    const fbHost = h('div', {});
+    const mayAsk = can(project.myLevel, 'publish') && !archived;
+    mount(briefingHost, h('section', { class: 'card questions-card', 'aria-labelledby': 'q-head' }, h('h2', { class: 'card-title', id: 'q-head' }, 'Vragen aan de klant'),
+      await questionsBlock({ project, canAsk: mayAsk, compact: true, onAsk: (reload) => askDialog({ project, videos: project.videos, onDone: reload }) })), fbHost);
+    await viewFeedback({ project, host: fbHost, session });
   } else if (tab === 'delivery') {
     await viewDeliveries({ project, host: briefingHost, onCount: (n) => { tabs.querySelector('[data-count=delivery]').textContent = String(n); } });
   } else if (tab === 'activity') {
@@ -801,6 +821,11 @@ async function viewVideo(id) {
   const version = video.versions.find((v) => v.id === requested) || video.versions[0];
   const latest = video.versions[0];
   const clientVersion = video.versions.find((v) => v.isClientVersion) || null;
+  const questionsHost = h('div', {});
+  if (clientVersion) {
+    questionsBlock({ project: video.project, videoId: video.id, compact: true, canAsk: can(video.myLevel, 'publish') && !(video.archivedAt || video.project.archivedAt),
+      onAsk: (reload) => askDialog({ project: video.project, video, version: clientVersion, onDone: reload }) }).then((el) => mount(questionsHost, el)).catch(() => {});
+  }
   let comments = await api('GET', `/api/versions/${version.id}/comments`);
   let activeId = null;
   let filter = 'all';
@@ -832,7 +857,9 @@ async function viewVideo(id) {
       h('button', { type: 'button', 'aria-pressed': String(filter === key), onClick: () => { filter = key; drawComments(); } }, label, h('span', { class: 'seg-count' }, count))));
     renderComments(commentsEl, comments, {
       mode: 'team',
-      canWrite: true,
+      // Meekijkers lezen alleen: geen antwoorden, afhandelen of taken.
+      canWrite: can(video.myLevel, 'view'),
+      canResolve: can(video.myLevel, 'view'),
       filter,
       activeId,
       isOwnTeamComment: (c) => c.authorType === 'team' && c.userId === session.user.id,
@@ -913,11 +940,14 @@ async function viewVideo(id) {
   const refresh = () => route();
   const panels = {
     comments: h('div', { class: 'tabpanel tabpanel-comments', role: 'tabpanel', id: 'tabpanel-comments', 'aria-labelledby': 'tab-comments' },
-      h('div', { class: 'panel-toolbar' }, filterBar), commentsEl, h('div', { class: 'panel-composer' }, composer.el)),
+      h('div', { class: 'panel-toolbar' }, filterBar), commentsEl,
+      may('view') ? h('div', { class: 'panel-composer' }, composer.el)
+        : h('p', { class: 'panel-note small muted' }, icon('eye'), archived ? 'Gearchiveerd: alleen bekijken.' : 'Je bent Meekijker in dit project: je kunt alles bekijken, maar niet reageren of wijzigen.')),
     versions: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-versions', 'aria-labelledby': 'tab-versions' }, h('div', { class: 'panel-scroll' }, versionsList(video, version))),
     // Info: vaste secties voor eigenschappen, rondes en geschiedenis van deze versie.
     info: h('div', { class: 'tabpanel', role: 'tabpanel', id: 'tabpanel-info', 'aria-labelledby': 'tab-info' }, h('div', { class: 'panel-scroll info-panel' },
       h('section', { class: 'info-section', id: 'info-props', 'aria-labelledby': 'info-props-h' }, h('h3', { id: 'info-props-h' }, 'Eigenschappen'), propertiesBlock(video, version, may, player, refresh)),
+      clientVersion ? h('section', { class: 'info-section', id: 'info-questions', 'aria-labelledby': 'info-questions-h' }, h('h3', { id: 'info-questions-h' }, 'Vragen aan de klant'), questionsHost) : null,
       h('section', { class: 'info-section', id: 'info-rounds', 'aria-labelledby': 'info-rounds-h' }, h('h3', { id: 'info-rounds-h' }, 'Reviewrondes', video.rounds.length ? h('span', { class: 'seg-count' }, video.rounds.length) : null), roundsList(video, refresh, may)),
       h('section', { class: 'info-section', id: 'info-history', 'aria-labelledby': 'info-history-h' }, h('h3', { id: 'info-history-h' }, `Geschiedenis van versie ${version.number}`), historyList(version)))),
   };

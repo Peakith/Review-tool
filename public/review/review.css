@@ -277,3 +277,14 @@ html[lang="en"] .howto[open] summary::after { content: "Hide"; }
 .viewer-controls .lang-toggle { margin-left: 0; }
 .theme-select { width: auto; padding: 5px 26px 5px 8px; font-size: 12.5px; }
 .r-version .viewer-controls { margin-left: 4px; }
+
+/* Vragen van het team (bouwronde 6) */
+.p-question { grid-template-columns: 40px minmax(0, 1fr); align-items: start; }
+.p-q-icon { width: 36px; height: 36px; border-radius: var(--r); display: grid; place-items: center; background: var(--text); color: var(--bg); }
+.p-question.is-answered .p-q-icon { background: var(--surface-3); color: var(--text-2); }
+.p-q-text { -webkit-line-clamp: unset; display: block; font-size: 16px; white-space: pre-line; }
+.p-q-open { grid-column: 2; }
+.p-q-form, .p-q-answer { grid-column: 2; display: grid; gap: 6px; max-width: 640px; }
+.p-q-answer p { margin: 0; white-space: pre-line; }
+.p-q-form textarea { min-height: 76px; }
+@media (max-width: 640px) { .p-question { grid-template-columns: 36px minmax(0, 1fr); } }

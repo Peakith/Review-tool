@@ -59,9 +59,11 @@ function reconcileAssignees(db, access) {
     JOIN versions ver ON ver.id = c.version_id JOIN videos v ON v.id = ver.video_id`).all();
   let changed = 0;
   for (const r of rows) {
-    const user = { id: r.assignee_id, isAdmin: db.prepare("SELECT role FROM users WHERE id = ?").get(r.assignee_id)?.role === 'admin' };
-    if (r.disabled_at || !access.levelFor(user, r.project_id)) {
-      const why = r.disabled_at ? `${r.name} is uitgeschakeld` : `${r.name} heeft geen toegang meer tot dit project`;
+    const role = db.prepare('SELECT role FROM users WHERE id = ?').get(r.assignee_id)?.role;
+    const user = { id: r.assignee_id, role, isAdmin: role === 'admin', isFreelancer: role === 'freelancer' };
+    // Een taak afhandelen vraagt minstens "reageren" (Editor); Meekijkers en freelancers niet.
+    if (r.disabled_at || !access.canAccess(user, r.project_id, 'view')) {
+      const why = r.disabled_at ? `${r.name} is uitgeschakeld` : access.levelFor(user, r.project_id) ? `${r.name} kan in dit project geen taken meer afhandelen (alleen kijken)` : `${r.name} heeft geen toegang meer tot dit project`;
       db.prepare('UPDATE comment_tasks SET assignee_id = NULL, unassigned_note = ?, updated_at = ? WHERE id = ?').run(`${why}; de taak is daarom niet meer toegewezen.`, now(), r.id);
       changed++;
     }
@@ -87,8 +89,12 @@ function taskRoutes(router, db, config, { access, notifier }) {
     if (assigneeId === null || assigneeId === undefined || assigneeId === '') return null;
     const u = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(assigneeId));
     if (!u || u.disabled_at) throw new HttpError(400, 'Dit teamlid bestaat niet of is uitgeschakeld.');
-    if (!access.levelFor({ id: u.id, isAdmin: u.role === 'admin' }, projectId)) {
-      throw new HttpError(400, `${u.name} heeft geen toegang tot dit project. Geef eerst toegang via Team & rechten, of kies iemand anders.`);
+    const who = { id: u.id, role: u.role, isAdmin: u.role === 'admin', isFreelancer: u.role === 'freelancer' };
+    if (!access.levelFor(who, projectId)) {
+      throw new HttpError(400, `${u.name} heeft geen toegang tot dit project. Koppel deze persoon eerst als Editor of Projectleider, of kies iemand anders.`);
+    }
+    if (!access.canAccess(who, projectId, 'view')) {
+      throw new HttpError(400, `${u.name} kan in dit project alleen kijken en dus geen taken afhandelen. Maak deze persoon eerst Editor of Projectleider, of kies iemand anders.`);
     }
     return u.id;
   }
@@ -115,7 +121,7 @@ function taskRoutes(router, db, config, { access, notifier }) {
   router.get('/projects/:id/assignees', (req, res) => {
     const { project } = access.project(req, req.params.id, 'view');
     const users = db.prepare('SELECT id, name, role FROM users WHERE disabled_at IS NULL ORDER BY name').all()
-      .filter((u) => access.levelFor({ id: u.id, isAdmin: u.role === 'admin' }, project.id))
+      .filter((u) => access.canAccess({ id: u.id, role: u.role, isAdmin: u.role === 'admin', isFreelancer: u.role === 'freelancer' }, project.id, 'view'))
       .map((u) => ({ id: u.id, name: u.name, me: u.id === req.user.id }));
     res.json(users);
   });

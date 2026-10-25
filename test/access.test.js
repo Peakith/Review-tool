@@ -48,14 +48,17 @@ describe('rechten per project', () => {
     await expectStatus(f.post('/api/uploads', { filename: 'x.mp4', size: 100 }), 400, 'upload zonder doel');
   });
 
-  test('bekijken/reageren: wel kijken en reageren, niets wijzigen', async () => {
+  // Bouwronde 6: het oude niveau "bekijken en reageren" wordt Meekijker: alleen kijken, niets wijzigen.
+  test('meekijker (oud: bekijken/reageren): wel kijken, niet reageren of wijzigen', async () => {
     const { client: f } = await addMember(srv, admin, { email: 'kijk@freelance.nl', projects: [{ projectId: A.projectId, level: 'view' }] });
     await expectStatus(f.get(`/api/versions/${A.versionId}/media`), 200, 'media');
     await expectStatus(f.get(`/api/versions/${A.versionId}/poster`), 200, 'thumbnail');
-    const c = await expectStatus(f.post(`/api/versions/${A.versionId}/comments`, { body: 'Mooi', timecode: 1 }), 201, 'reactie');
-    await expectStatus(f.post(`/api/comments/${c.data.id}/resolve`, { resolved: true }), 200, 'afhandelen');
+    await expectStatus(f.get(`/api/versions/${A.versionId}/comments`), 200, 'reacties lezen');
+    await expectStatus(f.post(`/api/versions/${A.versionId}/comments`, { body: 'Mooi', timecode: 1 }), 403, 'reactie');
+    const own = (await admin.post(`/api/versions/${A.versionId}/comments`, { body: 'Van de beheerder', timecode: 1 })).data;
+    await expectStatus(f.post(`/api/comments/${own.id}/resolve`, { resolved: true }), 403, 'afhandelen');
     const video = (await f.get(`/api/videos/${A.videoId}`)).data;
-    assert.equal(video.myLevel, 'view');
+    assert.equal(video.myLevel, 'read');
     assert.deepEqual(video.links, [], 'links (klanttoegang) niet zichtbaar');
     await expectStatus(f.post('/api/uploads', { filename: 'x.mp4', size: 100, projectId: A.projectId }), 403, 'upload');
     await expectStatus(f.patch(`/api/videos/${A.videoId}`, { title: 'Nieuw' }), 403, 'titel');
@@ -66,6 +69,13 @@ describe('rechten per project', () => {
     for (const url of ['/api/storage', '/api/backups', '/api/system']) await expectStatus(f.get(url), 403, url);
     const users = (await f.get('/api/users')).data;
     assert.equal(users.length, 1, 'ziet alleen zichzelf');
+  });
+
+  test('editor: kijken, reageren en afhandelen', async () => {
+    const { client: f } = await addMember(srv, admin, { email: 'editor-reageert@freelance.nl', projects: [{ projectId: A.projectId, role: 'editor' }] });
+    const c = await expectStatus(f.post(`/api/versions/${A.versionId}/comments`, { body: 'Mooi', timecode: 1 }), 201, 'reactie');
+    await expectStatus(f.post(`/api/comments/${c.data.id}/resolve`, { resolved: true }), 200, 'afhandelen');
+    assert.equal((await f.get(`/api/videos/${A.videoId}`)).data.myLevel, 'upload');
   });
 
   test('uploaden: video en versie toevoegen, titel, klaarzetten; niet publiceren', async () => {
@@ -81,16 +91,24 @@ describe('rechten per project', () => {
     await expectStatus(f.post(`/api/projects/${A.projectId}/videos`, { uploadId: id, title: 'x' }), 400, 'upload voor ander doel');
   });
 
-  test('publiceren/delen: delen en links, maar niet beheren', async () => {
+  // Oud niveau "publiceren en delen" wordt Editor (nooit meer rechten); Projectleider publiceert en deelt.
+  test('oud niveau publiceren wordt editor: niet publiceren of delen', async () => {
     const { client: f } = await addMember(srv, admin, { email: 'publish@freelance.nl', projects: [{ projectId: A.projectId, level: 'publish' }] });
     const v = (await f.get(`/api/videos/${A.videoId}`)).data;
+    assert.equal(v.myLevel, 'upload');
+    assert.deepEqual(v.links, [], 'ziet geen links');
+    await expectStatus(f.post(`/api/videos/${A.videoId}/links`, { role: 'reviewer' }), 403, 'link maken');
+  });
+
+  test('projectleider: publiceren, delen en links, ook corrigeren; geen ander project', async () => {
+    const extra = await sharedVideo(admin, file, { name: 'Project P', title: 'Video P' });
+    const { client: f } = await addMember(srv, admin, { email: 'producer@agency.nl', projects: [{ projectId: extra.projectId, role: 'producer' }] });
+    const v = (await f.get(`/api/videos/${extra.videoId}`)).data;
     assert.ok(v.links.length > 0, 'ziet links');
-    const latest = v.versions[0];
-    await f.post(`/api/versions/${latest.id}/ready`);
-    await expectStatus(f.post(`/api/versions/${latest.id}/share`), 200, 'publiceren');
-    await expectStatus(f.post(`/api/videos/${A.videoId}/links`, { role: 'reviewer' }), 201, 'link maken');
-    await expectStatus(f.post(`/api/versions/${latest.id}/status`, { status: 'approved', note: 'x' }), 403, 'status corrigeren');
-    await expectStatus(f.post(`/api/projects/${A.projectId}/archive`, {}), 403, 'archiveren');
+    await expectStatus(f.post(`/api/videos/${extra.videoId}/links`, { role: 'reviewer' }), 201, 'link maken');
+    await expectStatus(f.post(`/api/versions/${extra.versionId}/status`, { status: 'approved', note: 'x' }), 200, 'status corrigeren');
+    await expectStatus(f.get(`/api/projects/${A.projectId}`), 404, 'ander project');
+    for (const url of ['/api/storage', '/api/backups', '/api/system']) await expectStatus(f.get(url), 403, url);
   });
 
   test('beheren: corrigeren, archiveren en prullenbak; definitief verwijderen alleen beheerder', async () => {

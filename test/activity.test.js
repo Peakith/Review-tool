@@ -133,7 +133,7 @@ test('afscherming: geen activiteit voor een ander project, niet-gedeelde versie 
   // Teamoverzicht: zonder toegang 404, alleen bekijken/uploaden 403, publiceren wel
   const outsider = await addMember(srv, admin, { email: 'act-buiten@agency.nl', projects: [{ projectId: b.projectId, level: 'manage' }] });
   const viewer = await addMember(srv, admin, { email: 'act-kijker@agency.nl', projects: [{ projectId: a.projectId, level: 'upload' }] });
-  const publisher = await addMember(srv, admin, { email: 'act-publiceer@agency.nl', projects: [{ projectId: a.projectId, level: 'publish' }] });
+  const publisher = await addMember(srv, admin, { email: 'act-publiceer@agency.nl', projects: [{ projectId: a.projectId, role: 'producer' }] });
   assert.equal((await outsider.client.get(`/api/projects/${a.projectId}/activity`)).status, 404);
   assert.equal((await viewer.client.get(`/api/projects/${a.projectId}/activity`)).status, 403);
   assert.equal((await publisher.client.get(`/api/projects/${a.projectId}/activity`)).status, 200);

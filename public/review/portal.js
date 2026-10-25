@@ -5,7 +5,7 @@
 //    persoon zelf mag goedkeuren.
 // Dezelfde pagina toont het team als voorbeeld (/voorbeeld/project/<id>), gevuld met
 // dezelfde serverfilters, zodat het team precies ziet wat de klant ziet.
-import { h, mount, icon, api, emptyState, timecode, formatDateZone, formatDeadline, isPast } from '/shared/util.js';
+import { h, mount, icon, api, apiWithRetry, newRequestId, emptyState, timecode, formatDateZone, formatDeadline, isPast } from '/shared/util.js';
 import { tr } from '/shared/i18n.js';
 import { applyBrand, brandMark } from '/shared/brand.js';
 import { clientPill, clientStatusOf, metaLine, fileLabel, fileIcon } from '/shared/client.js';
@@ -57,9 +57,11 @@ function byDeadline(a, b) {
   return 0;
 }
 
-function summaryLine(n, nothingText) {
+function summaryLine(n, nothingText, questions = 0) {
+  const q = questions ? ` ${tr(questions === 1 ? 'En 1 vraag van het team.' : 'En {n} vragen van het team.', { n: questions })}` : '';
+  if (!n && questions) return h('p', { class: 'p-summary' }, h('strong', {}, tr(questions === 1 ? 'Het team heeft 1 vraag voor je.' : 'Het team heeft {n} vragen voor je.', { n: questions })));
   return h('p', { class: 'p-summary' }, n
-    ? h('strong', {}, tr(n === 1 ? 'Er staat 1 video voor je klaar.' : 'Er staan {n} video’s voor je klaar.', { n }))
+    ? [h('strong', {}, tr(n === 1 ? 'Er staat 1 video voor je klaar.' : 'Er staan {n} video’s voor je klaar.', { n })), q]
     : nothingText);
 }
 
@@ -75,24 +77,27 @@ function section(key, title, count, text, body, { collapsed = false } = {}) {
 }
 
 /** De vier blokken van de startpagina, voor één of meer projecten. */
-function startSections(items, deliveries, { studio, personal, multi }) {
+function startSections(items, deliveries, { studio, personal, multi, questions = [], identity = null }) {
   const actions = items.filter((i) => isOpen(i.video)).sort(byDeadline);
+  const openQ = questions.filter((q) => q.status === 'open');
+  const answeredQ = questions.filter((q) => q.status === 'answered');
   const busy = items.filter((i) => !i.video.archived && i.video.version.status === 'changes_requested' && !i.project.completed);
   const done = items.filter((i) => i.video.version.status === 'approved' && !i.project.completed);
   const out = [];
-  out.push(section('todo', tr('Jouw acties'), actions.length,
-    actions.length ? null : tr('Er wacht nu niets op jou. Zodra er iets te bekijken is, staat het hier.'),
-    actions.map((i) => actionRow(i, { personal, multi }))));
+  out.push(section('todo', tr('Jouw acties'), actions.length + openQ.length,
+    actions.length || openQ.length ? null : tr('Er wacht nu niets op jou. Zodra er iets te bekijken is, staat het hier.'),
+    [actions.map((i) => actionRow(i, { personal, multi })), openQ.map((q) => questionRow(q, { multi, identity }))]));
   if (busy.length) {
     out.push(section('busy', tr('Bij {studio}', { studio }), busy.length, tr('Je feedback is verstuurd. Het team is aan zet; de nieuwe versie verschijnt hier zodra die klaarstaat.'),
       busy.map((i) => compactRow(i, { multi }))));
   }
   if (done.length) out.push(section('done', tr('Goedgekeurd'), done.length, null, done.map((i) => compactRow(i, { multi })), { collapsed: true }));
+  if (answeredQ.length) out.push(section('answered', tr('Beantwoorde vragen'), answeredQ.length, null, answeredQ.map((q) => questionRow(q, { multi, identity })), { collapsed: true }));
   if (deliveries.length) {
     out.push(section('files', tr('Definitieve bestanden'), deliveries.reduce((n, d) => n + d.delivery.count, 0), null,
       deliveries.map((d) => deliveryCard(d.delivery, multi ? d.name : null))));
   }
-  return { out, actionCount: actions.length };
+  return { out, actionCount: actions.length, questionCount: openQ.length };
 }
 
 function header(brand, clientName) {
@@ -116,15 +121,15 @@ function render(d) {
   document.title = `${d.project.name}${brandName ? ` · ${brandName}` : ''}`;
   const project = { id: 0, name: d.project.name, completed: false };
   const items = d.videos.map((video) => ({ project, video }));
-  const { out, actionCount } = startSections(items, d.delivery ? [{ name: d.project.name, delivery: d.delivery }] : [], { studio: d.studio || tr('het team'), personal: false, multi: false });
+  const { out, actionCount, questionCount } = startSections(items, d.delivery ? [{ name: d.project.name, delivery: d.delivery }] : [], { studio: d.studio || tr('het team'), personal: false, multi: false, questions: d.questions || [] });
 
   const hero = h('section', { class: 'p-hero' },
     h('h1', {}, d.project.name),
     d.project.intro ? h('p', { class: 'p-intro' }, d.project.intro) : null,
-    d.videos.length ? summaryLine(actionCount, tr('Er wacht nu niets op jou.')) : null);
+    d.videos.length || questionCount ? summaryLine(actionCount, tr('Er wacht nu niets op jou.'), questionCount) : null);
 
   const sections = [];
-  if (!d.videos.length && !d.delivery) {
+  if (!d.videos.length && !d.delivery && !(d.questions || []).length) {
     sections.push(h('div', { class: 'p-empty' }, emptyState({
       icon: 'clock', title: tr('Er staan nog geen video’s voor je klaar'),
       text: tr('Bewaar deze link. Zodra het team een video publiceert, verschijnt die hier.'),
@@ -154,7 +159,7 @@ function renderClient(d) {
   const items = d.projects.flatMap((p) => p.videos.map((video) => ({ project: p, video })));
   const deliveries = d.projects.filter((p) => p.delivery).map((p) => ({ name: p.name, delivery: p.delivery }));
   const multi = d.projects.length > 1;
-  const { out, actionCount } = startSections(items, deliveries, { studio: d.studio || tr('het team'), personal, multi: true });
+  const { out, actionCount, questionCount } = startSections(items, deliveries, { studio: d.studio || tr('het team'), personal, multi: true, questions: d.questions || [], identity: personal ? d.identity.name : null });
 
   const hero = h('section', { class: 'p-hero' },
     h('h1', {}, d.client.name),
@@ -162,7 +167,7 @@ function renderClient(d) {
       ? h('p', { class: 'p-identity small' }, icon('shield'),
         h('span', {}, tr('Persoonlijke link van '), h('strong', {}, d.identity.name), '. ', tr('Goedkeuren kan bij de video’s waarvoor jij de akkoordgever bent.')))
       : null,
-    d.projects.length ? summaryLine(actionCount, tr('Er wacht nu niets op jou.')) : null);
+    d.projects.length ? summaryLine(actionCount, tr('Er wacht nu niets op jou.'), questionCount) : null);
 
   const sections = [];
   if (!d.projects.length) {
@@ -250,6 +255,67 @@ function actionRow({ project, video: v }, { personal = false, multi = false } = 
   ];
   const label = `${v.title}, ${tr('Versie {n}', { n: v.version.number })}. ${action}${deadline ? `. ${tr('Reactie graag vóór {date}', { date: formatDeadline(deadline) })}` : ''}`;
   return v.href ? h('a', { class: 'p-card p-action is-in_review', href: v.href, 'aria-label': label }, body) : h('div', { class: 'p-card p-action is-in_review' }, body);
+}
+
+const answerUrl = (q) => (clientMode ? `/api/client/${encodeURIComponent(token)}/questions/${q.id}/answer` : `/api/portal/${encodeURIComponent(token)}/questions/${q.id}/answer`);
+const nameStore = {
+  get() { try { return localStorage.getItem('rt-reviewer-name') || ''; } catch { return ''; } },
+  set(v) { try { localStorage.setItem('rt-reviewer-name', v); } catch { /* privémodus */ } },
+};
+
+/**
+ * Vraag van het team: open met een antwoordveld, of beantwoord (met wie en wanneer). Met een
+ * persoonlijke link staat de naam vast (geverifieerd); anders vul je die zelf in.
+ */
+function questionRow(q, { multi = false, identity = null } = {}) {
+  const about = [multi ? q.projectName : null, q.videoTitle, q.versionNumber ? tr('Versie {n}', { n: q.versionNumber }) : null].filter(Boolean).join(' · ');
+  const head = [
+    h('div', { class: 'p-q-icon', 'aria-hidden': 'true' }, icon('help')),
+    h('div', { class: 'p-card-body' },
+      about ? h('div', { class: 'p-card-kicker' }, about) : null,
+      h('h3', { class: 'p-card-title p-q-text' }, q.body),
+      h('div', { class: 'p-card-meta small muted' }, tr('Vraag van het team · {date}', { date: formatDateZone(q.createdAt) }))),
+  ];
+  if (q.status === 'answered') {
+    return h('article', { class: 'p-card p-question is-answered' }, head,
+      h('div', { class: 'p-q-answer' }, h('p', {}, q.answer.text),
+        h('p', { class: 'small muted' }, q.answer.verified
+          ? tr('Beantwoord door {name} · {date}', { name: q.answer.name, date: formatDateZone(q.answer.at) })
+          : tr('Beantwoord door {name} (naam zelf ingevuld) · {date}', { name: q.answer.name, date: formatDateZone(q.answer.at) }))));
+  }
+  const id = `q-${q.id}`;
+  const text = h('textarea', { id: `${id}-a`, rows: '3', maxlength: '2000', required: true });
+  const name = identity ? null : h('input', { id: `${id}-n`, type: 'text', maxlength: '120', autocomplete: 'name', value: nameStore.get(), required: true });
+  const error = h('p', { class: 'field-error', role: 'alert', hidden: true });
+  const send = h('button', { type: 'submit', class: 'btn btn-primary btn-sm' }, icon('send'), h('span', { class: 'btn-label' }, tr('Antwoord versturen')));
+  // Eén request-id per antwoord: een dubbelklik of herhaald verzoek maakt geen tweede antwoord.
+  const requestId = newRequestId();
+  const form = h('form', { class: 'p-q-form', novalidate: true, hidden: true }, h('label', { for: `${id}-a`, class: 'field-label' }, tr('Jouw antwoord')), text,
+    name ? [h('label', { for: `${id}-n`, class: 'field-label' }, tr('Je naam')), name] : h('p', { class: 'small muted' }, icon('shield'), ' ', tr('Je antwoordt als {name}.', { name: identity })),
+    error, h('div', {}, preview ? h('span', { class: 'small muted' }, tr('Voorbeeld: antwoorden kan alleen de klant.')) : send));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (preview) return;
+    if (!text.value.trim()) { text.focus(); return; }
+    if (name && !name.value.trim()) { name.focus(); return; }
+    send.disabled = true;
+    error.hidden = true;
+    try {
+      if (name) nameStore.set(name.value.trim());
+      await apiWithRetry('POST', answerUrl(q), { answer: text.value, name: name?.value, requestId });
+      await load();
+    } catch (err) {
+      send.disabled = false;
+      error.hidden = false;
+      error.textContent = err.data?.code === 'already_answered' ? tr('Deze vraag is al beantwoord.') : err.data?.code === 'withdrawn' ? tr('Het team heeft deze vraag ingetrokken.') : err.message;
+      if (['already_answered', 'withdrawn'].includes(err.data?.code)) setTimeout(load, 1500);
+    }
+  });
+  // Eerst alleen de vraag; het antwoordveld verschijnt na "Beantwoorden".
+  const open = h('div', { class: 'p-q-open' }, h('button', { type: 'button', class: 'btn btn-sm btn-primary', 'aria-expanded': 'false', onClick: (e) => {
+    form.hidden = false; e.currentTarget.parentElement.hidden = true; text.focus();
+  } }, icon('reply'), h('span', { class: 'btn-label' }, tr('Beantwoorden'))));
+  return h('article', { class: 'p-card p-question' }, head, open, form);
 }
 
 /** Compacte regel: status, versie en (bij goedkeuring) wie en wanneer. */

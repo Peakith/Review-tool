@@ -22,6 +22,9 @@ const { purgeOldActivity } = require('./activity');
 const { meRoutes } = require('./routes/me');
 const { clientPortalRoutes, clientTeamRoutes } = require('./routes/clients');
 const { createNotifier } = require('./notify');
+const { freelanceRoutes, freelanceGate } = require('./routes/freelance');
+const { memberRoutes } = require('./routes/members');
+const { questionTeamRoutes, questionClientRoutes } = require('./questions');
 const { inboxRoutes } = require('./routes/inbox');
 const { createVariants } = require('./variants');
 const { FORMATS, toolStatus } = require('./media');
@@ -182,6 +185,7 @@ function createApp(overrides = {}) {
   reviewRoutes(api, db, config, { storage, notifier, variants });
   portalRoutes(api, db, config, { storage });
   clientPortalRoutes(api, db, config, { storage });
+  questionClientRoutes(api, db, config, { notifier });
   brandLogoRoute(api, db, config, { storage });
   exportRoutes(api, db, config, { storage, mode: 'client' });
   deliveryClientRoutes(api, db, config, { storage });
@@ -190,6 +194,9 @@ function createApp(overrides = {}) {
   // ---------- Team (inloggen verplicht) ----------
   const team = asyncRouter();
   team.use(auth.requireTeam(db));
+  // Freelancers: alleen hun eigen alleen-lezen routes, de inbox en eigen voorkeuren.
+  team.use(freelanceGate);
+  freelanceRoutes(team, db, config, { storage });
   const uploads = uploadRoutes(team, db, config, { access, storage });
   teamRoutes(team, db, config, { ...uploads, access, storage, notifier, variants });
   adminRoutes(team, db, config, { access, storage, uploads });
@@ -200,6 +207,8 @@ function createApp(overrides = {}) {
   exportRoutes(team, db, config, { access, storage, mode: 'team' });
   deliveryTeamRoutes(team, db, config, { access, storage, notifier });
   inboxRoutes(team, db, config, { access, notifier });
+  memberRoutes(team, db, config, { access, notifier });
+  questionTeamRoutes(team, db, config, { access, notifier });
   activityRoutes(team, db, config, { access });
   clientTeamRoutes(team, db, config, { access });
   // Taken van wie inmiddels geen toegang meer heeft, losmaken (ook bij het starten).

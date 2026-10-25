@@ -11,7 +11,7 @@ const { intParam } = require('../access');
  */
 function inboxRoutes(router, db, config, { access, notifier }) {
   const usable = (user, n) => {
-    if (!n.project_id || !access.levelFor(user, n.project_id)) return false;
+    if (!n.project_id || !notifier.canSee(user.id, n.project_id, n.type)) return false;
     const p = db.prepare('SELECT trashed_at FROM projects WHERE id = ?').get(n.project_id);
     if (!p || p.trashed_at) return false;
     if (n.video_id && db.prepare('SELECT trashed_at FROM videos WHERE id = ?').get(n.video_id)?.trashed_at !== null) return false;
@@ -91,9 +91,11 @@ function inboxRoutes(router, db, config, { access, notifier }) {
   const prefsOf = (userId) => {
     try { return JSON.parse(db.prepare('SELECT preferences FROM users WHERE id = ?').get(userId)?.preferences || '{}') || {}; } catch { return {}; }
   };
-  const prefsDto = (p) => Object.entries(notifier.PREFS).map(([key, label]) => ({ key, label, on: p.notifications?.[key] !== false }));
+  // Freelancers krijgen alleen meldingen over verstuurde klantfeedback; de rest is voor hen niet van toepassing.
+  const prefsDto = (p, user) => Object.entries(notifier.PREFS).filter(([key]) => !user?.isFreelancer || key === 'feedback')
+    .map(([key, label]) => ({ key, label: user?.isFreelancer && key === 'feedback' ? 'Klantfeedback in projecten waaraan ik ben gekoppeld' : label, on: p.notifications?.[key] !== false }));
 
-  router.get('/inbox/preferences', (req, res) => res.json({ preferences: prefsDto(prefsOf(req.user.id)) }));
+  router.get('/inbox/preferences', (req, res) => res.json({ preferences: prefsDto(prefsOf(req.user.id), req.user) }));
 
   router.put('/inbox/preferences', (req, res) => {
     const p = prefsOf(req.user.id);
@@ -104,17 +106,17 @@ function inboxRoutes(router, db, config, { access, notifier }) {
     }
     p.notifications = next;
     db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify(p), req.user.id);
-    res.json({ preferences: prefsDto(p) });
+    res.json({ preferences: prefsDto(p, req.user) });
   });
 
   // ---------- Volgen ----------
   const target = (req) => {
     const kind = req.params.kind;
-    if (kind === 'project') { access.project(req, req.params.id, 'view', { allowTrashed: true }); return { kind, id: intParam(req.params.id) }; }
+    if (kind === 'project') { access.project(req, req.params.id, 'read', { allowTrashed: true }); return { kind, id: intParam(req.params.id) }; }
     if (kind === 'comment') {
       const c = db.prepare('SELECT id, parent_id, version_id FROM comments WHERE id = ?').get(intParam(req.params.id));
       if (!c) throw new HttpError(404, 'Reactie niet gevonden');
-      access.version(req, c.version_id, 'view', { allowTrashed: true });
+      access.version(req, c.version_id, 'read', { allowTrashed: true });
       return { kind, id: c.parent_id || c.id };
     }
     throw new HttpError(404, 'Onbekende soort');

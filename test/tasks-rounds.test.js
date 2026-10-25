@@ -94,15 +94,17 @@ describe('feedbacktaken', () => {
     assert.equal(srv.db.prepare('SELECT status FROM versions WHERE id = ?').get(v.versionId).status, 'changes_requested');
   });
 
-  test('rechten: toegewezen persoon mag status wijzigen; details vragen “uploaden”; klant ziet niets van taken', async () => {
+  // Bouwronde 6: taken gaan naar Editors of Projectleiders; een Meekijker kan niets aan taken wijzigen.
+  test('rechten: editor wijzigt taak; meekijker niet; klant ziet niets van taken', async () => {
     const v = await videoWithFeedback('Rechtenvideo');
-    const { client: viewer, id: viewerId } = await addMember(srv, admin, { email: 'kijker@b.nl', name: 'Kijker', projects: [{ projectId, level: 'view' }] });
-    const { client: other } = await addMember(srv, admin, { email: 'ander@b.nl', name: 'Ander', projects: [{ projectId, level: 'view' }] });
+    const { client: viewer, id: viewerId } = await addMember(srv, admin, { email: 'kijker@b.nl', name: 'Kijker', projects: [{ projectId, role: 'editor' }] });
+    const { client: other } = await addMember(srv, admin, { email: 'ander@b.nl', name: 'Ander', projects: [{ projectId, role: 'meekijker' }] });
     const t = (await admin.post(`/api/comments/${v.commentIds[0]}/task`, { assigneeId: viewerId, note: 'Interne toelichting: budget op' })).data.task;
     assert.equal((await viewer.patch(`/api/tasks/${t.id}`, { status: 'in_progress' })).status, 200);
-    assert.equal((await viewer.patch(`/api/tasks/${t.id}`, { priority: 'high' })).status, 403);
-    assert.equal((await other.patch(`/api/tasks/${t.id}`, { status: 'done' })).status, 403);
-    assert.equal((await viewer.post(`/api/comments/${v.commentIds[0]}/task`, {})).status, 403, 'taak maken vraagt uploaden');
+    assert.equal((await viewer.patch(`/api/tasks/${t.id}`, { priority: 'high' })).status, 200);
+    assert.equal((await other.patch(`/api/tasks/${t.id}`, { status: 'done' })).status, 403, 'meekijker wijzigt geen status');
+    assert.equal((await other.post(`/api/comments/${v.commentIds[0]}/task`, {})).status, 403, 'meekijker maakt geen taak');
+    assert.equal((await admin.patch(`/api/tasks/${t.id}`, { assigneeId: (await other.get('/api/session')).data.user.id })).status, 400, 'meekijker kan geen taak krijgen');
     const mine = (await viewer.get('/api/my/tasks')).data.items;
     assert.equal(mine.length, 1);
     assert.equal(mine[0].task.note, 'Interne toelichting: budget op');

@@ -385,8 +385,10 @@ async function viewProjects() {
   }
 
   const params = new URLSearchParams(location.search);
-  const state = { q: params.get('q') || '', filter: params.get('filter') || 'all', sort: params.get('sort') || 'activity' };
+  const viewPref = (() => { try { return localStorage.getItem('rt-projects-view'); } catch { return null; } })();
+  const state = { q: params.get('q') || '', filter: params.get('filter') || 'all', sort: params.get('sort') || 'activity', view: viewPref === 'list' ? 'list' : 'cards' };
   const grid = h('div', { class: 'project-grid' });
+  const viewToggle = h('div', { class: 'segmented segmented-sm view-toggle', role: 'group', 'aria-label': 'Weergave' });
   const filterBar = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Filter projecten' });
   const search = h('input', { type: 'search', placeholder: 'Zoek op project of klant', value: state.q, 'aria-label': 'Zoek projecten' });
   const sort = h('select', { 'aria-label': 'Sorteren' },
@@ -411,6 +413,13 @@ async function viewProjects() {
     shown.sort(state.sort === 'name' ? (a, b) => a.name.localeCompare(b.name, 'nl')
       : state.sort === 'created' ? (a, b) => b.createdAt.localeCompare(a.createdAt)
         : (a, b) => String(b.lastActivityAt).localeCompare(String(a.lastActivityAt)));
+    // Vastgezette projecten eerst (alleen voor jou).
+    shown.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
+    mount(viewToggle, [['cards', 'grid', 'Kaarten'], ['list', 'list', 'Lijst']].map(([key, ic, label]) => h('button', {
+      type: 'button', 'aria-pressed': String(state.view === key), 'aria-label': label, title: label,
+      onClick: () => { state.view = key; try { localStorage.setItem('rt-projects-view', key); } catch { /* privémodus */ } draw(); },
+    }, icon(ic))));
+    grid.className = state.view === 'list' ? 'project-list' : 'project-grid';
     if (!shown.length) {
       mount(grid, h('div', { class: 'grid-empty' }, emptyState({
         icon: 'search', compact: true, title: 'Geen projecten gevonden',
@@ -419,7 +428,8 @@ async function viewProjects() {
       })));
       return;
     }
-    mount(grid, shown.map(projectCard));
+    const redraw = () => draw();
+    mount(grid, shown.map((p) => (state.view === 'list' ? projectRow(p, redraw) : projectCard(p, redraw))));
   }
   search.addEventListener('input', () => { state.q = search.value; sync(); draw(); });
   sort.addEventListener('change', () => { state.sort = sort.value; sync(); draw(); });
@@ -429,7 +439,8 @@ async function viewProjects() {
     h('div', { class: 'toolbar' },
       h('div', { class: 'search toolbar-search' }, icon('search'), search),
       filterBar,
-      h('label', { class: 'toolbar-sort' }, h('span', { class: 'visually-hidden' }, 'Sorteren'), sort)),
+      h('label', { class: 'toolbar-sort' }, h('span', { class: 'visually-hidden' }, 'Sorteren'), sort),
+      viewToggle),
     grid,
     h('nav', { class: 'projects-foot small', 'aria-label': 'Meer projecten' },
       h('a', { href: '/instellingen/archief', 'data-nav': true }, icon('history'), ' Gearchiveerde projecten'),
@@ -456,23 +467,47 @@ function posterImg(versionId, alt = '') {
   return img;
 }
 
-function projectCard(p) {
+/** Projectcover als beeld: volledig zichtbaar (geen bijsnijden), met een vage achtergrond bij afwijkende verhoudingen. */
+function projectCoverImg(p) {
+  if (!p.cover) return h('div', { class: 'poster-empty' }, icon('folder'));
+  const img = h('img', { src: p.cover.url, alt: '', loading: 'lazy', decoding: 'async' });
+  const wrap = h('span', { class: 'cover-fit' }, blurBackdrop(p.cover.url), img);
+  img.addEventListener('error', () => wrap.replaceWith(h('div', { class: 'poster-empty' }, icon('folder'))));
+  return wrap;
+}
+
+function projectCard(p, onPin) {
   const s = projectSignal(p);
   const statusOrder = ['changes_requested', 'in_review', 'ready_for_review', 'concept', 'approved'];
-  return h('a', { class: 'project-card', href: `/projecten/${p.id}`, 'data-nav': true, 'aria-label': `${p.name}${p.clientName ? `, ${p.clientName}` : ''}` },
-    h('div', { class: `project-cover cover-${Math.min(p.posters.length, 3)}` },
-      p.posters.length ? p.posters.map((id) => posterImg(id)) : h('div', { class: 'poster-empty' }, icon('folder')),
-      p.openComments ? h('span', { class: 'cover-badge', title: 'Open reacties van de klant' }, icon('chat'), p.openComments) : null),
-    h('div', { class: 'project-body' },
-      h('div', { class: 'project-titles' },
-        h('h2', { class: 'project-name', title: p.name }, p.name),
-        h('div', { class: 'project-client truncate' }, p.clientName || 'Geen klant ingevuld')),
-      h('div', { class: 'project-meta small muted' },
-        h('span', {}, plural(p.videoCount, 'video', 'video’s')), h('span', { 'aria-hidden': 'true' }, '·'),
-        h('span', { title: formatDate(p.lastActivityAt) }, `actief ${relativeDate(p.lastActivityAt)}`)),
-      p.videoCount ? h('div', { class: 'status-row' }, statusOrder.filter((st) => p.statusCounts[st]).map((st) =>
-        h('span', { class: `pill pill-sm pill-${st}`, title: STATUS[st].label }, icon(STATUS[st].icon), `${p.statusCounts[st]} ${STATUS[st].label.toLowerCase()}`))) : null,
-      h('div', { class: `project-signal ${s.cls}` }, icon(s.icon), s.text)));
+  return h('div', { class: `project-card${p.pinned ? ' is-pinned' : ''}` },
+    h('a', { class: 'project-card-link', href: `/projecten/${p.id}`, 'data-nav': true, 'aria-label': `${p.name}${p.clientName ? `, ${p.clientName}` : ''}` },
+      h('div', { class: 'project-cover' },
+        projectCoverImg(p),
+        p.openComments ? h('span', { class: 'cover-badge', title: 'Open reacties van de klant' }, icon('chat'), p.openComments) : null),
+      h('div', { class: 'project-body' },
+        h('div', { class: 'project-titles' },
+          h('h2', { class: 'project-name', title: p.name }, p.name),
+          h('div', { class: 'project-client truncate' }, p.clientName || 'Geen klant ingevuld')),
+        h('div', { class: 'project-meta small muted' },
+          h('span', {}, plural(p.videoCount, 'video', 'video’s')), h('span', { 'aria-hidden': 'true' }, '·'),
+          h('span', { title: formatDate(p.lastActivityAt) }, `actief ${relativeDate(p.lastActivityAt)}`)),
+        p.videoCount ? h('div', { class: 'status-row' }, statusOrder.filter((st) => p.statusCounts[st]).map((st) =>
+          h('span', { class: `pill pill-sm pill-${st}`, title: STATUS[st].label }, icon(STATUS[st].icon), `${p.statusCounts[st]} ${STATUS[st].label.toLowerCase()}`))) : null,
+        h('div', { class: `project-signal ${s.cls}` }, icon(s.icon), s.text))),
+    pinButton(p, { compact: true, onChange: onPin }));
+}
+
+/** Compacte regel voor veel projecten. */
+function projectRow(p, onPin) {
+  const s = projectSignal(p);
+  return h('div', { class: `project-row${p.pinned ? ' is-pinned' : ''}` },
+    h('a', { class: 'project-row-link', href: `/projecten/${p.id}`, 'data-nav': true },
+      h('span', { class: 'project-row-cover' }, projectCoverImg(p)),
+      h('span', { class: 'project-row-main' },
+        h('strong', { class: 'project-name truncate', title: p.name }, p.name),
+        h('span', { class: 'small muted truncate' }, [p.clientName, plural(p.videoCount, 'video', 'video’s'), `actief ${relativeDate(p.lastActivityAt)}`].filter(Boolean).join(' · '))),
+      h('span', { class: `project-signal ${s.cls}` }, icon(s.icon), s.text)),
+    pinButton(p, { compact: true, onChange: onPin }));
 }
 
 async function projectDialog({ title, project, submitLabel }) {
@@ -619,8 +654,19 @@ async function viewProject(id, tab = 'videos') {
   const archived = !!project.archivedAt;
   const mayUpload = can(project.myLevel, 'upload') && !archived;
   const mayManage = can(project.myLevel, 'manage');
-  const state = { q: '', filter: params.get('filter') || 'all' };
-  const listEl = h('div', { class: 'video-list', role: 'list' });
+  const viewPref = (() => { try { return localStorage.getItem('rt-project-view'); } catch { return null; } })();
+  const state = { q: '', filter: params.get('filter') || 'all', view: viewPref === 'list' ? 'list' : 'cards', selected: Number(params.get('video')) || null };
+  const listEl = h('div', { class: 'project-gallery' });
+  // Vaste delen (zoekveld behoudt focus tijdens typen); alleen voorvertoning en lijst worden opnieuw getekend.
+  const previewHost = h('div', { class: 'preview-host' });
+  const itemsHost = h('div', { class: 'gallery-items' });
+  const countEl = h('span', { class: 'seg-count' });
+  const viewToggle = h('div', { class: 'segmented segmented-sm view-toggle', role: 'group', 'aria-label': 'Weergave' });
+  const galleryHead = h('div', { class: 'gallery-head' });
+  // Eén speler tegelijk: bij wisselen of weggaan wordt de vorige gestopt en losgelaten.
+  let preview = { id: null, el: null, player: null };
+  const stopPreview = () => { preview.player?.destroy(); preview = { id: null, el: null, player: null }; };
+  cleanup = stopPreview;
   const filterBar = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Filter video’s' });
   const search = h('input', { type: 'search', placeholder: 'Zoek een video', 'aria-label': 'Zoek video’s' });
 
@@ -654,13 +700,41 @@ async function viewProject(id, tab = 'videos') {
     const shown = searched.filter(VIDEO_FILTERS.find((f) => f.key === state.filter)?.test || (() => true))
       .sort((a, b) => String(b.lastActivityAt).localeCompare(String(a.lastActivityAt)));
     if (!shown.length) {
-      mount(listEl, emptyState({ icon: 'search', compact: true, title: 'Geen video’s gevonden', text: 'Pas je zoekterm of filter aan.',
+      stopPreview();
+      countEl.textContent = '0';
+      if (listEl.firstChild !== previewHost) mount(listEl, previewHost, galleryHead, itemsHost);
+      mount(previewHost);
+      mount(itemsHost, emptyState({ icon: 'search', compact: true, title: 'Geen video’s gevonden', text: 'Pas je zoekterm of filter aan.',
         action: button('Filters wissen', { onClick: () => { state.q = ''; search.value = ''; state.filter = 'all'; draw(); } }) }));
+      return;
+    }
+    const selected = shown.find((v) => v.id === state.selected) || shown[0];
+    state.selected = selected.id;
+    if (preview.id !== selected.id) { stopPreview(); preview = { id: selected.id, el: previewSection(selected), player: null }; }
+    const select = (v) => {
+      if (v.id === state.selected) return;
+      state.selected = v.id;
+      const q = new URLSearchParams(location.search);
+      q.set('video', String(v.id));
+      history.replaceState(null, '', `${location.pathname}?${q}`);
+      draw();
+      preview.el?.querySelector('.preview-play')?.focus({ preventScroll: true });
+    };
+    mount(viewToggle, [['cards', 'grid', 'Kaarten'], ['list', 'list', 'Lijst']].map(([key, ic, label]) => h('button', {
+      type: 'button', 'aria-pressed': String(state.view === key), 'aria-label': label, title: label,
+      onClick: () => { state.view = key; try { localStorage.setItem('rt-project-view', key); } catch { /* privémodus */ } draw(); },
+    }, icon(ic))));
+    countEl.textContent = String(shown.length);
+    if (previewHost.firstChild !== preview.el) mount(previewHost, preview.el);
+    if (listEl.firstChild !== previewHost) mount(listEl, previewHost, galleryHead, itemsHost);
+    const menu = (v) => videoMenu(v, reload, { mayUpload, mayManage });
+    if (state.view === 'cards') {
+      mount(itemsHost, h('div', { class: 'video-cards', role: 'list' }, shown.map((v) => videoCard(v, { selected: v.id === selected.id, onSelect: select, menu: menu(v) }))));
       return;
     }
     // Opleveringen gegroepeerd per type, zodra er types zijn ingevuld.
     if (project.videos.some((v) => v.meta?.kind)) {
-      mount(listEl, KIND_ORDER.map(([kind, label]) => {
+      mount(itemsHost, KIND_ORDER.map(([kind, label]) => {
         const rows = shown.filter((v) => (v.meta?.kind || null) === kind);
         return rows.length ? h('div', { class: 'kind-group', role: 'group', 'aria-label': label },
           h('h2', { class: 'kind-head' }, label, h('span', { class: 'seg-count' }, rows.length)),
@@ -668,9 +742,55 @@ async function viewProject(id, tab = 'videos') {
       }));
       return;
     }
-    mount(listEl, shown.map((v) => videoRow(v, reload, { mayUpload, mayManage })));
+    mount(itemsHost, h('div', { class: 'video-list', role: 'list' }, shown.map((v) => videoRow(v, reload, { mayUpload, mayManage }))));
+  }
+
+  /**
+   * Grote voorvertoning van de gekozen video met een korte samenvatting. Niets speelt vanzelf af en er
+   * wordt pas media geladen bij "Afspelen". Kiezen verandert nooit een status.
+   */
+  function previewSection(v) {
+    const lv = v.latestVersion;
+    const sv = v.sharedVersion;
+    const stage = h('div', { class: `preview-stage${v.meta?.orientation === 'staand' ? ' is-portrait' : ''}` });
+    const playBtn = h('button', { type: 'button', class: 'preview-play', 'aria-label': `${v.title} afspelen` },
+      v.posterVersionId ? posterImg(v.posterVersionId) : h('span', { class: 'poster-empty' }, icon('film')),
+      h('span', { class: 'preview-play-icon', 'aria-hidden': 'true' }, icon('play')),
+      lv?.duration ? h('span', { class: 'thumb-duration' }, timecode(lv.duration)) : null);
+    const fileLine = h('p', { class: 'preview-file small muted' });
+    playBtn.addEventListener('click', async () => {
+      if (!lv) return;
+      playBtn.disabled = true;
+      try {
+        const video = await api('GET', `/api/videos/${v.id}`);
+        if (preview.id !== v.id) return; // intussen een andere video gekozen
+        const version = video.versions[0];
+        const player = teamPlayerFor(version);
+        preview.player = player;
+        mount(stage, player.el);
+        player.play();
+        if (version.originalFilename) fileLine.textContent = `Bestand: ${version.originalFilename}`;
+      } catch (err) { toast(err.message, 'error'); playBtn.disabled = false; }
+    });
+    mount(stage, playBtn);
+    const metaBits = [v.meta?.kindLabel, v.meta?.aspect, lv ? `v${lv.number}` : null].filter(Boolean);
+    return h('section', { class: 'project-preview', 'aria-label': 'Voorvertoning' },
+      stage,
+      h('div', { class: 'preview-summary' },
+        lv ? statusPill(lv.status) : null,
+        h('h2', { class: 'preview-title', title: v.title }, v.title),
+        h('div', { class: 'preview-meta' }, metaBits.flatMap((m, i) => (i ? [h('span', { class: 'meta-dot', 'aria-hidden': 'true' }, '·'), m] : [m]))),
+        h('p', { class: 'preview-client small' }, icon('eye'), sv ? (sv.number === lv?.number ? `Klant ziet v${sv.number}` : `Klant ziet v${sv.number} · intern nieuwste v${lv?.number}`) : 'Nog niet gedeeld met de klant'),
+        v.openComments || v.delivery ? h('div', { class: 'preview-badges' },
+          v.openComments ? h('span', { class: 'badge badge-warn', title: 'Open reacties van de klant' }, icon('chat'), `${v.openComments} open`) : null,
+          v.delivery ? h('span', { class: `badge ${v.delivery.available ? 'badge-ok' : 'badge-warn'}` }, icon('package'), `Opgeleverd v${v.delivery.versionNumber}`) : null) : null,
+        fileLine,
+        h('div', { class: 'preview-actions' },
+          h('a', { href: `/video/${v.id}`, 'data-nav': true, class: 'btn btn-lg' }, icon('play'), h('span', { class: 'btn-label' }, 'Video openen')),
+          videoMenu(v, reload, { mayUpload, mayManage, large: true }))));
   }
   search.addEventListener('input', () => { state.q = search.value; draw(); });
+  mount(galleryHead, h('h2', {}, 'Alle video’s', countEl), h('div', { class: 'gallery-tools' }, h('div', { class: 'search toolbar-search' }, icon('search'), search), filterBar, viewToggle));
 
   const isVideos = tab === 'videos';
   const tabLink = (key, href, iconName, label, extra) => h('a', { href, 'data-nav': true, class: tab === key ? 'is-active' : '', 'aria-current': tab === key ? 'page' : null }, icon(iconName), label, extra);
@@ -684,22 +804,21 @@ async function viewProject(id, tab = 'videos') {
     can(project.myLevel, 'publish') ? tabLink('activity', `/projecten/${project.id}/activiteit`, 'activity', 'Activiteit') : null);
   const briefingHost = h('div', {});
 
-  const content = h('div', { class: 'page page-drop' },
-    pageHeader({
-      crumbs: [{ label: 'Projecten', href: '/projecten' }],
-      title: h('h1', { class: 'page-title', title: project.name }, project.name),
+  const withFeedback = project.videos.filter((v) => v.openComments || v.latestVersion?.status === 'changes_requested').length;
+  const content = h('div', { class: 'page page-drop project-page' },
+    projectHead({
+      project, mayManage,
       meta: [
-        project.client ? h('a', { href: `/klanten/${project.client.id}`, 'data-nav': true, title: 'Gekoppelde klant' }, icon('users'), ' ', project.client.name)
+        project.client ? h('a', { href: `/klanten/${project.client.id}`, 'data-nav': true, class: 'meta-link', title: 'Gekoppelde klant' }, project.client.name)
           : project.clientName ? h('span', {}, project.clientName) : null,
+        h('span', {}, plural(project.videos.length, 'video', 'video’s')),
+        withFeedback ? h('span', {}, `${withFeedback} met feedback`) : null,
+        brandChip(project.brand),
         project.clientVisibility === 'completed' ? h('span', { class: 'badge badge-neutral', title: 'In het klantportaal ingeklapt onder “Afgeronde projecten”' }, 'afgerond voor klant') : null,
         project.clientVisibility === 'off' ? h('span', { class: 'badge badge-danger', title: 'Geen enkele klantlink werkt voor dit project' }, icon('lock'), 'klanttoegang uit') : null,
-        h('span', {}, plural(project.videos.length, 'video', 'video’s')),
-        brandChip(project.brand),
-        mayManage ? h('button', { type: 'button', class: 'link-btn meta-people', onClick: () => peopleDialog(project).then(() => route()), title: 'Personen koppelen, rol en einddatum' }, icon('users'), 'Personen') : null,
       ],
       actions: [
-        followButton(project),
-        mayUpload && isVideos ? button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }) : null,
+        mayManage ? button('Personen', { icon: 'users', class: 'btn meta-people', onClick: () => peopleDialog(project).then(() => route()), title: 'Personen koppelen, rol en einddatum' }) : null,
         can(project.myLevel, 'publish') ? menuButton([
           ['Klantportaal (projectlink)…', () => portalDialog(project), { icon: 'globe' }],
           ['Opleverlink en oplevering', () => navigate(`/projecten/${project.id}/oplevering`), { icon: 'package' }],
@@ -707,9 +826,11 @@ async function viewProject(id, tab = 'videos') {
           !archived ? ['Vraag aan klant…', () => askDialog({ project, videos: project.videos, onDone: () => navigate(`/projecten/${project.id}/feedback`) }), { icon: 'help' }] : null,
           mayManage ? ['Klant en klanttoegang…', () => clientSection(project, () => route()), { icon: 'users' }] : null,
         ].filter(Boolean), 'Delen', { label: 'Delen', icon: 'link' }) : null,
+        mayUpload && isVideos ? button('Nieuwe video', { icon: 'upload', variant: 'primary', onClick: chooseFiles, title: 'Een nieuwe, losse video aan dit project toevoegen' }) : null,
         menuButton([
           project.videos.length ? ['Feedback exporteren…', () => exportDialog({ projectId: project.id, videos: project.videos }), { icon: 'fileDown' }] : null,
           ['Klantweergave bekijken', () => window.open(`/voorbeeld/project/${project.id}`, '_blank', 'noopener'), { icon: 'eye' }],
+          mayManage ? ['Omslag wijzigen…', () => coverDialog(project), { icon: 'image' }] : null,
           mayManage ? ['Personen en toegang…', () => peopleDialog(project).then(() => route()), { icon: 'users' }] : null,
           mayManage ? ['Project bewerken…', () => editProject(project), { icon: 'edit' }] : null,
           mayManage ? (archived ? ['Uit archief halen', () => setArchived('project', project.id, project.name, false), { icon: 'refresh' }]
@@ -727,7 +848,6 @@ async function viewProject(id, tab = 'videos') {
     !can(project.myLevel, 'upload') && !archived ? h('p', { class: 'small muted page-notice' }, icon('lock'), `Je rol in dit project: ${({ read: 'Meekijker (alleen bekijken)', view: 'bekijken en reageren', publish: 'publiceren en delen' })[project.myLevel] || project.myLevel}.`) : null,
     tabs,
     isVideos ? [
-      project.videos.length ? h('div', { class: 'toolbar' }, h('div', { class: 'search toolbar-search' }, icon('search'), search), filterBar) : null,
       listEl,
       project.archivedVideoCount || showArchived ? h('p', { class: 'small' }, h('a', { href: showArchived ? location.pathname : `${location.pathname}?archief=1`, 'data-nav': true },
         showArchived ? 'Gearchiveerde video’s verbergen' : `${plural(project.archivedVideoCount, 'gearchiveerde video', 'gearchiveerde video’s')} tonen`)) : null,
@@ -826,6 +946,195 @@ function videoRow(v, reload, { mayUpload, mayManage }) {
         ['Naar prullenbak…', () => moveToTrash('video', v.id, v.title, reload, { deliveryWarning: v.delivery ? 'Zolang de video in de prullenbak staat, verdwijnt het bestand van de opleverpagina van de klant.' : null }), { icon: 'trash', danger: true }],
       ], `Acties voor ${v.title}`) : null,
       icon('chevronRight')));
+}
+
+// ---------- Projectpagina (bouwronde 7): kop met cover, voorvertoning en video-overzicht ----------
+
+/** Projectkop: compacte cover, titel met vastzetten en volgen, klant en aantallen, acties rechts. */
+function projectHead({ project, mayManage, meta, actions }) {
+  const dots = meta.filter(Boolean).flatMap((m, i) => (i ? [h('span', { class: 'meta-dot', 'aria-hidden': 'true' }, '·'), m] : [m]));
+  return h('header', { class: 'project-head' },
+    coverBox(project, mayManage),
+    h('div', { class: 'project-head-main' },
+      h('div', { class: 'project-title-row' },
+        h('h1', { class: 'page-title', title: project.name }, project.name),
+        pinButton(project), followButton(project)),
+      h('div', { class: 'page-meta project-meta' }, dots)),
+    h('div', { class: 'page-actions project-actions' }, actions));
+}
+
+/** Projectcover (of een rustige terugval) met "Omslag wijzigen" alleen voor wie dat mag. */
+function coverBox(project, mayManage, { size = 'head' } = {}) {
+  const img = project.cover ? h('img', { src: project.cover.url, alt: '', loading: 'lazy', decoding: 'async' }) : null;
+  const fallback = h('div', { class: 'poster-empty' }, icon('film'));
+  if (img) img.addEventListener('error', () => img.replaceWith(fallback));
+  return h('div', { class: `project-cover-box is-${size}` }, img || fallback,
+    mayManage ? h('button', { type: 'button', class: 'cover-edit', onClick: () => coverDialog(project) }, icon('image'), h('span', {}, 'Omslag wijzigen')) : null);
+}
+
+/** Persoonlijk vastzetten (alleen voor jezelf; verandert niets voor anderen). */
+function pinButton(project, { compact = false, onChange = null } = {}) {
+  const btn = h('button', { type: 'button', class: `pin-btn${compact ? ' is-compact' : ''}` });
+  const draw = () => {
+    btn.setAttribute('aria-pressed', String(!!project.pinned));
+    btn.title = project.pinned ? 'Vastgezet: staat bovenaan je dashboard en projectenoverzicht. Klik om los te maken.' : 'Vastzetten op je dashboard en bovenaan het projectenoverzicht';
+    btn.setAttribute('aria-label', project.pinned ? `${project.name} losmaken` : `${project.name} vastzetten`);
+    mount(btn, icon('star'), compact ? null : h('span', { class: 'pin-label' }, project.pinned ? 'Vastgezet' : 'Vastzetten'));
+  };
+  draw();
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      project.pinned = (await api('PUT', `/api/pins/${project.id}`, { pinned: !project.pinned })).pinned;
+      draw();
+      onChange?.(project.pinned);
+    } catch (err) { toast(err.message, 'error'); }
+  });
+  return btn;
+}
+
+/** Afspeelbron van een versie voor de gedeelde speler (afspeelversies, anders het origineel voor het team). */
+function teamPlayerFor(version) {
+  const levels = version.playback?.levels || [];
+  const base = `/api/versions/${version.id}/hls`;
+  return createPlayer({
+    src: `/api/versions/${version.id}/media`,
+    hls: levels.length ? { master: `${base}/master.m3u8`, levels, levelPlaylist: (l) => `${base}/${l}/index.m3u8`, levelFile: (l) => `${base}/${l}/seg.m4s` } : null,
+    poster: version.hasPoster ? `/api/versions/${version.id}/poster` : undefined,
+    duration: version.duration,
+  });
+}
+
+/**
+ * Omslag kiezen: automatisch, de thumbnail van een video, of een frame uit een video. De keuze hoort
+ * alleen bij het project; video's, thumbnails en titels veranderen niet.
+ */
+async function coverDialog(project) {
+  const withPoster = project.videos.filter((v) => v.posterVersionId);
+  let choice = project.cover?.mode === 'version' ? { mode: 'version', versionId: project.cover.versionId } : { mode: project.cover?.mode === 'frame' ? 'frame-keep' : 'auto' };
+  let framePlayer = null;
+  let frameVersion = null;
+  const grid = h('div', { class: 'cover-options', role: 'radiogroup', 'aria-label': 'Omslag' });
+  const option = (key, label, sub, img, pick) => h('button', { type: 'button', role: 'radio', class: 'cover-option', dataset: { key }, onClick: () => { pick(); draw(); } },
+    h('span', { class: 'cover-option-img' }, img || h('span', { class: 'poster-empty' }, icon('sparkle'))),
+    h('span', { class: 'cover-option-text' }, h('strong', {}, label), sub ? h('span', { class: 'small muted truncate' }, sub) : null));
+  const frameHost = h('div', { class: 'cover-frame' });
+  const frameSelect = h('select', { 'aria-label': 'Video voor een eigen frame' }, h('option', { value: '' }, 'Kies een video…'), project.videos.map((v) => h('option', { value: v.id }, v.title)));
+  frameSelect.addEventListener('change', async () => {
+    framePlayer?.destroy();
+    framePlayer = null;
+    mount(frameHost);
+    if (!frameSelect.value) return;
+    const video = await api('GET', `/api/videos/${frameSelect.value}`);
+    frameVersion = video.versions[0];
+    framePlayer = teamPlayerFor(frameVersion);
+    mount(frameHost, framePlayer.el, h('p', { class: 'small muted' }, 'Pauzeer op het gewenste beeld en kies hieronder “Dit frame gebruiken”.'));
+    choice = { mode: 'frame' };
+    draw();
+  });
+  function draw() {
+    const key = choice.mode === 'version' ? `v${choice.versionId}` : choice.mode;
+    mount(grid,
+      option('auto', 'Automatisch', 'Thumbnail van de hoofdvideo of de meest recente video', null, () => { choice = { mode: 'auto' }; }),
+      project.cover?.mode === 'frame' ? option('frame-keep', 'Huidig eigen frame', 'Zoals nu ingesteld', h('img', { src: project.cover.url, alt: '' }), () => { choice = { mode: 'frame-keep' }; }) : null,
+      withPoster.map((v) => option(`v${v.posterVersionId}`, v.title, 'Thumbnail van deze video', h('img', { src: `/api/versions/${v.posterVersionId}/poster`, alt: '', loading: 'lazy' }), () => { choice = { mode: 'version', versionId: v.posterVersionId }; })));
+    grid.querySelectorAll('.cover-option').forEach((el) => el.setAttribute('aria-checked', String(el.dataset.key === key)));
+  }
+  draw();
+  try {
+    await openDialog({
+      title: 'Omslag van het project',
+      wide: true,
+      body: [
+        h('p', { class: 'muted' }, 'De omslag staat in het projectenoverzicht, op het dashboard en boven het project. Video’s, thumbnails en titels veranderen niet. Klanten zien alleen beeld uit versies die met hen gedeeld zijn.'),
+        grid,
+        h('details', { class: 'cover-frame-pick', open: choice.mode === 'frame' }, h('summary', {}, 'Een frame uit een video kiezen'), field('Video', frameSelect), frameHost),
+      ],
+      actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, 'Omslag opslaan'))],
+      onSubmit: async () => {
+        try {
+          if (choice.mode === 'frame-keep') return true;
+          const body = choice.mode === 'frame'
+            ? (framePlayer ? { mode: 'frame', versionId: frameVersion.id, time: framePlayer.currentTime() } : null)
+            : choice;
+          if (!body) { toast('Kies eerst een video en een frame.', 'error'); return false; }
+          const r = await api('PUT', `/api/projects/${project.id}/cover`, body);
+          project.cover = r.cover;
+          toast('Omslag opgeslagen', 'success');
+          route();
+        } catch (err) { toast(err.message, 'error'); return false; }
+      },
+    });
+  } finally {
+    framePlayer?.destroy();
+  }
+}
+
+/** Acties bij een video (titel wijzigen, archiveren, prullenbak), alleen wat je mag. */
+function videoMenu(v, reload, { mayUpload, mayManage, large = false }) {
+  const items = [
+    mayUpload && !v.archivedAt ? ['Titel wijzigen…', () => renameDialog(v, reload), { icon: 'edit' }] : null,
+    mayManage ? (v.archivedAt ? ['Uit archief halen', () => setArchived('video', v.id, v.title, false), { icon: 'refresh' }]
+      : ['Archiveren', () => setArchived('video', v.id, v.title, true), { icon: 'history' }]) : null,
+    mayManage ? ['Naar prullenbak…', () => moveToTrash('video', v.id, v.title, reload, { deliveryWarning: v.delivery ? 'Zolang de video in de prullenbak staat, verdwijnt het bestand van de opleverpagina van de klant.' : null }), { icon: 'trash', danger: true }] : null,
+  ].filter(Boolean);
+  if (!items.length) return null;
+  const m = menuButton(items, `Acties voor ${v.title}`);
+  if (large) m.classList.add('is-large');
+  return m;
+}
+
+/** Titel wijzigen. Bestanden, links en reacties blijven ongewijzigd; de oorspronkelijke bestandsnaam blijft in de details. */
+async function renameDialog(v, reload) {
+  const input = h('input', { type: 'text', value: v.title, maxlength: '200', required: true, autofocus: true, 'aria-label': `Titel van “${v.title}” wijzigen` });
+  await openDialog({
+    title: 'Titel wijzigen',
+    body: [field('Titel', input, 'Bestanden, links en reacties blijven ongewijzigd.')],
+    actions: [h('button', { class: 'btn btn-ghost', value: 'cancel', formnovalidate: true }, 'Annuleren'), h('button', { class: 'btn btn-primary', value: 'ok' }, h('span', { class: 'btn-label' }, 'Opslaan'))],
+    onSubmit: async () => {
+      const value = input.value.trim();
+      if (!value) { input.focus(); return false; }
+      if (value === v.title) return true;
+      try {
+        await api('PATCH', `/api/videos/${v.id}`, { title: value });
+        v.title = value;
+        toast('Titel bijgewerkt. Bestanden, links en reacties blijven ongewijzigd.', 'success');
+        reload();
+      } catch (err) { toast(err.message, 'error'); return false; }
+    },
+  });
+}
+
+/** Vage achtergrond achter een staande video (het beeld zelf blijft volledig zichtbaar). Via CSSOM i.v.m. CSP. */
+function blurBackdrop(url) {
+  const el = h('span', { class: 'thumb-blur', 'aria-hidden': 'true' });
+  el.style.backgroundImage = `url("${url}")`;
+  return el;
+}
+
+/** Kaart in het video-overzicht: kiezen = in de voorvertoning tonen; de titel opent de werkplek. */
+function videoCard(v, { selected, onSelect, menu }) {
+  const lv = v.latestVersion;
+  const portrait = v.meta?.orientation === 'staand';
+  const poster = v.posterVersionId ? `/api/versions/${v.posterVersionId}/poster` : null;
+  const card = h('div', { class: `video-row video-card${selected ? ' is-selected' : ''}`, role: 'listitem', dataset: { id: v.id } },
+    h('button', { type: 'button', class: `video-card-thumb${portrait ? ' is-portrait' : ''}`, 'aria-pressed': String(selected), 'aria-label': `${v.title} in de voorvertoning tonen`, onClick: () => onSelect(v) },
+      poster && portrait ? blurBackdrop(poster) : null,
+      poster ? posterImg(v.posterVersionId) : h('span', { class: 'poster-empty' }, icon('film')),
+      lv?.duration ? h('span', { class: 'thumb-duration' }, timecode(lv.duration)) : null),
+    h('div', { class: 'video-card-body' },
+      h('div', { class: 'video-card-head' },
+        h('a', { href: `/video/${v.id}`, 'data-nav': true, class: 'video-row-title', title: v.title }, v.title),
+        menu),
+      h('div', { class: 'video-card-meta' },
+        lv ? statusPill(lv.status, { small: true }) : null,
+        v.meta?.aspect ? h('span', {}, v.meta.aspect) : null,
+        lv ? h('span', {}, `v${lv.number}`) : null,
+        v.openComments ? h('span', { class: 'badge badge-warn', title: 'Open reacties van de klant' }, `${v.openComments} open`) : null,
+        v.archivedAt ? h('span', { class: 'badge badge-neutral' }, 'Gearchiveerd') : null)));
+  card.addEventListener('click', (e) => { if (!e.target.closest('a, button, .menu-wrap')) onSelect(v); });
+  return card;
 }
 
 async function editProject(project) {

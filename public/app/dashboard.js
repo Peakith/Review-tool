@@ -135,7 +135,31 @@ const row = (href, main, sub, side) => h('a', { class: 'dash-row', href, 'data-n
 const empty = (text) => h('p', { class: 'dash-empty-text small muted' }, text);
 const more = (href, text) => h('a', { class: 'dash-more small', href, 'data-nav': true }, text, icon('chevronRight'));
 
+function pinnedCard(p) {
+  const img = p.cover ? h('img', { src: p.cover.url, alt: '', loading: 'lazy' }) : null;
+  const fallback = h('span', { class: 'poster-empty' }, icon('film'));
+  if (img) img.addEventListener('error', () => img.replaceWith(fallback));
+  return h('a', { class: 'dash-pin', href: `/projecten/${p.id}`, 'data-nav': true },
+    h('span', { class: 'dash-pin-cover' }, img || fallback),
+    h('span', { class: 'dash-pin-text' }, h('strong', { class: 'truncate', title: p.name }, p.name),
+      h('span', { class: 'small muted truncate' }, [p.clientName, plural(p.videoCount, 'video', 'video’s')].filter(Boolean).join(' · '))));
+}
+
 const RENDER = {
+  // Wat het team nu kan oppakken; de belangrijkste acties staan bovenaan.
+  attention: (d) => [
+    d.items.length ? h('div', { class: 'dash-list' }, d.items.map((v) => h('a', { class: `dash-row dash-attn is-${v.kind}`, href: v.href, 'data-nav': true },
+      h('span', { class: 'dash-attn-icon', 'aria-hidden': 'true' }, icon(v.kind === 'changes_requested' ? 'chat' : 'send')),
+      h('div', { class: 'dash-row-main' }, h('div', { class: 'truncate' }, h('strong', {}, v.label), ` · ${v.videoTitle} · versie ${v.versionNumber}`), h('div', { class: 'small muted truncate' }, v.projectName)),
+      h('span', { class: 'dash-row-side small' }, 'Openen', icon('chevronRight'))))) : empty('Niets dat nu op je wacht. Nieuwe klantfeedback en versies die klaarstaan om te delen verschijnen hier.'),
+    d.taskCount ? more('/taken', `Mijn open taken (${d.taskCount})`) : null,
+  ],
+  pinned: (d) => (d.items.length ? h('div', { class: 'dash-pins' }, d.items.map(pinnedCard))
+    : empty('Zet een project vast met de ster bij de projecttitel of in het projectenoverzicht; het staat dan hier.')),
+  inbox: (d) => [
+    d.items.length ? h('div', { class: 'dash-list' }, d.items.map((n) => row('/inbox', n.title, n.project, h('span', { title: formatDate(n.at) }, relativeDate(n.at))))) : empty('Geen ongelezen meldingen.'),
+    more('/inbox', d.unread ? `Inbox (${d.unread} ongelezen)` : 'Inbox'),
+  ],
   tasks: (d) => [
     d.items.length ? h('div', { class: 'dash-list' }, d.items.map((t) => row(`/video/${t.videoId}?v=${t.versionId}&c=${t.commentId}`,
       [t.timecode !== null && t.timecode !== undefined ? h('span', { class: 'mono dash-tc' }, timecode(t.timecode)) : null, ' ', t.body || 'Tekening'],

@@ -465,6 +465,8 @@ export function createPlayer({ src, poster, duration: knownDuration, fps = 25, h
     quality: () => ({ choice, played: playedLabel(video), mode, levels: levels.map((l) => l.label) }),
     setQuality,
     destroy() {
+      // Altijd stoppen en het bestand loslaten: geen doorlopend geluid na wisselen of weggaan.
+      try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* al losgekoppeld */ }
       hls?.destroy();
       document.removeEventListener('click', outsideQuality);
       ro?.disconnect();

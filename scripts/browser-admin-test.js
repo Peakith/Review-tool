@@ -85,7 +85,7 @@ const apiOf = (page, base) => ({
   const reviewUrl = (await api.call('GET', `/api/videos/${vA.videoId}`)).data.links[0].url;
   await page.reload();
   await page.waitForSelector('.dash-card');
-  check('na het eerste project opent de app op het dashboard', await page.isVisible('.dash-card:has-text("Recente projecten")'));
+  check('na het eerste project opent de app op het dashboard', await page.isVisible('.dash-card:has-text("Aandacht nodig")'));
   check('versienummer zichtbaar in de zijbalk', /Studio Review \d+\.\d+\.\d+ \(build [0-9a-f]{8}\)/.test(await page.textContent('.side-version')), await page.textContent('.side-version'));
 
   // ---------- Team & rechten ----------
@@ -126,7 +126,7 @@ const apiOf = (page, base) => ({
     const r = await f.request.get(`${srv.base}${url}`);
     check(`freelancer: ${url} rechtstreeks geweigerd`, r.status() === 403, String(r.status()));
   }
-  await f.click('.list-row');
+  await f.click('.project-row-link');
   await f.waitForSelector('.page-title');
   check('freelancer: projectpagina zonder upload-, deel- of beheerknoppen', !(await f.isVisible('button:has-text("Nieuwe video")')) && !(await f.isVisible('button:has-text("Delen")')) && !(await f.isVisible('button[aria-label="Projectacties"]')));
   await shot(f, '22-freelancer-project');

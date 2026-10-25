@@ -1,11 +1,81 @@
-# Herinrichting (bouwronde 6): ontwerpregels, inventarisatie en plek van iedere functie
+# Herinrichting: ontwerpregels, inventarisatie en plek van iedere functie
 
 Alle bestaande functies blijven bestaan en vindbaar; oude adressen blijven werken. Rollen en rechten:
 [ROLLEN.md](ROLLEN.md).
 
-## Ontwerpregels (gelden voor elk scherm)
+## Bouwronde 7 (0.8.0): stijl 2 — nachtblauw met blauwe accenten
 
-- Elk scherm heeft één doel en één hoofdactie (primaire knop in inktkleur). Veelgebruikte acties staan
+Gekozen stijl, toegepast op de hele app (team, freelancer, klant). Licht/Donker/Systeem blijft; stijl 2 is
+het donkere thema. Opgeslagen themakeuzes blijven gelden. De merken Studio Brutaal en Moviemates
+(logo en accentkleur in **Instellingen › Merken**) blijven ongewijzigd op de klantpagina's.
+
+| Gebruik | Donker (stijl 2) | Contrast |
+|---|---|---|
+| Achtergrond | `#0B1424` | — |
+| Panelen | `#14233A` | — |
+| Verhoogd / geselecteerd | `#1C304C` | — |
+| Primaire knoppen | `#2563EB`, witte tekst | 5,2 : 1 |
+| Links, focus, selectie | `#7BB4FF` | 8,6 : 1 op de achtergrond |
+| Hoofdtekst | `#E6EEF9` | 15,8 : 1 |
+| Secundaire tekst | `#B5C8E1` | 10,8 : 1 |
+| Rustige hulptekst | `#8FA5C2` | ≥ 5,3 : 1, ook op verhoogde vlakken |
+| Lijnen | `#29415F` | — |
+
+Hoeken 8–12 px. Kleur alleen voor belangrijke acties en statussen; “Nog niet verstuurd” blijft neutraal,
+rood alleen voor fouten. Het lichte thema gebruikt dezelfde opbouw (lichte vlakken, donkerblauwe
+selectie `#1D4ED8`). Contrast wordt in de browsertest `test:browser:ui` gemeten (≥ 4,5 : 1).
+
+### Wat er verplaatst of veranderd is
+
+| Was (0.7.0) | Wordt (0.8.0) |
+|---|---|
+| Zijbalk links met menu, zoeken en profiel | **Bovenbalk**: links Studio Brutaal · Studio Review; midden Dashboard, Projecten, Klanten, Inbox, Mijn taken; rechts compact zoeken (⌘K/Ctrl+K), Instellingen (tandwiel) en het profielmenu |
+| Versienummer en systeemstatus onderaan de zijbalk | Klein **onderaan elke pagina** (en zoals altijd in Instellingen › Opslag & back-ups) |
+| Knop **Opdrachten** in de zijbalk | Het toetsenbordlabel in het zoekveld (of ⌘K / Ctrl+K) |
+| Projectkop: titel met knoppen | **Kleine omslag** links, naam, klant en aantallen ernaast, **Vastzetten** bij de titel; rechts **Personen**, **Delen**, **Nieuwe video** en **⋯** (met **Omslag wijzigen…**) |
+| Videolijst op de projectpagina | **Grote voorvertoning** van de gekozen video met samenvatting (status, versie, wat de klant ziet, **Video openen**); daaronder kaarten met een blauwe selectierand, of de **lijst** (schakelaar rechts; de lijst groepeert per type zoals voorheen). De keuze staat in de adresbalk (`?video=…`) |
+| Titel wijzigen met het potloodje in de rij | **⋯** bij de video → **Titel wijzigen…** (ook in de werkplek bij de titel) |
+| Projectenoverzicht met kleine kaarten | **Grote omslagen**, ster om vast te zetten, zoeken, filters en kaart/lijst |
+| Dashboard: Mijn taken, Nieuwe feedback, Wacht op klant, Recente projecten | Nieuw standaard: **Aandacht nodig**, **Vastgezet**, **Inbox**, **Bij de klant**. Wie het dashboard al had aangepast, houdt die indeling; de nieuwe blokken zijn toe te voegen via **Dashboard aanpassen** |
+| Freelancerstart: lijst met projecten | Zelfde lijst met **omslag** (alleen uit gedeelde versies) en **ster** |
+| Klantportaal | Zelfde volgorde (Jouw acties · Bij Studio Brutaal · Goedgekeurd (ingeklapt) · Definitieve bestanden). In het ingeklapte **Alle projecten en video’s** nu een kleine omslag en een ster om een project in **deze browser** vast te zetten |
+| Klantreview op mobiel | Vaste actiebalk onderaan (Feedback versturen · Deze versie goedkeuren); de balk wijkt zolang je typt en er is onderaan ruimte gereserveerd, zodat hij nooit reacties of invoer afdekt |
+
+### Omslag (cover) van een project
+
+- **Automatisch** (standaard, ook voor bestaande projecten zonder iets in te stellen): de thumbnail van de
+  hoofdvideo, anders van de video met de meest recente activiteit.
+- **Omslag wijzigen…** (Projectleider of beheerder): kies de thumbnail van een andere video, of een
+  **frame** uit een video (pauzeer op het beeld en sla op), of zet terug op **Automatisch**.
+- Een omslag is een aparte projectkeuze: video's, thumbnails, titels en bestanden veranderen niet en er
+  wordt niets opnieuw verwerkt.
+- Klanten en freelancers krijgen alleen beeld uit versies die met hen gedeeld zijn; is de gekozen bron
+  intern, dan zien zij de automatische keuze uit gedeelde versies (of niets).
+- Ophalen loopt via afgeschermde adressen per publiek. Verdwijnt de bron (versie of video in de
+  prullenbak), dan valt de omslag terug op automatisch.
+- Een eigen frame is een los bestand (`cover-<project>-….jpg`) en gaat mee in opslagbeheer, back-up en
+  herstel.
+
+### Vastzetten
+
+- Ster bij een project (projectenoverzicht, projectpagina, freelancerstart). Alleen voor jezelf; anderen
+  merken er niets van. Vastgezette projecten staan bovenaan het overzicht en in het dashboardblok
+  **Vastgezet**. Blijft bewaard na herladen, opnieuw inloggen, een update en back-up/herstel.
+- Vastzetten geeft nooit toegang. Freelancers kunnen alleen projecten vastzetten waar hun koppeling nu
+  geldt; verloopt die, dan verdwijnt het project ook uit hun favorieten.
+- Klanten (optioneel, zonder account): een ster in **Alle projecten en video’s**, alleen in die browser.
+  De acties bovenaan blijven altijd boven vastgezette projecten.
+
+### Niet toegevoegd (bewust)
+
+Hervatten vanaf de laatst bekeken plek, verwerking pauzeren en “Bekijk als freelancer” (voorstellen
+43–45) zijn niet gebouwd.
+
+## Bouwronde 6: ontwerpregels, inventarisatie en plek van iedere functie
+
+### Ontwerpregels (bouwronde 6; kleuren vervangen door stijl 2)
+
+- Elk scherm heeft één doel en één hoofdactie (primaire knop; sinds 0.8.0 blauw). Veelgebruikte acties staan
   direct in beeld; zeldzamere onder een logisch genoemd menu (**Delen**, **⋯**) of in de opdrachtbalk.
 - Lijsten zijn regels met een lijn ertussen, geen losse kaders. Secties hebben een stevige lijn erboven.
   Kaders alleen nog voor invoervelden, keuzes in dialogen, scrollvakken en de speler.
@@ -16,7 +86,7 @@ Alle bestaande functies blijven bestaan en vindbaar; oude adressen blijven werke
 - Formulieren kort; extra opties pas na een keuze (bijv. "Tijdelijke toegang" → datum, "Beantwoorden" →
   antwoordveld).
 - Thema: Licht, Donker of Systeem, klein in het profielmenu (team) en rechtsboven (klant).
-- Niets alleen bij hover zichtbaar (de hernoemknop bij video's staat er nu altijd).
+- Niets alleen bij hover zichtbaar (hernoemen staat sinds 0.8.0 in het ⋯-menu van elke video).
 
 ## Huisstijl Studio Brutaal: wat is gebruikt en wat ontbreekt
 
@@ -25,7 +95,7 @@ Alle bestaande functies blijven bestaan en vindbaar; oude adressen blijven werke
 - **Niet bereikbaar:** www.studiobrutaal.nl was vanuit de bouwomgeving geblokkeerd (netwerkbeleid);
   er zijn geen logo-, lettertype- of kleurbestanden van Studio Brutaal aangeleverd.
 - **Daarom:** er zijn **geen** huisstijlkleuren of -lettertypen verzonnen. De teamomgeving is neutraal
-  zwart-wit met sterke koppen. De accentkleuren van de standaardmerken (`#ff6a3d` voor Studio Brutaal en
+  zwart-wit met sterke koppen (sinds 0.8.0: stijl 2, nachtblauw). De accentkleuren van de standaardmerken (`#ff6a3d` voor Studio Brutaal en
   `#38c6b8` voor Moviemates) zijn **plaatshouders** uit een eerdere ronde, geen huisstijlafspraken; pas ze
   aan in **Instellingen › Merken** en upload daar het echte logo.
 - **Klaar voor de echte huisstijl:** `public/shared/huisstijl.css` is de plek voor lettertypen

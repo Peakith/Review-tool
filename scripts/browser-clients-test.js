@@ -111,7 +111,7 @@ const mp4 = (name, size = '1280x720', sec = 4) => {
   check('persoonlijke link staat bovenaan (nieuwste eerst)', /\/k\//.test(personalUrl) && /\/k\//.test(generalUrl) && personalUrl !== generalUrl);
   await page.goto(`${BASE}/projecten/${pA}`);
   await page.waitForSelector('.page-title');
-  check('projectpagina: gekoppelde klant als link in de kop', await page.isVisible('.page-head a[href^="/klanten/"]:has-text("Bakkerij Jansen")'));
+  check('projectpagina: gekoppelde klant als link in de kop', await page.isVisible('.project-head a[href^="/klanten/"]:has-text("Bakkerij Jansen")'));
   await page.goto(`${BASE}/klanten`);
   await page.waitForSelector('.client-row');
   await shot(page, '61-klanten');

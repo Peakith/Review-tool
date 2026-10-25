@@ -57,7 +57,7 @@ brew install node ffmpeg
 
 | Wat | Standaardlocatie | Bij een update |
 |---|---|---|
-| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.7.0` | vervangen |
+| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.8.0` | vervangen |
 | Gegevens (database met accounts, projecten, reacties, links en rechten; video's in `media/`) | `~/Studio Review/gegevens` | blijft staan |
 | Back-ups | `~/Studio Review/backups` | blijft staan |
 | Instellingen | `~/Studio Review/instellingen.env` | blijft staan |
@@ -176,7 +176,7 @@ brew install node ffmpeg
 - Per reactie bestaat hooguit één taak. Opnieuw klikken of opnieuw proberen na een verbindingsfout maakt nooit een tweede.
 - **Eén afhandelstatus:** een taak op *Afgehandeld* zetten handelt de reactie af. Een reactie afvinken of heropenen zet de taak mee. Een reactie kan dus nooit tegelijk "afgehandeld" en "taak open" zijn. De status van de video verandert hierdoor niet.
 - **Overzicht:** het tabblad **Feedback & taken** op de projectpagina toont de verstuurde klantfeedback en alle reacties met een taak. Je kunt filteren op verantwoordelijke, video, prioriteit en status.
-- **Mijn taken** in de zijbalk toont jouw taken in alle projecten, met een teller.
+- **Mijn taken** in de bovenbalk toont jouw taken in alle projecten, met een teller.
 - **Wie kan wat:**
   - toewijzen kan alleen aan teamleden met toegang tot het project;
   - verliest iemand later die toegang, of wordt het account uitgeschakeld, dan wordt de taak losgekoppeld met een zichtbare toelichting;
@@ -322,6 +322,28 @@ brew install node ffmpeg
 - Zonder tekeningen gaat de iPhone direct naar de ingebouwde schermvullende weergave, zoals voorheen.
 - Dit is getest met een nagebootste iPhone-omgeving in Chrome, **niet op een echte iPhone**.
 
+## Bouwronde 7 (0.8.0): stijl 2 — nachtblauw, omslagen en vastzetten
+
+- **Stijl 2** in de hele app: nachtblauwe vlakken (`#0B1424` / `#14233A` / `#1C304C`), primaire knoppen
+  `#2563EB` met witte tekst, links/focus/selectie `#7BB4FF`, tekst `#E6EEF9` / `#B5C8E1`, lijnen
+  `#29415F`, hoeken 8–12 px. Licht/Donker/Systeem blijft (stijl 2 is Donker); je opgeslagen keuze blijft.
+  De merken Studio Brutaal en Moviemates op klantpagina's zijn ongewijzigd. Overzicht van wat waar staat:
+  [docs/HERINRICHTING.md](docs/HERINRICHTING.md).
+- **Bovenbalk** in plaats van de zijbalk; versie en systeemstatus klein onderaan.
+- **Projectpagina**: kleine omslag, naam, klant en aantallen, ster om vast te zetten; Personen, Delen,
+  Nieuwe video en ⋯; tabbladen Video’s · Feedback · Briefing · Oplevering · Activiteit; een grote
+  **voorvertoning** van de gekozen video met samenvatting (status, versie, wat de klant ziet, Video
+  openen) en daaronder kaarten of een lijst. Geen autoplay; er wordt pas media geladen als je op afspelen
+  klikt, en bij wisselen stopt de vorige speler. Kiezen verandert nooit een status. Staande video's
+  worden nooit bijgesneden.
+- **Omslagen**: automatisch, of via **Omslag wijzigen…** een andere thumbnail of een frame; terug naar
+  automatisch kan altijd. Klanten en freelancers zien alleen beeld uit gedeelde versies.
+- **Vastzetten**: ster per project, alleen voor jezelf, bovenaan het overzicht en in het dashboardblok
+  **Vastgezet**. Geeft nooit toegang. Klanten kunnen optioneel in hun browser vastzetten.
+- **Dashboard** (nieuwe standaard): Aandacht nodig · Vastgezet · Inbox · Bij de klant. Een eerder
+  aangepaste indeling blijft staan.
+- **Mobiel**: vaste actiebalk in de klantreview die wijkt zolang je typt.
+
 ## Bouwronde 6: nieuwe vormgeving, rollen, freelancers, klantvragen en ⌘K
 
 - **Vormgeving**: neutrale zwart-witbasis met sterke koppen, lijnen in plaats van kaders, kleur alleen voor
@@ -346,7 +368,7 @@ brew install node ffmpeg
   persoonlijke link = geverifieerd; zelf ingevulde naam staat er als zodanig bij). Het team krijgt een
   melding. Herhaalde verzoeken maken geen dubbele vragen, antwoorden of meldingen. Een antwoord verandert
   niets aan status of goedkeuring, en een goedkeuring beantwoordt geen vraag.
-- **Opdrachtbalk** (⌘K op de Mac, Ctrl+K elders, of **Opdrachten** in de zijbalk): zoeken in je
+- **Opdrachtbalk** (⌘K op de Mac, Ctrl+K elders, of het toetsenbordlabel in het zoekveld bovenaan): zoeken in je
   projecten, video’s en taken en toegestane acties starten (bijv. uploaden), volledig met het toetsenbord.
   Zelfde rechten als de rest van de app; bevestigingen blijven gewoon.
 - **Identieke uploads**: de app vergelijkt de inhoud (SHA-256, gestreamd berekend), alleen binnen het
@@ -359,7 +381,7 @@ brew install node ffmpeg
 
 ### Indeling, dashboard, zoeken en thema
 - **Dashboard** per account: standaard vier blokken (Mijn taken, Nieuwe feedback, Wacht op klant, Recente projecten). Met **Dashboard aanpassen** voeg je blokken toe, verberg, verplaats (ook met het toetsenbord) en maak je ze breed; alleen dan zie je bewerkknoppen. Klantactiviteit en Opslag zijn er alleen voor wie de rechten heeft. Alles wordt op de server beperkt tot je eigen projecten.
-- **Zoeken** (veld in de zijbalk, sneltoets `/`): projecten en klanten, videotitels, oorspronkelijke bestandsnamen, briefings en reacties, gegroepeerd. Een reactie opent de juiste video, versie en het juiste tijdstip. Zoekopdrachten bewaar je per account. Elke zoekopdracht (ook suggesties en aantallen) houdt rekening met je rechten.
+- **Zoeken** (veld in de bovenbalk, sneltoets `/`): projecten en klanten, videotitels, oorspronkelijke bestandsnamen, briefings en reacties, gegroepeerd. Een reactie opent de juiste video, versie en het juiste tijdstip. Zoekopdrachten bewaar je per account. Elke zoekopdracht (ook suggesties en aantallen) houdt rekening met je rechten.
 - **Thema**: Licht, Donker of Systeem in het profielmenu (per account). Klanten zonder account hebben dezelfde kleine keuze rechtsboven op hun pagina’s (onthouden in hun browser).
 - **Eigen thumbnail** per versie: Info › *Huidig frame gebruiken*; *Automatisch* zet hem terug. Het videobestand blijft ongewijzigd en een interne versie lekt niet via klantweergaven.
 
@@ -409,7 +431,7 @@ Volledige matrix en regels: [docs/ROLLEN.md](docs/ROLLEN.md). Kort:
 - Klantlinks en de akkoordgever werken los van accounts, net als voorheen.
 
 ## Versie en cache
-- Het versienummer staat onderin de zijbalk, in het profielmenu en onder **Instellingen › Opslag & back-ups**, bijvoorbeeld `0.7.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
+- Het versienummer staat klein onderaan elke pagina, in het profielmenu en onder **Instellingen › Opslag & back-ups**, bijvoorbeeld `0.8.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
   - de versie komt uit `package.json`;
   - de build is een vingerafdruk van de interfacebestanden.
 - Na een update is gewoon verversen genoeg. De pagina zelf wordt altijd gecontroleerd, en alle scripts en stijlen (ook geïmporteerde modules) komen van een adres per build.
@@ -417,7 +439,7 @@ Volledige matrix en regels: [docs/ROLLEN.md](docs/ROLLEN.md). Kort:
 ## Functionaliteit
 
 **Teamomgeving (inloggen verplicht)**
-- **Vaste zijbalk** met zoeken, **Dashboard, Projecten, Klanten, Inbox**, **Mijn taken**, onderaan **Instellingen** (team, merken, opslag, archief, prullenbak), de systeemstatus en het profielmenu (thema, account, uitloggen). Waar elke functie staat: [docs/HERINRICHTING.md](docs/HERINRICHTING.md).
+- **Bovenbalk** met links Studio Brutaal · Studio Review, in het midden **Dashboard, Projecten, Klanten, Inbox, Mijn taken**, rechts zoeken (⌘K), **Instellingen** (team, merken, opslag, archief, prullenbak) en het profielmenu (thema, account, uitloggen); versie en systeemstatus klein onderaan de pagina. Waar elke functie staat: [docs/HERINRICHTING.md](docs/HERINRICHTING.md).
 - **Projectoverzicht:**
   - zoeken op project of klant, filters (*Actie nodig*, *Wacht op klant*, *Goedgekeurd*) en sorteren;
   - per project: thumbnails, het aantal video's, de laatste activiteit, statuslabels en één zin met de volgende actie (bijv. "Feedback binnen · 1 video aanpassen");
@@ -486,21 +508,22 @@ Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan
 ### Tests
 Alle tests gebruiken eigen, tijdelijke mappen en raken je echte gegevens in `~/Studio Review` niet aan.
 ```bash
-npm test                                                   # 162 servertests (vereist ffmpeg en unzip)
+npm test                                                   # 186 servertests (vereist ffmpeg en unzip)
 CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (52 controles)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rollen, freelanceraccount, opslag, back-ups, prullenbak, archief (28)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal (startpagina in vaste volgorde), merk, opleveringen, briefing, desktop + mobiel (52)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:feedback # taken, rondes, tekenen, bereik, vergelijken, export, desktop + mobiel (50)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:oplevering # opleveringen, klantactiviteit, statuscorrectie per versie, iPhone-uitleg (nagebootst), desktop + mobiel (52)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:update   # update met de vorige interface in de browsercache (7)
-npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (13)
+npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (14)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:ui      # dashboard, zoeken, thema, bestandsnamen, thumbnail, desktop + mobiel (38)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:klanten # klanten, klantportaal NL/EN, goedkeuren, vorige/volgende, wachtwoord, bezoekersthema, desktop + mobiel (47)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:inbox   # inbox, browsermeldingen (nagebootst), activiteitentijdlijn (24)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:kwaliteit # kwaliteitskeuze met hls.js, vertraagd netwerk, 4K/staand, geen origineel (23)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:ronde6  # ⌘K met toetsenbord en beperkte rechten, identieke uploads in de wachtrij, klantvraag, freelancer verloopt (24)
-npm run test:upgrade                                       # bijwerken vanaf 0.6.0 met echte gegevens, rollen omgezet, oude en nieuwe back-up terugzetten (46)
-npm run test:offline-update                                # ZIP-update vanaf 0.6.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (11)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:ronde7  # voorvertoning wisselen (geen geluid op de achtergrond), omslag, vastzetten met twee accounts, freelancer verboden/verlopen, klantvolgorde, nieuwe versie, mobiele actiebalk (35)
+npm run test:upgrade                                       # bijwerken vanaf 0.7.0 met echte gegevens: voorkeuren, automatische omslag, back-ups met omslag en vastzetten terugzetten (50); `-- 98ff4da` voor 0.6.0
+npm run test:offline-update                                # ZIP-update vanaf 0.7.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (11)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;

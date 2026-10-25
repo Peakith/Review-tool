@@ -5,6 +5,48 @@ Vanaf versie 0.2.0 staan programma en gegevens los van elkaar:
 - **Programma**: de uitgepakte map. Bij elke update komt er een nieuwe.
 - **Gegevens**: `~/Studio Review/` met daarin `gegevens/`, `backups/` en `instellingen.env`. Deze map blijft gewoon staan.
 
+## Van 0.7.0 naar 0.8.0 (bouwronde 7: stijl 2 nachtblauw, omslagen, vastzetten)
+
+Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` (of je eigen `DATA_DIR`) blijven
+staan. Accounts, rollen, klantlinks, feedback, goedkeuringen, opleveringen, back-ups en je voorkeuren
+(thema en dashboardindeling) blijven werken. Een gewone update maakt geen klantlinks ongeldig.
+
+1. **Maak eerst een back-up en controleer hem:** **Instellingen › Opslag & back-ups › Nu back-up maken**.
+   Wacht tot er bij de nieuwe back-up “compleet en gecontroleerd” staat.
+2. **Stop de app:** dubbelklik `Stop Studio Review.command` in de map van 0.7.0.
+3. **Pak de nieuwe ZIP uit in een nieuwe map.** Laat de map van 0.7.0 staan.
+4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.**
+5. **Controleer:** ververs een openstaand tabblad (gewoon verversen is genoeg; de nieuwe bestanden komen
+   van een nieuw adres). Je ziet nu de **bovenbalk** en onderaan de pagina **Studio Review 0.8.0 (build …)**.
+   Open een project en een klantlink in een privévenster.
+
+**Internet bij het installeren (eerlijk):** 0.8.0 heeft **geen nieuwe npm-onderdelen** ten opzichte van
+0.7.0. De startknop installeert de bestaande onderdelen bij de eerste start in de nieuwe map uit de
+npm-cache op je Mac (`~/.npm`). In de test (Linux, zonder netwerk, vanaf 0.7.0) werkte dat. Is die cache
+leeg, dan is er bij de eerste start **wel internet nodig**, of kopieer `node_modules` uit de map van
+0.7.0. Node.js en ffmpeg moeten al geïnstalleerd zijn. Dit is **niet** op jouw Mac getest.
+
+**Wat er bij de eerste start gebeurt**
+- De database krijgt een paar extra kolommen (omslag per project) en een tabel voor vastgezette
+  projecten. Er wordt niets omgezet of opnieuw verwerkt; bestaande projecten krijgen vanzelf een
+  automatische omslag.
+
+**Wat je direct merkt**
+- Stijl 2 (nachtblauw met blauwe accenten) in de hele app; Licht en Systeem blijven beschikbaar.
+- Het menu staat **bovenaan**; versie en systeemstatus staan klein onderaan de pagina.
+- Projectpagina met omslag, voorvertoning en kaarten; **titel wijzigen** zit nu in het **⋯**-menu van
+  een video. Zie [docs/HERINRICHTING.md](docs/HERINRICHTING.md) voor alles wat verplaatst is.
+- Nieuw: **Omslag wijzigen…** (Projectleider/beheerder) en de **ster** om projecten voor jezelf vast te
+  zetten.
+- Dashboard: wie het nooit had aangepast, krijgt de nieuwe standaard (Aandacht nodig · Vastgezet · Inbox
+  · Bij de klant). Had je het aangepast, dan blijft jouw indeling; voeg de nieuwe blokken toe via
+  **Dashboard aanpassen**.
+
+**Terug naar 0.7.0?** Stop 0.8.0, zet de back-up van stap 1 terug met `npm run herstel` in de **nieuwe**
+map (klantlinks uit de back-up worden dan standaard ongeldig) en start daarna de map van 0.7.0. Dat
+teruggaan zelf is in deze ronde niet apart getest; 0.7.0 rechtstreeks starten op gegevens van 0.8.0 ook
+niet. Omslagen en vastgezette projecten die je na de update instelde, zitten niet in die back-up.
+
 ## Van 0.6.0 naar 0.7.0 (bouwronde 6: nieuwe vormgeving, rollen, freelancers, klantvragen, ⌘K)
 
 Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` blijven staan, en je accounts,

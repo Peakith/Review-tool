@@ -80,7 +80,8 @@ const shot = async (page, name, opts = {}) => {
   await e.fill('input[name=password]', 'een-lang-wachtwoord');
   await e.click('button[type=submit]');
   await e.waitForSelector('.side-nav');
-  check('hoofdmenu: Dashboard, Projecten, Klanten, Inbox', JSON.stringify(await e.$$eval('.side-nav[aria-label="Hoofdmenu"] a', (els) => els.map((x) => x.querySelector('.nav-label').textContent))) === JSON.stringify(['Dashboard', 'Projecten', 'Klanten', 'Inbox']));
+  const menu = await e.$$eval('.side-nav[aria-label="Hoofdmenu"] a', (els) => els.map((x) => x.querySelector('.nav-label').textContent));
+  check('hoofdmenu (bovenbalk): Dashboard, Projecten, Klanten, Inbox, Mijn taken', JSON.stringify(menu) === JSON.stringify(['Dashboard', 'Projecten', 'Klanten', 'Inbox', 'Mijn taken']), menu.join(', '));
   await e.goto(`${BASE}/inbox`);
   await e.waitForSelector('.inbox-page .empty');
   check('lege inbox met uitleg wat er komt', /Je inbox is leeg/.test(await e.textContent('.inbox-list')));

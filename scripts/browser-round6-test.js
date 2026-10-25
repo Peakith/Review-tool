@@ -68,7 +68,7 @@ const mp4 = (name, sec, pattern = 'testsrc2') => {
   await apiT('POST', '/api/setup', { setupToken: 'ronde6-test-code-123', email: 'sanne@agency.nl', name: 'Sanne de Vries', password: 'een-lang-wachtwoord' });
   // Na de installatie is de beheerder in deze context al ingelogd.
   await page.goto(`${BASE}/`);
-  await page.waitForSelector('.sidebar');
+  await page.waitForSelector('.topbar');
   const pA = (await apiT('POST', '/api/projects', { name: 'Voorjaarscampagne' })).id;
   const pB = (await apiT('POST', '/api/projects', { name: 'Geheim project' })).id;
   const main = await apiT('POST', `/api/projects/${pA}/videos`, { uploadId: await upload(film, { projectId: pA }), title: 'Hoofdfilm' });
@@ -113,7 +113,7 @@ const mp4 = (name, sec, pattern = 'testsrc2') => {
   const k = await kctx.newPage();
   watch(k, 'meekijker');
   await login(k, 'kees@agency.nl');
-  await k.waitForSelector('.sidebar');
+  await k.waitForSelector('.topbar');
   await k.goto(`${BASE}/projecten/${pA}`);
   await k.waitForSelector('.video-row');
   await k.keyboard.press('Control+k');

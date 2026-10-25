@@ -15,7 +15,7 @@ Je hebt twee browservensters nodig: één voor het **team** en een privévenster
 | 1 | Maak het eerste account aan via de installatielink. | Je ziet "Begin met je eerste project": een korte uitleg en één knop. Nergens staat losse tekst zoals "null". | ☐ |
 | 2 | **Eerste project aanmaken** → "Acceptatietest", klant "Testklant". | Je komt in het lege project met een grote sleepzone. | ☐ |
 | 3 | Sleep `export_v01.mp4` in de sleepzone (of klik erop). | Rechtsonder het uploadpaneel met voortgang, daarna "Bestand wordt gecontroleerd" en dan "Klaar". De video staat in de lijst met thumbnail, duur, "Intern v1 · Concept" en "Nog niet gedeeld". | ☐ |
-| 4 | Klik op het potlood naast de titel, typ "Campagnefilm — Hoofdvideo" en druk op Enter. | De titel is aangepast, zonder ".mp4". | ☐ |
+| 4 | Klik bij de video op **⋯ › Titel wijzigen…**, typ "Campagnefilm — Hoofdvideo" en klik **Opslaan**. | De titel is aangepast, zonder ".mp4". | ☐ |
 | 5 | Open de video. Klik in de statusbalk op **Klaar voor review**, daarna op **Publiceren naar klant** en bevestig. | De statusbalk toont "In review". In de kop staat "Klant ziet: Versie 1". | ☐ |
 | 6 | **Delen** → kopieer de **reviewlink**. Vul bij **Akkoordlink** naam en e-mail in → **Akkoordgever opslaan** → **Persoonlijke akkoordlink maken**. | Het venster legt het verschil uit: de reviewlink "kan niet goedkeuren", en alleen met de akkoordlink kan worden goedgekeurd. | ☐ |
 | 7 | **⋯ › Download Versie 1**. | Het bestand heet zoals je het uploadde (`export_v01.mp4`), ook al heb je de titel gewijzigd, en speelt lokaal af. | ☐ |
@@ -61,7 +61,7 @@ Deze punten zijn **niet op een echte Mac getest**: de start- en stopknop zijn al
 | # | Doe | Verwacht | ✓ |
 |---|---|---|---|
 | 25 | Dubbelklik `Start Studio Review.command` in de nieuwe map. | macOS vraagt eenmalig om toestemming (zie de README). Daarna opent Terminal, de controles staan op ✓, de vraag om gegevens over te nemen verschijnt, en de browser opent vanzelf. | ☐ |
-| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.7.0 (build …)". | ☐ |
+| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderaan de pagina staat "Studio Review 0.8.0 (build …)". | ☐ |
 | 27 | Dubbelklik nog eens op de startknop. | Er start niets nieuws; de bestaande sessie opent in de browser. | ☐ |
 | 28 | **Instellingen › Opslag & back-ups › Nu back-up maken.** | De back-up krijgt "compleet en gecontroleerd", met de juiste aantallen en in een map onder `~/Studio Review/backups`. | ☐ |
 | 29 | **Instellingen › Team & rechten** → voeg een freelancer toe met toegang "Bekijken en reageren" tot één project. Log in als freelancer (privévenster). | De freelancer ziet alleen dat project, kan reageren, maar ziet geen upload-, deel- of publiceerknoppen. | ☐ |
@@ -76,7 +76,7 @@ Doe dit eerst zelf op je Mac. Wil je het portaal op een tweede apparaat of telef
 |---|---|---|---|
 | 33 | **Instellingen › Merken** → upload een logo voor Moviemates en pas eventueel de kleur aan. | Het voorbeeld rechts toont direct logo, kleur en knop. | ☐ |
 | 34 | **⋯ › Project bewerken** → kies het merk Moviemates en schrijf een korte introductie. | Bij het project staat een kleurstip met “Moviemates”. | ☐ |
-| 35 | Geef bij een video **Gegevens → Invullen**: type “Social”, kanaal “Instagram Reels”. | De projectpagina groepeert per type; bij de video staat “Social · 9:16 · Instagram Reels”. | ☐ |
+| 35 | Geef bij een video **Gegevens → Invullen**: type “Social”, kanaal “Instagram Reels”. | De projectpagina in de **lijstweergave** groepeert per type; bij de video staat “Social · 9:16 · Instagram Reels”. | ☐ |
 | 36 | Tabblad **Briefing**: voeg een tekst toe, een link en een PDF. Deel alleen de link. | Alles staat eerst onder “Alleen intern”; de link verhuist naar “Zichtbaar voor de klant”. | ☐ |
 | 37 | **Delen › Klantportaal (projectlink) → Projectlink maken** en open de link in een privévenster (Safari én Chrome). | Je ziet logo, introductie, alleen gepubliceerde video’s met de gepubliceerde versie, en alleen de gedeelde link. Geen interne PDF, geen concepten, geen goedkeurknop. | ☐ |
 | 38 | Open in het portaal een video, plaats een reactie en verstuur feedback. Ga terug naar het overzicht. | De video staat onder “Feedback verstuurd”. Interne teamnotities zijn niet zichtbaar. | ☐ |
@@ -179,6 +179,22 @@ getest (alleen Chrome op Linux en Pixel 7-emulatie): meld wat je ziet.
 | 101 | Upload in project A hetzelfde bestand nog eens, maar hernoem het eerst in de Finder. Upload tegelijk een ander bestand. | Bij het hernoemde bestand: “Dit bestand staat al in dit project als …, versie …” met **Bestaande openen**, **Annuleren** en **Toch uploaden**. Het andere bestand gaat gewoon door. **Annuleren** laat niets achter; **Toch uploaden** maakt een gewone nieuwe video met de nieuwe bestandsnaam. | ☐ |
 | 102 | Druk **⌘K** in een project, typ “upload”, kies **Video’s uploaden naar dit project** met de pijltjes en Enter. | De bestandskiezer opent (dezelfde als via de knop). | ☐ |
 | 103 | Wissel het thema (profielmenu) tussen Licht en Donker en bekijk een project, de werkplek en het klantportaal. Maak het venster ook smal (zoals een telefoon); een echte telefoon kan de links nog niet openen (alleen localhost). | Alles leesbaar in beide thema’s; het merk van de klant (logo, kleur) blijft zichtbaar. | ☐ |
+
+## M. Korte Mac-test 0.8.0: stijl 2, omslag, vastzetten (± 10 min)
+Doe dit na de update (zie [UPDATEN.md](UPDATEN.md)) eerst met je **echte** installatie alleen kijkend
+(stap 104–105), en de rest bij voorkeur met de aparte testgegevensmap. Gemaakt en getest met Chrome op
+Linux en Pixel 7-emulatie; **niet** in Safari, niet op jouw Mac en niet op een echte telefoon.
+
+| # | Doe | Verwacht | ✓ |
+|---|---|---|---|
+| 104 | Start met `Start Studio Review.command` en ververs een tabblad dat nog openstond. | Nachtblauwe app met het menu **bovenaan**; onderaan de pagina “Studio Review 0.8.0 (build …)”. Je projecten, thema en (eventueel aangepaste) dashboardindeling zijn er nog. | ☐ |
+| 105 | Open een bestaand project. | Links een kleine **omslag** (automatisch gekozen), naam, klant en aantallen, rechts Personen · Delen · Nieuwe video · ⋯. Daaronder de tabbladen en een grote voorvertoning van één video met status, versie en **Video openen**. Er speelt niets vanzelf. | ☐ |
+| 106 | Klik op afspelen in de voorvertoning, en kies tijdens het afspelen een andere kaart. | Het geluid stopt meteen; de voorvertoning toont de gekozen video (titel en versie kloppen). De status van beide video's is ongewijzigd. Een staande video is helemaal zichtbaar. | ☐ |
+| 107 | **Omslag wijzigen** (op de omslag of via ⋯) → kies de thumbnail van een andere video → Omslag opslaan. Daarna nogmaals → **Automatisch**. | De omslag verandert in het project, in **Projecten** en (als vastgezet) op het dashboard. De thumbnail en titel van de video zelf blijven gelijk. Automatisch zet hem terug. | ☐ |
+| 108 | Klik de **ster** bij een project in **Projecten**. Herlaad; log uit en weer in. | Het project staat bovenaan en in het dashboardblok **Vastgezet**, ook na herladen en opnieuw inloggen. Een ander account ziet het niet als vastgezet. | ☐ |
+| 109 | Open als klant het klantportaal (privévenster) en klap **Alle projecten en video’s** open. Klik een ster en herlaad. | **Jouw acties** staat bovenaan; kleine omslagen alleen in het ingeklapte overzicht; het vastgezette project staat daar bovenaan (alleen in deze browser). | ☐ |
+| 110 | Maak het klantvenster smal (zoals een telefoon), open een video, klik in het reactieveld en typ. | De actiebalk onderaan (Feedback versturen · Deze versie goedkeuren) verdwijnt zolang je typt en komt daarna terug; hij dekt nooit de laatste reactie af. | ☐ |
+| 111 | Wissel in het profielmenu tussen Licht, Donker en Systeem. | Alles blijft leesbaar; de keuze blijft na herladen bewaard. | ☐ |
 
 ## Handmatige browsertestlijst
 Automatisch getest (`npm run test:browser`, zie de PR): **Chrome 141 desktop (Linux, headless)** en **Chrome 141 met Pixel 7-emulatie**. Al het andere moet nog met de hand. Voer per browser minstens stappen 8–11, 13, 19–20 en 7 uit.

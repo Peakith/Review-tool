@@ -21,6 +21,8 @@ akkoordlink, opleverlink). Goedkeuren blijft per video, en alleen voor de aangew
 | Publiceren, klantlinks maken en beheren, akkoordgever | ✓ | ✓ | — | — | — |
 | Vraag aan klant stellen of intrekken | ✓ | ✓ | — | — | — |
 | Definitief opleveren, status corrigeren, archiveren, prullenbak | ✓ | ✓ | — | — | — |
+| Omslag van het project wijzigen (0.8.0) | ✓ | ✓ | — | — | — |
+| Project voor jezelf vastzetten (0.8.0; geeft nooit extra toegang) | ✓ | ✓ | ✓ | ✓ | ✓ (alleen zolang de koppeling geldt) |
 | Personen aan het project koppelen (rol, einddatum) | ✓ | ✓ (bestaande accounts) | — | — | — |
 | Accounts maken, merken, opslag, back-ups, definitief verwijderen | ✓ | — | — | — | — |
 | Eigen inbox, voorkeuren, thema en wachtwoord | ✓ | ✓ | ✓ | ✓ | ✓ (alleen meldingen over klantfeedback) |

@@ -78,7 +78,9 @@ const stopServer = (child) => new Promise((r) => { child.once('exit', r); child.
     check('nieuwe indeling zichtbaar: dashboard, projecten en instellingen', await page.isVisible('.side-nav a:has-text("Dashboard")') && await page.isVisible('.side-nav a:has-text("Instellingen")'));
     check('ook geïmporteerde modules komen van de nieuwe build', fresh.some((u) => u.includes('/shared/util.js')) && fresh.some((u) => u.includes('/shared/icons.js')), `${fresh.length} bestanden via /assets/<build>/`);
     await page.waitForSelector('.dash-card');
-    check('bestaand project en sessie behouden', (await page.textContent('.dash-grid')).includes('Project uit de vorige versie'));
+    await page.click('.side-nav a:has-text("Projecten")');
+    await page.waitForSelector('.project-card');
+    check('bestaand project en sessie behouden', (await page.textContent('main')).includes('Project uit de vorige versie'));
     check('geen JavaScript-fouten na de update', errors.length === 0, errors.join(' | '));
     await page.screenshot({ path: path.join(SHOTS, '31-na-update.png') });
   } finally {

@@ -1,4 +1,4 @@
-// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard 98ff4da = 0.6.0) met echte gegevens.
+// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard 14d0aba = 0.7.0) met echte gegevens.
 //  1. vorige versie (zonder .git) maakt account, project, video met twee versies, reviewlink, klantreactie,
 //     feedback, teamnotitie en -antwoord, akkoordlink en goedkeuring, en een back-up;
 //  2. de nieuwe code start op dezelfde gegevens: alles werkt nog, teamnotities zijn intern, antwoorden aan
@@ -6,7 +6,10 @@
 //  3. de back-up van de vorige versie wordt met de nieuwe code teruggezet en werkt; de klantlinks uit
 //     die back-up zijn daarbij (veilige standaard) ongeldig gemaakt;
 //  4. bouwronde 6: een nieuwe back-up met projectkoppelingen (einddatums) en klantvragen terugzetten;
-//     een verstreken einddatum blijft verstreken.
+//     een verstreken einddatum blijft verstreken;
+//  5. bouwronde 7: voorkeuren (thema, eigen dashboardindeling) blijven na de update; bestaande projecten
+//     hebben zonder instellen een automatische omslag; omslag (eigen frame) en vastgezette projecten gaan
+//     mee in een back-up en komen terug bij herstel.
 // Gebruik: npm run test:upgrade [-- <oude-commit>]
 'use strict';
 const fs = require('fs');
@@ -15,7 +18,7 @@ const path = require('path');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
 const REPO = path.resolve(__dirname, '..');
-const OLD_REV = process.argv[2] || '98ff4da';
+const OLD_REV = process.argv[2] || '14d0aba';
 const { client, upload, makeVideo, rid } = require(path.join(REPO, 'test/helpers'));
 const { restoreBackup, listBackups } = require(path.join(REPO, 'server/backup'));
 
@@ -77,6 +80,8 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
     await team.put(`/api/users/${kijker.data.id}/projects`, { projects: [{ projectId, level: 'view' }] });
     await team.put(`/api/users/${publiceerder.data.id}/projects`, { projects: [{ projectId, level: 'publish' }] });
   }
+  // Voorkeuren van vóór de update (thema en een eigen dashboardindeling).
+  const prefsSet = await team.put('/api/me/preferences', { theme: 'light', dashboard: { widgets: [{ id: 'tasks', size: 'wide' }, { id: 'recent' }] } });
   await team.post('/api/backups', { label: 'voor-update' });
   for (let i = 0; i < 100 && (await team.get('/api/backups')).data.job?.state === 'bezig'; i++) await new Promise((r) => setTimeout(r, 100));
   const oldBackup = (await team.get('/api/backups')).data.backups[0];
@@ -144,13 +149,21 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   const backups = await listBackups(env.BACKUP_DIR);
   ok('back-up van de vorige versie staat in de lijst als volledig', backups.some((b) => b.name === oldBackup.name && b.status === 'volledig'));
   // Bouwronde 6 op bestaande gegevens
+  // Bouwronde 7 op bestaande gegevens
+  const prefs = (await t2.get('/api/me/preferences')).data;
+  if (prefsSet.status === 200) ok('voorkeuren behouden: thema en eigen dashboardindeling', prefs.theme === 'light' && JSON.stringify(prefs.dashboard.widgets) === '[{"id":"tasks","size":"wide"},{"id":"recent","size":"normal"}]', JSON.stringify(prefs));
+  const proj = (await t2.get(`/api/projects/${projectId}`)).data;
+  ok('bestaand project heeft zonder instellen een automatische omslag', proj.cover?.mode === 'auto' && (await fetch(`${base}${proj.cover.url}`, { headers: { cookie: t2.cookie() } })).status === 200);
   ok('beheerder blijft beheerder na de update', (await t2.get('/api/session')).data.user.role === 'admin' && (await t2.get('/api/storage')).status === 200);
   if (hadRoles) {
     const users = (await t2.get('/api/users')).data;
     const roleOf = (email) => users.find((u) => u.email === email).projects[0]?.role;
     ok('oude niveaus omgezet zonder extra rechten (view → Meekijker, publish → Editor)', roleOf('kees@agency.nl') === 'meekijker' && roleOf('pim@agency.nl') === 'editor');
+    // Alleen bij bijwerken van vóór de rollen (0.6.0 en eerder) valt er iets om te zetten.
+    const oldHadRoleModel = fs.readFileSync(path.join(OLD, 'server', 'access.js'), 'utf8').includes('meekijker');
     const notice = (await t2.get('/api/system/roles-notice')).data.notice;
-    ok('melding voor de beheerder over omgezette rechten', notice?.changes?.length === 2);
+    if (oldHadRoleModel) ok('geen omzetmelding nodig (vorige versie kende de rollen al)', !notice?.changes?.length);
+    else ok('melding voor de beheerder over omgezette rechten', notice?.changes?.length === 2);
     const kees = client(base);
     await kees.post('/api/login', { email: 'kees@agency.nl', password: 'een-lang-wachtwoord' });
     ok('meekijker kan na de update kijken maar niet reageren', (await kees.get(`/api/videos/${created.videoId}`)).status === 200
@@ -222,6 +235,27 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   ok('na herstel: geldige koppeling (editor tot later) werkt', edUser.projects[0]?.expiresAt === later && edUser.projects[0]?.expired === false);
   const qs = (await t4.get(`/api/projects/${projectId}/questions`)).data.questions;
   ok('na herstel: klantvraag behouden', qs.some((x) => x.id === q4.id && x.body === 'Vraag in de back-up'));
+
+  // ---- 5. Omslag en vastzetten in back-up en herstel (bouwronde 7) ----
+  const frame = await t4.put(`/api/projects/${projectId}/cover`, { mode: 'frame', versionId: v2.versionId, time: 0.5 });
+  ok('eigen frame als omslag', frame.status === 200 && frame.data.cover.mode === 'frame', String(frame.status));
+  const coverBytes = Buffer.from(await (await fetch(`${base}${frame.data.cover.url}`, { headers: { cookie: t4.cookie() } })).arrayBuffer());
+  await t4.put(`/api/pins/${projectId}`, { pinned: true });
+  await t4.post('/api/backups', { label: 'ronde7' });
+  for (let i = 0; i < 100 && (await t4.get('/api/backups')).data.job?.state === 'bezig'; i++) await new Promise((r2) => setTimeout(r2, 100));
+  const b7 = (await t4.get('/api/backups')).data.backups[0];
+  ok('back-up met omslag en vastgezette projecten', b7?.status === 'volledig');
+  await t4.put(`/api/projects/${projectId}/cover`, { mode: 'auto' });
+  await t4.put(`/api/pins/${projectId}`, { pinned: false });
+  await stop(srv);
+  await restoreBackup({ backupPath: path.join(env.BACKUP_DIR, b7.name), dataDir: env.DATA_DIR, mediaDir: path.join(env.DATA_DIR, 'media') });
+  srv = await start(REPO);
+  const t5 = client(base);
+  await t5.post('/api/login', { email: 'sanne@agency.nl', password: 'een-lang-wachtwoord' });
+  const p5 = (await t5.get(`/api/projects/${projectId}`)).data;
+  const bytes5 = Buffer.from(await (await fetch(`${base}${p5.cover.url}`, { headers: { cookie: t5.cookie() } })).arrayBuffer());
+  ok('na herstel: eigen frame terug (zelfde beeld)', p5.cover.mode === 'frame' && Buffer.compare(bytes5, coverBytes) === 0);
+  ok('na herstel: vastgezet project weer vastgezet', p5.pinned === true);
   await stop(srv);
 
   fs.rmSync(T, { recursive: true, force: true });

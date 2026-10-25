@@ -126,14 +126,14 @@ async function waitUploadsDone(page, n) {
   const titles = await page.locator('.video-row-title').allTextContents();
   check('titels zonder bestandsextensie', titles.every((t) => !/\.mp4/i.test(t)), titles.join(' | '));
 
-  // Inline titel aanpassen
+  // Titel aanpassen via het ⋯-menu van de kaart (bouwronde 7)
   const row = page.locator('.video-row', { hasText: 'klant campagne edit v03' });
-  await row.hover();
-  await row.locator('button[aria-label^="Titel van"]').click();
-  await page.fill('.inline-input', 'Campagnefilm — Hoofdvideo');
-  await page.keyboard.press('Enter');
+  await row.locator('button[aria-label^="Acties voor"]').click();
+  await row.locator('.menu-item:has-text("Titel wijzigen")').click();
+  await page.fill('dialog input[aria-label^="Titel van"]', 'Campagnefilm — Hoofdvideo');
+  await page.click('dialog button:has-text("Opslaan")');
   await page.waitForSelector('.video-row-title:has-text("Campagnefilm — Hoofdvideo")');
-  check('titel inline aangepast', true);
+  check('titel aangepast via ⋯ → Titel wijzigen', true);
 
   // Tweede project voor een gevuld overzicht
   await page.click('.side-nav a:has-text("Projecten")');
@@ -354,12 +354,12 @@ async function waitUploadsDone(page, n) {
   await shot(page, '04-project-gevuld');
 
   // Ontbrekende thumbnails: nette vervanging i.p.v. een kapot plaatje
-  await page.route('**/poster', (r) => r.abort());
+  await page.route(/\/(poster|cover)(\?.*)?$/, (r) => r.abort());
   await page.click('.side-nav a:has-text("Projecten")');
   await page.waitForSelector('.project-card');
   await page.waitForTimeout(300);
   check('ontbrekende thumbnail toont een vervangend vlak', (await page.locator('.project-cover .poster-empty').count()) >= 2);
-  await page.unroute('**/poster');
+  await page.unroute(/\/(poster|cover)(\?.*)?$/);
 
   // Trage verbinding: laadstatus zichtbaar, daarna de inhoud
   const cdp = await ctx.newCDPSession(page);

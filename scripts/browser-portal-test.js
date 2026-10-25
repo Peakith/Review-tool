@@ -152,6 +152,8 @@ function logo() {
 
   // Projectpagina: gegroepeerd per type
   await page.goto(`${BASE}/projecten/${projectId}`);
+  // Bouwronde 7: standaard kaarten; de lijstweergave groepeert per type.
+  await page.click('.gallery-tools .view-toggle button[aria-label="Lijst"]');
   await page.waitForSelector('.kind-group');
   const groupNames = await page.locator('.kind-head').allTextContents();
   check('projectpagina: opleveringen per type gegroepeerd', groupNames.length === 4 && /Hoofdvideo/.test(groupNames[0]), groupNames.join(' | '));

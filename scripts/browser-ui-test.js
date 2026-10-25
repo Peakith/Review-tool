@@ -89,15 +89,15 @@ const mp4 = (name, size = '1920x1080', sec = 6, pat = 'testsrc2') => {
   await page.goto(`${BASE}/`);
   await page.waitForSelector('.dash-card');
   const titles = await page.$$eval('.dash-card h2', (els) => els.map((e) => e.textContent));
-  check('standaarddashboard: vier rustige blokken', JSON.stringify(titles) === JSON.stringify(['Mijn taken', 'Nieuwe feedback', 'Wacht op klant', 'Recente projecten']), titles.join(', '));
+  check('standaarddashboard: vier rustige blokken — Aandacht nodig, Vastgezet, Inbox, Bij de klant', JSON.stringify(titles) === JSON.stringify(['Aandacht nodig', 'Vastgezet', 'Inbox', 'Bij de klant']), titles.join(', '));
   check('geen bewerkknoppen buiten de aanpasmodus', !(await page.isVisible('.dash-grip')) && !(await page.isVisible('.dash-tools')));
   await shot(page, '51-dashboard');
   await page.click('button:has-text("Dashboard aanpassen")');
   check('aanpasmodus: grepen en knoppen zichtbaar', await page.isVisible('.dash-grip') && await page.isVisible('.dash-add button:has-text("Opslag")'));
   await page.click('.dash-add button:has-text("Opslag")');
   await page.waitForSelector('.dash-card[data-widget="storage"] .progress');
-  await page.click('.dash-card[data-widget="recent"] button:has-text("Breed")');
-  await page.click('.dash-card[data-widget="recent"] button[aria-label="Recente projecten omhoog"]');
+  await page.click('.dash-card[data-widget="inbox"] button:has-text("Breed")');
+  await page.click('.dash-card[data-widget="inbox"] button[aria-label="Inbox omhoog"]');
   await page.click('.dash-card[data-widget="waiting"] button:has-text("Verbergen")');
   await page.waitForFunction(() => !document.querySelector('.dash-card[data-widget="waiting"]'));
   // Verplaatsen met het toetsenbord via de greep
@@ -109,7 +109,7 @@ const mp4 = (name, size = '1920x1080', sec = 6, pat = 'testsrc2') => {
   await page.reload();
   await page.waitForSelector('.dash-card');
   const after = await page.$$eval('.dash-card', (els) => els.map((e) => `${e.dataset.widget}:${e.classList.contains('is-wide') ? 'breed' : 'normaal'}`));
-  check('dashboard: toevoegen, verbergen, verplaatsen (muis en toetsenbord) en formaat blijven bewaard', JSON.stringify(after) === JSON.stringify(['tasks:normaal', 'feedback:normaal', 'storage:normaal', 'recent:breed']), after.join(', '));
+  check('dashboard: toevoegen, verbergen, verplaatsen (muis en toetsenbord) en formaat blijven bewaard', JSON.stringify(after) === JSON.stringify(['attention:breed', 'inbox:breed', 'storage:normaal', 'pinned:breed']), after.join(', '));
 
   // Freelancer: eigen dashboard, geen beheerblokken en geen gegevens uit andere projecten
   const fctx = await browser.newContext(ctxOpts);
@@ -121,7 +121,7 @@ const mp4 = (name, size = '1920x1080', sec = 6, pat = 'testsrc2') => {
   await f.click('button[type=submit]');
   await f.waitForSelector('.dash-card');
   const ftitles = await f.$$eval('.dash-card h2', (els) => els.map((e) => e.textContent));
-  check('freelancer: eigen standaarddashboard (indeling beheerder niet overgenomen)', ftitles.length === 4 && ftitles[2] === 'Wacht op klant', ftitles.join(', '));
+  check('freelancer: eigen standaarddashboard (indeling beheerder niet overgenomen)', ftitles.length === 4 && ftitles[3] === 'Bij de klant', ftitles.join(', '));
   check('freelancer: niets uit een ander project op het dashboard', !(await f.textContent('.dash-grid')).includes('Geheim'));
   await f.click('button:has-text("Dashboard aanpassen")');
   const fAdd = await f.$$eval('.dash-add button', (els) => els.map((e) => e.textContent));
@@ -135,7 +135,7 @@ const mp4 = (name, size = '1920x1080', sec = 6, pat = 'testsrc2') => {
   await page.click('.profile-menu .menu-item:has-text("Licht")');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  check('licht thema direct toegepast', bodyBg === 'rgb(246, 246, 244)', bodyBg);
+  check('licht thema direct toegepast', bodyBg === 'rgb(244, 247, 251)', bodyBg);
   await page.keyboard.press('Escape');
   await page.reload();
   await page.waitForSelector('.dash-card');
@@ -160,7 +160,7 @@ const mp4 = (name, size = '1920x1080', sec = 6, pat = 'testsrc2') => {
     const probe = (v) => { const el = document.createElement('span'); el.style.color = `var(${v})`; document.body.append(el); const c = getComputedStyle(el).color; el.remove(); return rgb(c); };
     const bg = rgb(getComputedStyle(document.body).backgroundColor);
     const surface = (() => { const el = document.createElement('div'); el.style.background = 'var(--surface)'; document.body.append(el); const c = getComputedStyle(el).backgroundColor; el.remove(); return rgb(c); })();
-    return Object.fromEntries(['--text', '--text-2', '--text-3', '--accent-strong', '--warn-text', '--danger-text', '--ok-text', '--info-text'].map((v) => [v, Math.min(cr(probe(v), bg), cr(probe(v), surface)).toFixed(2)]));
+    return Object.fromEntries(['--text', '--text-2', '--text-3', '--sel', '--warn-text', '--danger-text', '--ok-text', '--info-text'].map((v) => [v, Math.min(cr(probe(v), bg), cr(probe(v), surface)).toFixed(2)]));
   });
   const cLight = await contrastOf(page);
   const cDark = await contrastOf(f);

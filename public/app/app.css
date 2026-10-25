@@ -935,3 +935,27 @@ a.dash-row:hover { background: var(--surface-2); border-radius: 6px; }
 /* Lijsten zonder tussenruimte (de regels scheiden de items). */
 .fb-list, .dl-list, .client-list, .inbox-list, .version-list, .brief-list, .link-list, .round-list, .release-list, .client-projects { gap: 0 !important; }
 .fb-row:hover, .client-row:hover, .inbox-item:hover { background: var(--row-hover); }
+
+/* ---------- Opdrachtbalk (⌘K / Ctrl+K) ---------- */
+.side-palette { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; margin: 6px 0 10px; padding: 6px 10px; border: 0; border-radius: var(--r); background: none; color: var(--text-2); font: 500 13px var(--font); cursor: pointer; text-align: left; }
+.side-palette:hover { background: var(--surface); color: var(--text); }
+.side-palette .side-palette-label { flex: 1; }
+.side-palette .icon { --icon-size: 15px; }
+dialog.palette { width: min(640px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 80px)); margin: 10vh auto auto; padding: 0; border: 1px solid var(--line-2); border-top: 3px solid var(--text); border-radius: var(--r-lg); background: var(--surface); color: var(--text); box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+dialog.palette::backdrop { background: var(--backdrop); }
+.palette-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.palette-head > .icon { color: var(--text-3); }
+.palette-input { flex: 1; border: 0 !important; box-shadow: none !important; background: none !important; padding: 6px 0 !important; font-size: 16px !important; }
+.palette-kbd, .palette-foot kbd { font: 600 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line-2); border-radius: var(--r-sm); color: var(--text-2); }
+.palette-list { overflow-y: auto; padding: 6px; flex: 1; }
+.palette-group { padding: 10px 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }
+.palette-item { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border-radius: var(--r); cursor: pointer; }
+.palette-item .icon { --icon-size: 16px; color: var(--text-3); flex-shrink: 0; }
+.palette-item.is-active { background: var(--text); color: var(--bg); }
+.palette-item.is-active .icon, .palette-item.is-active .palette-sub { color: inherit; opacity: .8; }
+.palette-label { font-weight: 600; min-width: 0; }
+.palette-sub { margin-left: auto; max-width: 50%; }
+.palette-empty { padding: 16px 10px; margin: 0; }
+.palette-foot { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--line); }
+@media (max-width: 640px) { .palette-foot { display: none; } .palette-sub { display: none; } }
+.tray-status.is-duplicate { color: var(--text); font-weight: 500; }

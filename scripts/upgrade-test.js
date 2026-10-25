@@ -1,10 +1,12 @@
-// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard f247164 = 0.5.1) met echte gegevens.
+// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard 98ff4da = 0.6.0) met echte gegevens.
 //  1. vorige versie (zonder .git) maakt account, project, video met twee versies, reviewlink, klantreactie,
 //     feedback, teamnotitie en -antwoord, akkoordlink en goedkeuring, en een back-up;
 //  2. de nieuwe code start op dezelfde gegevens: alles werkt nog, teamnotities zijn intern, antwoorden aan
 //     de klant blijven zichtbaar, klantportaal werkt;
 //  3. de back-up van de vorige versie wordt met de nieuwe code teruggezet en werkt; de klantlinks uit
-//     die back-up zijn daarbij (veilige standaard) ongeldig gemaakt.
+//     die back-up zijn daarbij (veilige standaard) ongeldig gemaakt;
+//  4. bouwronde 6: een nieuwe back-up met projectkoppelingen (einddatums) en klantvragen terugzetten;
+//     een verstreken einddatum blijft verstreken.
 // Gebruik: npm run test:upgrade [-- <oude-commit>]
 'use strict';
 const fs = require('fs');
@@ -13,7 +15,7 @@ const path = require('path');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
 const REPO = path.resolve(__dirname, '..');
-const OLD_REV = process.argv[2] || 'f247164';
+const OLD_REV = process.argv[2] || '98ff4da';
 const { client, upload, makeVideo, rid } = require(path.join(REPO, 'test/helpers'));
 const { restoreBackup, listBackups } = require(path.join(REPO, 'server/backup'));
 
@@ -67,6 +69,14 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   const approver = new URL((await team.post(`/api/videos/${created.videoId}/links`, { role: 'approver' })).data.url).pathname.split('/').pop();
   const appr = await guest.post(`/api/review/${approver}/versions/${v2.versionId}/approve`, { confirm: true, versionNumber: 2, requestId: rid() }, key);
   ok(`vorige versie (${OLD_REV}): gegevens aangemaakt incl. goedkeuring`, appr.status === 200, String(appr.status));
+  // Teamleden met de oude niveaus (alleen als de vorige versie al rollen kende).
+  const kijker = await team.post('/api/users', { name: 'Kees Kijker', email: 'kees@agency.nl', password: 'een-lang-wachtwoord', role: 'member' });
+  const publiceerder = await team.post('/api/users', { name: 'Pim Publiceer', email: 'pim@agency.nl', password: 'een-lang-wachtwoord', role: 'member' });
+  const hadRoles = kijker.status === 201;
+  if (hadRoles) {
+    await team.put(`/api/users/${kijker.data.id}/projects`, { projects: [{ projectId, level: 'view' }] });
+    await team.put(`/api/users/${publiceerder.data.id}/projects`, { projects: [{ projectId, level: 'publish' }] });
+  }
   await team.post('/api/backups', { label: 'voor-update' });
   for (let i = 0; i < 100 && (await team.get('/api/backups')).data.job?.state === 'bezig'; i++) await new Promise((r) => setTimeout(r, 100));
   const oldBackup = (await team.get('/api/backups')).data.backups[0];
@@ -133,6 +143,31 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   ok('bestaande projectlink houdt zijn bereik (geen vorige/volgende buiten het project)', (await client(base).get(new URL(link.url).pathname.replace('/p/', '/api/portal/'))).status === 200);
   const backups = await listBackups(env.BACKUP_DIR);
   ok('back-up van de vorige versie staat in de lijst als volledig', backups.some((b) => b.name === oldBackup.name && b.status === 'volledig'));
+  // Bouwronde 6 op bestaande gegevens
+  ok('beheerder blijft beheerder na de update', (await t2.get('/api/session')).data.user.role === 'admin' && (await t2.get('/api/storage')).status === 200);
+  if (hadRoles) {
+    const users = (await t2.get('/api/users')).data;
+    const roleOf = (email) => users.find((u) => u.email === email).projects[0]?.role;
+    ok('oude niveaus omgezet zonder extra rechten (view → Meekijker, publish → Editor)', roleOf('kees@agency.nl') === 'meekijker' && roleOf('pim@agency.nl') === 'editor');
+    const notice = (await t2.get('/api/system/roles-notice')).data.notice;
+    ok('melding voor de beheerder over omgezette rechten', notice?.changes?.length === 2);
+    const kees = client(base);
+    await kees.post('/api/login', { email: 'kees@agency.nl', password: 'een-lang-wachtwoord' });
+    ok('meekijker kan na de update kijken maar niet reageren', (await kees.get(`/api/videos/${created.videoId}`)).status === 200
+      && (await kees.post(`/api/versions/${v2.versionId}/comments`, { body: 'x', timecode: 1 })).status === 403);
+  }
+  // Inhoudshash van bestaande versies op de achtergrond; daarna wordt een identieke upload herkend.
+  let hashed = false;
+  for (let i = 0; i < 60 && !hashed; i++) {
+    const dupId = await upload(t2, file, { projectId });
+    const d = (await t2.post(`/api/uploads/${dupId}/check-duplicate`, {})).data;
+    await t2.del(`/api/uploads/${dupId}`);
+    hashed = d.duplicates?.length >= 1;
+    if (!hashed) await new Promise((r2) => setTimeout(r2, 500));
+  }
+  ok('identieke upload herkend, ook voor bestanden van vóór de update', hashed);
+  const q = await t2.post(`/api/projects/${projectId}/questions`, { body: 'Vraag na de update', requestId: rid() });
+  ok('vraag aan klant op een bestaand project', q.status === 201);
   await stop(srv);
 
   // ---- 3. Oude back-up terugzetten met de nieuwe code ----
@@ -157,6 +192,36 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   ok('na herstel: een nieuwe reviewlink werkt (afspeelversies opnieuw gemaakt voor de oudere back-up)', (await client(base).get(`/api/review/${freshLink}`)).status === 200 && ready);
   ok('na herstel: projectlink van ná de back-up bestaat niet meer (zoals verwacht)', (await client(base).get(new URL(link.url).pathname.replace('/p/', '/api/portal/'))).status === 404);
   ok('na herstel: oplevering van ná de back-up bestaat niet (geen verzonnen gegevens)', (await t3.get(`/api/projects/${projectId}/deliveries`)).data.history.length === 0);
+
+  // ---- 4. Nieuwe gegevens (bouwronde 6) in een back-up en terugzetten ----
+  const fl = (await t3.post('/api/users', { name: 'Fien Freelancer', email: 'fien@freelance.nl', password: 'een-lang-wachtwoord', role: 'freelancer' })).data.id;
+  const ed = (await t3.post('/api/users', { name: 'Ed Editor', email: 'ed@agency.nl', password: 'een-lang-wachtwoord', role: 'member' })).data.id;
+  const soon = new Date(Date.now() + 2500).toISOString();
+  const later = new Date(Date.now() + 7 * 86400000).toISOString();
+  await t3.put(`/api/users/${fl}/projects`, { projects: [{ projectId, role: 'freelancer', expiresAt: soon }] });
+  await t3.put(`/api/users/${ed}/projects`, { projects: [{ projectId, role: 'editor', expiresAt: later }] });
+  const q4 = (await t3.post(`/api/projects/${projectId}/questions`, { body: 'Vraag in de back-up', requestId: rid() })).data.question;
+  await t3.post('/api/backups', { label: 'ronde6' });
+  for (let i = 0; i < 100 && (await t3.get('/api/backups')).data.job?.state === 'bezig'; i++) await new Promise((r2) => setTimeout(r2, 100));
+  const newBackup = (await t3.get('/api/backups')).data.backups[0];
+  ok('back-up met projectkoppelingen en klantvragen', newBackup?.status === 'volledig');
+  await new Promise((r2) => setTimeout(r2, 3000)); // de korte einddatum is nu verstreken
+  await stop(srv);
+  await restoreBackup({ backupPath: path.join(env.BACKUP_DIR, newBackup.name), dataDir: env.DATA_DIR, mediaDir: path.join(env.DATA_DIR, 'media') });
+  srv = await start(REPO);
+  const t4 = client(base);
+  await t4.post('/api/login', { email: 'sanne@agency.nl', password: 'een-lang-wachtwoord' });
+  const users4 = (await t4.get('/api/users')).data;
+  const flUser = users4.find((u) => u.email === 'fien@freelance.nl');
+  const edUser = users4.find((u) => u.email === 'ed@agency.nl');
+  ok('na herstel: freelanceraccount en koppeling met einddatum behouden', flUser?.role === 'freelancer' && flUser.projects[0]?.expiresAt === soon);
+  ok('na herstel: verstreken einddatum blijft verstreken', flUser.projects[0]?.expired === true);
+  const fien = client(base);
+  await fien.post('/api/login', { email: 'fien@freelance.nl', password: 'een-lang-wachtwoord' });
+  ok('na herstel: verlopen freelancer heeft geen toegang', (await fien.get(`/api/freelance/projects/${projectId}`)).status === 403 && (await fien.get('/api/freelance/overview')).data.projects.length === 0);
+  ok('na herstel: geldige koppeling (editor tot later) werkt', edUser.projects[0]?.expiresAt === later && edUser.projects[0]?.expired === false);
+  const qs = (await t4.get(`/api/projects/${projectId}/questions`)).data.questions;
+  ok('na herstel: klantvraag behouden', qs.some((x) => x.id === q4.id && x.body === 'Vraag in de back-up'));
   await stop(srv);
 
   fs.rmSync(T, { recursive: true, force: true });

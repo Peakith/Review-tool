@@ -493,6 +493,11 @@ const COLUMNS = [
   ['project_members', 'expires_at', 'TEXT'],
   ['project_members', 'added_by', 'INTEGER'],
   ['project_members', 'updated_at', 'TEXT'],
+  // Identieke uploads herkennen op inhoud (SHA-256), en welke upload een versie opleverde.
+  ['versions', 'sha256', 'TEXT'],
+  ['versions', 'sha256_error', 'TEXT'],
+  ['versions', 'source_upload_id', 'TEXT'],
+  ['uploads', 'sha256', 'TEXT'],
 ];
 
 const DEFAULT_BRANDS = [
@@ -553,6 +558,7 @@ function migrate(db) {
     -- Per klantlink hooguit één geldige afgeleide reviewlink per video.
     CREATE UNIQUE INDEX IF NOT EXISTS uq_share_links_client ON share_links(client_link_id, video_id) WHERE client_link_id IS NOT NULL AND revoked_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
+    CREATE INDEX IF NOT EXISTS idx_versions_sha256 ON versions(sha256);
     CREATE INDEX IF NOT EXISTS idx_client_links_client ON client_links(client_id);`);
   for (const [key, step] of Object.entries(ONCE)) {
     if (db.prepare('SELECT 1 FROM app_meta WHERE key = ?').get(key)) continue;

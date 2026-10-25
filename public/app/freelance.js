@@ -7,6 +7,7 @@ import { renderComments, markersFrom } from '/shared/comments.js';
 import { THEMES, themePref } from '/shared/theme.js';
 import { saveTheme } from './settings.js';
 import { viewInbox, startInboxPolling, refreshInboxCount } from './inbox.js';
+import { openPalette, paletteShortcut } from './palette.js';
 
 let shell = null;
 let pageEl = null;
@@ -73,6 +74,7 @@ function buildShell(root, logout) {
       h('div', { class: 'side-top' }, h('a', { href: '/', 'data-nav': true, class: 'brand' }, h('span', { class: 'brand-mark' }, icon('play')), h('span', {}, 'Studio Review')), menuBtn),
       h('div', { class: 'side-scroll' },
         h('p', { class: 'side-role small' }, icon('eye'), 'Freelancer · alleen bekijken'),
+        h('button', { type: 'button', class: 'side-palette', onClick: () => openPalette(), 'aria-keyshortcuts': 'Meta+K Control+K' }, icon('command'), h('span', { class: 'side-palette-label' }, 'Zoeken'), h('kbd', { class: 'side-kbd' }, paletteShortcut())),
         h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
           link('/', 'home', 'folder', 'Mijn projecten'),
           link('/inbox', 'inbox', 'inbox', 'Inbox', h('span', { class: 'side-count', id: 'inbox-count', hidden: true, 'aria-label': 'ongelezen' })))),

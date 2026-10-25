@@ -202,10 +202,10 @@ function teamRoutes(router, db, config, { finalize, access, storage, notifier, v
   function insertVersion(videoId, file, user) {
     const number = (db.prepare('SELECT MAX(number) AS n FROM versions WHERE video_id = ?').get(videoId).n || 0) + 1;
     const info = db.prepare(`INSERT INTO versions
-      (video_id, number, original_filename, stored_name, extension, mime_type, size_bytes, duration_seconds, width, height, has_poster, status, uploaded_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'concept', ?, ?)`)
+      (video_id, number, original_filename, stored_name, extension, mime_type, size_bytes, duration_seconds, width, height, has_poster, status, uploaded_by, created_at, sha256, source_upload_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'concept', ?, ?, ?, ?)`)
       .run(videoId, number, file.originalFilename, file.storedName, file.extension, file.mimeType, file.size,
-        file.duration, file.width, file.height, file.hasPoster ? 1 : 0, user.id, now());
+        file.duration, file.width, file.height, file.hasPoster ? 1 : 0, user.id, now(), file.sha256 || null, file.uploadId || null);
     const versionId = Number(info.lastInsertRowid);
     db.prepare('INSERT INTO status_events (version_id, from_status, to_status, event, actor_type, actor_label, actor_user_id, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)')
       .run(versionId, 'concept', 'upload', 'team', user.name, user.id, now());

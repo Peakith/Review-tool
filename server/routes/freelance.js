@@ -104,6 +104,22 @@ function freelanceRoutes(router, db, config, { storage }) {
     res.json({ projects });
   });
 
+  // Zoeken (⌘K) binnen de geldige koppelingen: projectnamen en titels van gepubliceerde video's.
+  router.get('/freelance/search', (req, res) => {
+    onlyFreelancer(req);
+    const q = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
+    const at = new Date().toISOString();
+    const projects = db.prepare(`SELECT p.*, pm.expires_at AS member_expires_at FROM project_members pm JOIN projects p ON p.id = pm.project_id
+      WHERE pm.user_id = ? AND p.trashed_at IS NULL ORDER BY p.created_at DESC`).all(req.user.id).filter((p) => activeAt({ expires_at: p.member_expires_at }, at));
+    const hit = (t) => !q || String(t || '').toLowerCase().includes(q);
+    const out = { projects: [], videos: [] };
+    for (const p of projects) {
+      if (hit(p.name) || hit(p.client_name)) out.projects.push({ title: p.name, sub: p.client_name || '', href: `/projecten/${p.id}` });
+      for (const v of videosOf(p)) if (q && hit(v.title)) out.videos.push({ title: v.title, sub: `${p.name} · klant ziet v${v.version.number}`, href: `/video/${v.id}` });
+    }
+    res.json({ q, groups: { projects: { items: out.projects.slice(0, 8) }, videos: { items: out.videos.slice(0, 8) } } });
+  });
+
   router.get('/freelance/projects/:id', (req, res) => {
     const { project, member } = membership(req, intParam(req.params.id));
     res.json({ project: { id: project.id, name: project.name, clientName: project.client_name || '', archived: !!project.archived_at, ...expiry(member) }, videos: videosOf(project) });

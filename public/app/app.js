@@ -25,6 +25,7 @@ import { viewInbox, startInboxPolling, refreshInboxCount } from './inbox.js';
 import { routeFreelance } from './freelance.js';
 import { peopleDialog } from './people.js';
 import { askDialog, questionsBlock } from './questions.js';
+import { initPalette, setPaletteActions, openPalette, paletteShortcut } from './palette.js';
 
 const root = document.getElementById('root');
 let session = null;
@@ -60,6 +61,8 @@ async function route() {
   if (!session.user) { shellEl = null; return session.needsSetup ? viewSetup() : viewLogin(); }
   // Thema van dit account (ook direct na inloggen, zonder herladen).
   if (session.theme && session.theme !== themePref()) applyTheme(session.theme);
+  initPalette({ navigate, session });
+  setPaletteActions([]);
   // Freelancers krijgen hun eigen, alleen-lezen omgeving (geen teamschermen).
   if (session.user.role === 'freelancer') {
     try {
@@ -121,6 +124,7 @@ function ensureShell() {
   if (shellEl && root.contains(shellEl)) { refreshSidebar(); return; }
   const tray = createUploadTray({
     openItem: (item) => navigate(item.target.kind === 'video' ? `/video/${item.result.videoId}` : `/video/${item.target.videoId}?v=${item.result.versionId}`),
+    openPath: (path) => navigate(path),
   });
   const menuBtn = button('', { icon: 'grid', variant: 'ghost', 'aria-label': 'Menu', class: 'btn btn-ghost btn-icon menu-btn', onClick: () => shellEl.classList.toggle('nav-open') });
   const navLink = (href, section, iconName, label, extra) => h('a', { href, 'data-nav': true, dataset: { section } }, icon(iconName), h('span', { class: 'nav-label' }, label), extra);
@@ -130,6 +134,7 @@ function ensureShell() {
       menuBtn),
     h('div', { class: 'side-scroll' },
       searchBox({ navigate }),
+      h('button', { type: 'button', class: 'side-palette', onClick: () => openPalette(), 'aria-keyshortcuts': 'Meta+K Control+K' }, icon('command'), h('span', { class: 'side-palette-label' }, 'Opdrachten'), h('kbd', { class: 'side-kbd' }, paletteShortcut())),
       h('nav', { class: 'side-nav', 'aria-label': 'Hoofdmenu' },
         navLink('/', 'dashboard', 'grid', 'Dashboard'),
         navLink('/projecten', 'projects', 'folder', 'Projecten'),
@@ -357,6 +362,7 @@ async function viewProjects() {
   document.title = 'Projecten — Studio Review';
   // Alleen beheerders maken projecten; teamleden zien de projecten waar ze toegang toe hebben.
   const newBtn = session.user.isAdmin ? button('Nieuw project', { icon: 'plus', variant: 'primary', onClick: newProjectDialog }) : null;
+  setPaletteActions([session.user.isAdmin ? { label: 'Nieuw project…', icon: 'plus', keywords: 'project aanmaken', run: newProjectDialog } : null]);
   mount(pageEl, h('div', { class: 'page' }, pageHeader({ title: 'Projecten', actions: newBtn }),
     h('div', { class: 'project-grid' }, skeletonRows(3, 'skeleton-card'))));
   const projects = await api('GET', '/api/projects');
@@ -719,6 +725,13 @@ async function viewProject(id, tab = 'videos') {
       project.videos.length && mayUpload ? h('p', { class: 'drop-hint small muted' }, icon('upload'), 'Tip: sleep bestanden op deze pagina om nieuwe video’s toe te voegen. Een nieuwe versie van een bestaande video upload je vanaf die video.') : null,
     ] : briefingHost);
   if (mayUpload && isVideos) makeDropTarget(content, (files) => addVideos(project, files, onDone), 'Loslaten om als nieuwe video’s toe te voegen');
+  setPaletteActions([
+    mayUpload ? { label: 'Video’s uploaden naar dit project', sub: project.name, icon: 'upload', keywords: 'nieuwe video upload bestand', run: () => (isVideos ? chooseFiles() : navigate(`/projecten/${project.id}`)) } : null,
+    can(project.myLevel, 'publish') && !archived ? { label: 'Vraag aan klant…', sub: project.name, icon: 'help', keywords: 'vraag klant', run: () => askDialog({ project, videos: project.videos, onDone: () => navigate(`/projecten/${project.id}/feedback`) }) } : null,
+    mayManage ? { label: 'Personen en toegang…', sub: project.name, icon: 'users', keywords: 'persoon toevoegen freelancer rol', run: () => peopleDialog(project).then(() => route()) } : null,
+    project.videos.length ? { label: 'Feedback exporteren…', sub: project.name, icon: 'fileDown', keywords: 'pdf csv export', run: () => exportDialog({ projectId: project.id, videos: project.videos }) } : null,
+    { label: 'Feedback en taken van dit project', sub: project.name, icon: 'tasks', keywords: 'feedback taken', run: () => navigate(`/projecten/${project.id}/feedback`) },
+  ]);
   mount(pageEl, content);
   if (isVideos) draw();
   else if (tab === 'feedback') {
@@ -968,6 +981,12 @@ async function viewVideo(id) {
   versionSelect.addEventListener('change', () => navigate(`/video/${video.id}?v=${versionSelect.value}`));
 
   const shareBtn = can(level, 'publish') ? button('Delen', { icon: 'link', onClick: () => shareDialog(video, refresh) }) : null;
+  setPaletteActions([
+    may('upload') ? { label: 'Nieuwe versie uploaden…', sub: video.title, icon: 'layers', keywords: 'upload versie bestand', run: () => newVersionDialog(video) } : null,
+    can(level, 'publish') ? { label: 'Delen en links…', sub: video.title, icon: 'link', keywords: 'klant link akkoord', run: () => shareDialog(video, refresh) } : null,
+    can(level, 'publish') && clientVersion && !archived ? { label: 'Vraag aan klant over deze video…', sub: `${video.title} · versie ${clientVersion.number}`, icon: 'help', keywords: 'vraag klant', run: () => askDialog({ project: video.project, video, version: clientVersion }) } : null,
+    { label: 'Terug naar het project', sub: video.project.name, icon: 'folder', run: () => navigate(`/projecten/${video.project.id}`) },
+  ]);
   if (archived) composer.setDisabled(true, 'Gearchiveerd: reageren is niet meer mogelijk.');
 
   const content = h('div', { class: 'workspace page-drop' },

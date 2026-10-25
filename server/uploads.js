@@ -8,6 +8,7 @@ const { HttpError } = require('./status');
 const { extensionOf, FORMATS, probe, makePoster, resolveTools } = require('./media');
 const { diskFree } = require('./storage');
 const { ATTACHMENT_TYPES, checkAttachment, verifyContent } = require('./files');
+const { hashFile } = require('./filehash');
 
 /**
  * Hervatbare uploads in blokken. De browser stuurt blokken van ~8 MB met een
@@ -136,6 +137,30 @@ function uploadRoutes(router, db, config, { access, storage }) {
     });
   });
 
+  /**
+   * Bestaat exact dit bestand (zelfde inhoud) al in het project van deze upload? Alleen versies in
+   * datzelfde project, waar de uploader rechten heeft; nooit iets over andere projecten. De hash wordt
+   * gestreamd berekend en bij de upload bewaard, dus een herhaald verzoek rekent niet opnieuw en meldt
+   * nooit de versie die uit deze upload zelf is ontstaan.
+   */
+  router.post('/uploads/:id/check-duplicate', async (req, res) => {
+    const up = getUpload(req);
+    if (up.purpose !== 'video' || !up.project_id) return res.json({ duplicates: [] });
+    if (up.received_bytes !== up.size_bytes) throw new HttpError(409, 'De upload is nog niet compleet.');
+    access.project(req, up.project_id, 'upload');
+    let digest = up.sha256;
+    if (!digest) {
+      busy.add(up.id);
+      try { digest = await hashFile(tmpPath(up.id)); } finally { busy.delete(up.id); }
+      db.prepare('UPDATE uploads SET sha256 = ?, updated_at = ? WHERE id = ?').run(digest, now(), up.id);
+    }
+    const rows = db.prepare(`SELECT ver.id AS version_id, ver.number, ver.original_filename, v.id AS video_id, v.title, v.archived_at
+      FROM versions ver JOIN videos v ON v.id = ver.video_id
+      WHERE v.project_id = ? AND ver.sha256 = ? AND ver.trashed_at IS NULL AND v.trashed_at IS NULL AND (ver.source_upload_id IS NULL OR ver.source_upload_id != ?)
+      ORDER BY ver.id DESC LIMIT 5`).all(up.project_id, digest, up.id);
+    res.json({ duplicates: rows.map((r) => ({ videoId: r.video_id, videoTitle: r.title, versionId: r.version_id, versionNumber: r.number, originalFilename: r.original_filename, archived: !!r.archived_at })) });
+  });
+
   router.delete('/uploads/:id', async (req, res) => {
     const up = getUpload(req);
     db.prepare('DELETE FROM uploads WHERE id = ?').run(up.id);
@@ -177,6 +202,8 @@ function uploadRoutes(router, db, config, { access, storage }) {
           throw new HttpError(422, err.message);
         }
       }
+      // Inhoudshash voor het herkennen van identieke uploads (al berekend bij de controle, anders nu).
+      const sha256 = up.sha256 || await hashFile(source);
       // Thumbnail maken vanuit het tijdelijke bestand, daarna beide in de opslag zetten.
       const posterTmp = `${source}.jpg`;
       const hasPoster = await makePoster(source, posterTmp, info?.duration, tools);
@@ -193,6 +220,8 @@ function uploadRoutes(router, db, config, { access, storage }) {
         width: info?.width ?? null,
         height: info?.height ?? null,
         hasPoster,
+        sha256,
+        uploadId: up.id,
       };
     } finally {
       busy.delete(up.id);

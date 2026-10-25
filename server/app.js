@@ -24,6 +24,7 @@ const { clientPortalRoutes, clientTeamRoutes } = require('./routes/clients');
 const { createNotifier } = require('./notify');
 const { freelanceRoutes, freelanceGate } = require('./routes/freelance');
 const { memberRoutes } = require('./routes/members');
+const { startHashBackfill } = require('./filehash');
 const { questionTeamRoutes, questionClientRoutes } = require('./questions');
 const { inboxRoutes } = require('./routes/inbox');
 const { createVariants } = require('./variants');
@@ -182,6 +183,8 @@ function createApp(overrides = {}) {
   // Afspeelversies op de achtergrond (ook voor oudere versies die er nog geen hebben).
   const variants = createVariants({ db, config, storage });
   if (config.variants !== false) variants.start();
+  // Hash van oudere versies op de achtergrond (voor het herkennen van identieke uploads).
+  const hashJob = config.hashBackfill === false ? { stop() {} } : startHashBackfill({ db, storage });
   reviewRoutes(api, db, config, { storage, notifier, variants });
   portalRoutes(api, db, config, { storage });
   clientPortalRoutes(api, db, config, { storage });
@@ -301,7 +304,7 @@ function createApp(overrides = {}) {
   const needsSetup = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
   return {
     app, db, config, uploads, storage, access, setupToken, needsSetup, runCleanup, mediaCheck, variants,
-    stop() { clearInterval(cleanupTimer); variants.stop(); },
+    stop() { clearInterval(cleanupTimer); variants.stop(); hashJob.stop(); },
   };
 }
 

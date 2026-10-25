@@ -355,7 +355,7 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   check('activiteit: uitleg wat signalen niet bewijzen', /betekent niet dat de video volledig is bekeken/.test(await page.textContent('.fb-intro')));
   await shot(page, '95-team-klantactiviteit', { fullPage: true });
   await page.selectOption('.fb-filter select[aria-label="Gebeurtenis"]', 'download_requested');
-  await page.waitForFunction(() => [...document.querySelectorAll('.act-row strong')].every((s) => s.textContent === 'Download aangevraagd'));
+  await page.waitForFunction(() => { const s = [...document.querySelectorAll('.act-row strong')]; return s.length > 0 && s.every((x) => x.textContent === 'Download aangevraagd'); });
   const dlRows = await page.$$eval('.act-row', (r) => r.length);
   check('activiteit: filter op gebeurtenis', dlRows >= 2 && page.url().includes('soort=download_requested'), String(dlRows));
   await page.selectOption('.fb-filter select[aria-label="Gebeurtenis"]', '');

@@ -26,6 +26,16 @@ function brandRoutes(router, db, config, { access, storage }) {
     updatedAt: b.updated_at,
   });
 
+  // Naam van de studio zoals klanten die zien ("Bij Studio Brutaal"). Lezen voor iedereen, wijzigen door beheerders.
+  router.get('/settings/studio-name', (req, res) => res.json({ name: require('../client').studioName(db) }));
+  router.put('/settings/studio-name', (req, res) => {
+    access.requireAdmin(req);
+    const name = String(req.body?.name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!name) throw new HttpError(400, 'Vul de naam van de studio in.');
+    db.prepare("INSERT INTO settings (key, value) VALUES ('studio_name', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(name);
+    res.json({ name });
+  });
+
   router.get('/brands', (req, res) => {
     res.json(db.prepare('SELECT * FROM brands ORDER BY name').all().map(dto));
   });

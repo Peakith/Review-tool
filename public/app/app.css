@@ -311,6 +311,7 @@ code { font: 12.5px var(--mono); background: var(--surface-3); padding: 1px 5px;
 }
 @media (max-width: 860px) {
   .app { grid-template-columns: 1fr; background: var(--bg); }
+  .app { grid-template-rows: auto 1fr; }
   .sidebar { position: sticky; top: 0; z-index: 60; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .side-top { padding: 10px 12px; }
   .menu-btn { display: inline-flex; }
@@ -959,3 +960,4 @@ dialog.palette::backdrop { background: var(--backdrop); }
 .palette-foot { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--line); }
 @media (max-width: 640px) { .palette-foot { display: none; } .palette-sub { display: none; } }
 .tray-status.is-duplicate { color: var(--text); font-weight: 500; }
+.inline-form { display: flex; gap: 8px; align-items: center; max-width: 480px; }

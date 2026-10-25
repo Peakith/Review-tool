@@ -61,7 +61,7 @@ Deze punten zijn **niet op een echte Mac getest**: de start- en stopknop zijn al
 | # | Doe | Verwacht | ✓ |
 |---|---|---|---|
 | 25 | Dubbelklik `Start Studio Review.command` in de nieuwe map. | macOS vraagt eenmalig om toestemming (zie de README). Daarna opent Terminal, de controles staan op ✓, de vraag om gegevens over te nemen verschijnt, en de browser opent vanzelf. | ☐ |
-| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.6.0 (build …)". | ☐ |
+| 26 | Log in. | Je bestaande projecten, video's, reacties en klantlinks zijn er allemaal. Onderin de zijbalk staat "Studio Review 0.7.0 (build …)". | ☐ |
 | 27 | Dubbelklik nog eens op de startknop. | Er start niets nieuws; de bestaande sessie opent in de browser. | ☐ |
 | 28 | **Instellingen › Opslag & back-ups › Nu back-up maken.** | De back-up krijgt "compleet en gecontroleerd", met de juiste aantallen en in een map onder `~/Studio Review/backups`. | ☐ |
 | 29 | **Instellingen › Team & rechten** → voeg een freelancer toe met toegang "Bekijken en reageren" tot één project. Log in als freelancer (privévenster). | De freelancer ziet alleen dat project, kan reageren, maar ziet geen upload-, deel- of publiceerknoppen. | ☐ |
@@ -158,6 +158,27 @@ Gebruik de aparte testgegevensmap. Doe klantstappen in een privévenster, in **S
 | 89 | Klant: probeer de downloadknop. Maak daarna een reviewlink **met** download. | Zonder downloadrecht: geen knop. Met: wel, onder de oorspronkelijke bestandsnaam. | ☐ |
 | 90 | Geef twee goedgekeurde versies vrij (Oplevering). Opleverpagina klant → **Alles downloaden (ZIP)**. Open de ZIP met dubbelklik in de Finder. | De browser toont de voortgang. In de ZIP: de bestanden onder hun oorspronkelijke naam (dubbele namen elk in een eigen map) en `Overzicht.txt`. *Uitpakken met Archiefhulpprogramma is niet op een Mac getest.* | ☐ |
 | 91 | Op je iPhone of in Safari: open een reviewlink en kies een kwaliteit. | Speelt af (Safari gebruikt zijn eigen HLS). *Niet getest: meld wat je ziet.* | ☐ |
+
+## L. Bouwronde 6: vormgeving, rollen, freelancer, klantvragen, ⌘K (± 25 min, op je Mac)
+Gebruik de aparte testgegevensmap, met **twee projecten** (A en B, elk met een gedeelde video) en
+**twee extra accounts** die je in stap 92 maakt. Gebruik voor elk account een eigen browservenster
+(of een privévenster). Safari, een echte iPhone en macOS-systeemmeldingen zijn in deze ronde **niet**
+getest (alleen Chrome op Linux en Pixel 7-emulatie): meld wat je ziet.
+
+| # | Doe | Verwacht | ✓ |
+|---|---|---|---|
+| 92 | **Instellingen › Team & rechten › Account toevoegen**: “Eddy Editor” (Teamlid) en “Fien Freelancer” (Freelancer). Bij Fien: project A → **Freelancer**, met een einddatum over 10 minuten. | Onder **Rollen en rechten** staat de rechtenmatrix. Fien staat er met “Project A (freelancer, tijdelijk)”. | ☐ |
+| 93 | Open project A → **Personen** → **Persoon toevoegen** → kies Eddy → rol **Editor** → Toevoegen. | Eddy staat in de lijst als Editor; beheerders staan apart als “altijd toegang”. De rol staat standaard op Meekijker tot je hem kiest. | ☐ |
+| 94 | Log in als Eddy. | Alleen project A is zichtbaar. Project B via de adresbalk: “Niet gevonden”. Eddy kan reageren en uploaden in A, maar ziet geen **Delen**. | ☐ |
+| 95 | Log in als Fien. | Eigen eenvoudige omgeving: **Klantfeedback** met alleen project A, “Toegang tot … CET/CEST”. Bij de video: alleen gepubliceerde versie en verstuurde klantfeedback (met tijdcodes, fragmenten en tekeningen), geen invoerveld, geen interne notities. | ☐ |
+| 96 | Als Fien: druk **⌘K** en typ een woord uit de titel van een video in project B. | Geen resultaat uit B. Acties alleen: Mijn projecten, Inbox, Mijn account. **Esc** sluit. | ☐ |
+| 97 | Wacht tot Fiens einddatum voorbij is (of trek de toegang in via **Personen › ⋯ › Toegang nu intrekken**). Ververs bij Fien de videopagina. | “Je toegang tot dit project is verlopen”. Op de startpagina is project A verdwenen. Bij het team blijft de status van de video ongewijzigd. | ☐ |
+| 98 | Als beheerder in project A: **Delen › Vraag aan klant…** → kies de video → “Klopt de naam in de eindtitel?” → Vraag delen met klant. | De vraag staat onder **Feedback › Vragen aan de klant** als **Open**. | ☐ |
+| 99 | Privévenster: open het klantportaal van de klant van project A. | Bovenaan “Er staan … video’s voor je klaar. En 1 vraag van het team.” Dan **Jouw acties** (met de vraag), **Bij Studio Brutaal**, **Goedgekeurd** (ingeklapt) en **Definitieve bestanden** (alleen als er iets is vrijgegeven). | ☐ |
+| 100 | Klik bij de vraag **Beantwoorden**, typ een antwoord en je naam, klik twee keer snel op **Antwoord versturen**. | Eén antwoord, onder **Beantwoorde vragen** met “(naam zelf ingevuld)”. Het team krijgt één melding in de inbox. De status van de video verandert niet. | ☐ |
+| 101 | Upload in project A hetzelfde bestand nog eens, maar hernoem het eerst in de Finder. Upload tegelijk een ander bestand. | Bij het hernoemde bestand: “Dit bestand staat al in dit project als …, versie …” met **Bestaande openen**, **Annuleren** en **Toch uploaden**. Het andere bestand gaat gewoon door. **Annuleren** laat niets achter; **Toch uploaden** maakt een gewone nieuwe video met de nieuwe bestandsnaam. | ☐ |
+| 102 | Druk **⌘K** in een project, typ “upload”, kies **Video’s uploaden naar dit project** met de pijltjes en Enter. | De bestandskiezer opent (dezelfde als via de knop). | ☐ |
+| 103 | Wissel het thema (profielmenu) tussen Licht en Donker en bekijk een project, de werkplek en het klantportaal. Maak het venster ook smal (zoals een telefoon); een echte telefoon kan de links nog niet openen (alleen localhost). | Alles leesbaar in beide thema’s; het merk van de klant (logo, kleur) blijft zichtbaar. | ☐ |
 
 ## Handmatige browsertestlijst
 Automatisch getest (`npm run test:browser`, zie de PR): **Chrome 141 desktop (Linux, headless)** en **Chrome 141 met Pixel 7-emulatie**. Al het andere moet nog met de hand. Voer per browser minstens stappen 8–11, 13, 19–20 en 7 uit.

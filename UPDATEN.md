@@ -5,6 +5,58 @@ Vanaf versie 0.2.0 staan programma en gegevens los van elkaar:
 - **Programma**: de uitgepakte map. Bij elke update komt er een nieuwe.
 - **Gegevens**: `~/Studio Review/` met daarin `gegevens/`, `backups/` en `instellingen.env`. Deze map blijft gewoon staan.
 
+## Van 0.6.0 naar 0.7.0 (bouwronde 6: nieuwe vormgeving, rollen, freelancers, klantvragen, ⌘K)
+
+Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` blijven staan, en je accounts,
+klantlinks, feedback, goedkeuringen, opleveringen en back-ups blijven werken.
+
+1. **Maak eerst een back-up en controleer hem:** **Instellingen › Opslag & back-ups › Nu back-up maken**.
+   Wacht tot er bij de nieuwe back-up “compleet en gecontroleerd” staat. Ga niet verder zonder.
+2. **Stop de app:** dubbelklik `Stop Studio Review.command` in de map van 0.6.0.
+3. **Pak de nieuwe ZIP uit in een nieuwe map.** Laat de map van 0.6.0 staan (die heb je nodig als je
+   terug wilt).
+4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.**
+5. **Controleer:** ververs een openstaand tabblad; onderin de zijbalk staat **Studio Review 0.7.0**. Open
+   een project en een video, en open één klantlink in een privévenster.
+
+**Internet bij het installeren (eerlijk):** 0.7.0 heeft **geen nieuwe npm-onderdelen** ten opzichte van
+0.6.0 (zelfde express en pdfkit; de videospeler hls.js zit in de ZIP). De startknop installeert die
+onderdelen bij de eerste start in de nieuwe map, uit de npm-cache op je Mac (`~/.npm`) als ze daar staan.
+Dat werkte in de test zonder netwerk vanaf 0.6.0. Is die cache leeg (bijvoorbeeld op een andere Mac of na
+opschonen), dan is er bij de eerste start **wel internet nodig**, of kopieer `node_modules` uit de map
+van 0.6.0. Node.js zelf en ffmpeg moeten al geïnstalleerd zijn; die zitten niet in de ZIP. Een
+meegeleverde browserbibliotheek betekent dus niet dat een verse ZIP op elke Mac volledig offline
+installeert.
+
+**Wat er bij de eerste start gebeurt**
+- **Rechten worden omgezet naar rollen**, zonder dat iemand er rechten bij krijgt: Beheren →
+  Projectleider, Uploaden → Editor, Publiceren en delen → Editor (publiceren vervalt), Bekijken en
+  reageren → Meekijker (reageren vervalt; toegewezen taken worden losgekoppeld met toelichting).
+  Beheerders blijven beheerder. Bovenaan **Instellingen › Team & rechten** staat wie een recht verloor;
+  geef daar of via **Personen** in het project bewust de juiste rol. Zie [docs/ROLLEN.md](docs/ROLLEN.md).
+- Voor bestaande video's wordt op de achtergrond een inhoudscode (hash) berekend, één bestand tegelijk,
+  zodat identieke uploads ook voor oudere bestanden worden herkend. Dat leest elk bestand één keer en
+  kost bij veel materiaal even tijd; de app blijft bruikbaar.
+
+**Wat je direct merkt**
+- Nieuwe, rustigere vormgeving (zwart-wit, lijnen in plaats van kaders). Alles staat nog op dezelfde plek
+  of is terug te vinden via [docs/HERINRICHTING.md](docs/HERINRICHTING.md). Je thema en dashboard blijven.
+- Klanten zien op hun startpagina eerst **Jouw acties**, dan **Bij Studio Brutaal**, **Goedgekeurd**
+  (ingeklapt) en **Definitieve bestanden**.
+- Nieuw: **Personen** per project (met tijdelijke toegang), **freelanceraccounts** (alleen klantfeedback
+  bekijken), **Vraag aan klant**, de **opdrachtbalk** (⌘K) en een melding bij **identieke uploads**.
+- Huisstijl: er zijn geen huisstijlwaarden verzonnen. Pas logo en kleur aan in **Instellingen › Merken**
+  (de standaardkleuren zijn plaatshouders) en, als je wilt, de studionaam die klanten zien.
+
+**Let op:** de app blijft lokaal op je Mac. Klanten en freelancers kunnen nog **niet** van buiten je Mac
+inloggen of links openen; de links beginnen met `localhost`.
+
+**Terug naar 0.6.0?** Stop 0.7.0, zet de back-up van stap 1 terug met `npm run herstel` in de **nieuwe**
+map (veilige standaard: klantlinks uit de back-up worden ongeldig), en start daarna de map van 0.6.0.
+Start 0.6.0 **niet** zomaar op de gegevens van 0.7.0: dat is niet getest. 0.6.0 kent de rollen
+Meekijker en Freelancer, de einddatums en de klantvragen niet; je kunt er dan niet op rekenen dat die
+beperkingen nog gelden.
+
 ## Van 0.5.1 naar 0.6.0 (bouwronde 5: rustiger indeling, klanten, inbox, kwaliteit, ZIP)
 
 Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` blijven staan en je klantlinks blijven werken.

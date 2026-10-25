@@ -1,4 +1,79 @@
-# Herinrichting (bouwronde 5): inventarisatie en nieuwe plek van iedere functie
+# Herinrichting (bouwronde 6): ontwerpregels, inventarisatie en plek van iedere functie
+
+Alle bestaande functies blijven bestaan en vindbaar; oude adressen blijven werken. Rollen en rechten:
+[ROLLEN.md](ROLLEN.md).
+
+## Ontwerpregels (gelden voor elk scherm)
+
+- Elk scherm heeft één doel en één hoofdactie (primaire knop in inktkleur). Veelgebruikte acties staan
+  direct in beeld; zeldzamere onder een logisch genoemd menu (**Delen**, **⋯**) of in de opdrachtbalk.
+- Lijsten zijn regels met een lijn ertussen, geen losse kaders. Secties hebben een stevige lijn erboven.
+  Kaders alleen nog voor invoervelden, keuzes in dialogen, scrollvakken en de speler.
+- Kleur alleen waar het iets betekent: status (altijd met pictogram én tekst) en het merk van de
+  klantweergave. In de werkplek is de video het grootste element.
+- Eén typografie (zware koppen, rustige lopende tekst), vaste afstanden, knoppen van 32–40 px hoog,
+  menu-items van minstens 36 px, zichtbare toetsenbordfocus, voldoende contrast in licht en donker.
+- Formulieren kort; extra opties pas na een keuze (bijv. "Tijdelijke toegang" → datum, "Beantwoorden" →
+  antwoordveld).
+- Thema: Licht, Donker of Systeem, klein in het profielmenu (team) en rechtsboven (klant).
+- Niets alleen bij hover zichtbaar (de hernoemknop bij video's staat er nu altijd).
+
+## Huisstijl Studio Brutaal: wat is gebruikt en wat ontbreekt
+
+- **Bronnen die zijn gebruikt:** de briefing ("direct, zelfverzekerd, creatief, professioneel; Lef loont")
+  en wat al in de app stond (merken in Instellingen › Merken met logo en accentkleur per merk).
+- **Niet bereikbaar:** www.studiobrutaal.nl was vanuit de bouwomgeving geblokkeerd (netwerkbeleid);
+  er zijn geen logo-, lettertype- of kleurbestanden van Studio Brutaal aangeleverd.
+- **Daarom:** er zijn **geen** huisstijlkleuren of -lettertypen verzonnen. De teamomgeving is neutraal
+  zwart-wit met sterke koppen. De accentkleuren van de standaardmerken (`#ff6a3d` voor Studio Brutaal en
+  `#38c6b8` voor Moviemates) zijn **plaatshouders** uit een eerdere ronde, geen huisstijlafspraken; pas ze
+  aan in **Instellingen › Merken** en upload daar het echte logo.
+- **Klaar voor de echte huisstijl:** `public/shared/huisstijl.css` is de plek voor lettertypen
+  (`--font-display`, `--font`) en eventueel een accentkleur; de studionaam voor klanten ("Bij Studio
+  Brutaal") is instelbaar (instelling `studio_name`).
+
+## Schermen: doel, hoofdactie en waar alles staat
+
+| Scherm | Doel | Hoofdactie | Verder |
+|---|---|---|---|
+| Dashboard `/` | Wat vraagt nu aandacht | — (blokken met directe links) | Dashboard aanpassen (blokken kiezen en ordenen) |
+| Projecten `/projecten` | Project vinden | **Nieuw project** (beheerder) | Zoeken, filters, sortering; links naar Archief en Prullenbak |
+| Project `/projecten/:id` | Video's van dit project | **Nieuwe video** | **Delen** (klantportaal, opleverlink, klantweergave, vraag aan klant, klant en klanttoegang); **⋯** (feedback exporteren, klantweergave, **Personen en toegang**, project bewerken, archiveren, prullenbak); **Personen** in de kopregel; Volgen; tabbladen Video's · Feedback (met *Vragen aan de klant*) · Briefing · Oplevering · Activiteit |
+| Werkplek `/video/:id` | Video bekijken en feedback verwerken | Volgende stap in de statusregel (klaarzetten, publiceren, nieuwe versie, vrijgeven) | Versiekeuze, **Delen**, ⋯ (nieuwe versie, vergelijken, download, export, status corrigeren, archiveren, prullenbak); paneel Reacties · Versies · Info (eigenschappen, **vragen aan de klant**, rondes, geschiedenis) |
+| Klanten `/klanten`, klant `/klanten/:id` | Klant en zijn portaal beheren | **Project koppelen** / **Nieuwe link** | Klanttoegang per project, beveiliging per link, bewerken |
+| Inbox `/inbox` | Persoonlijke meldingen | Openen | Alles gelezen, meldingsvoorkeuren, browsermeldingen |
+| Mijn taken `/taken` | Eigen feedbacktaken | Openen | Filters |
+| Zoeken `/zoeken` | Alles terugvinden | — | Opgeslagen zoekopdrachten; snel zoeken met `/` of de opdrachtbalk |
+| Instellingen | Account, team, merken, opslag, archief, prullenbak | per onderdeel | Team & rechten met **rechtenmatrix** en melding over omgezette rechten |
+| Inloggen | Inloggen | **Inloggen** | — |
+| Klantstartpagina `/k/…`, `/p/…` | Wat de klant nu moet doen | Eerste actie onder **Jouw acties** | Bij Studio Brutaal · Goedgekeurd (ingeklapt) · Beantwoorde vragen (ingeklapt) · Definitieve bestanden · Alle projecten en video's (ingeklapt) |
+| Klantreview `/r/…` | Video bekijken en reageren | **Feedback versturen** / **Deze versie goedkeuren** (alleen akkoordgever) | Vorige/volgende (via portaal), NL/EN, thema, export |
+| Opleverpagina | Definitieve bestanden downloaden | **Alles downloaden** | Per bestand downloaden |
+| Freelancer `/`, `/projecten/:id`, `/video/:id` | Klantfeedback bekijken | — (alleen lezen) | Inbox, Mijn account, opdrachtbalk |
+
+## Nieuw in bouwronde 6: waar staat wat
+
+| Functie | Plek |
+|---|---|
+| Rollen (Projectleider, Editor, Meekijker, Freelancer) en rechtenmatrix | **Instellingen › Team & rechten**; uitleg in [ROLLEN.md](ROLLEN.md) |
+| Persoon toevoegen aan een project, rol en tijdelijke toegang | Project → **Personen** (kopregel) of **⋯ › Personen en toegang…**; per account ook via Team & rechten › **Projecten** |
+| Verlengen, nu intrekken, ontkoppelen | In dezelfde lijst, menu **⋯** bij de persoon |
+| Freelanceromgeving | Automatisch na inloggen met een freelanceraccount |
+| Vraag aan klant | Project → **Delen › Vraag aan klant…** of tab **Feedback**; werkplek → **Info › Vragen aan de klant**; klant: **Jouw acties** |
+| Opdrachtbalk | **⌘K** (Mac) of **Ctrl+K**; ook de knop **Opdrachten** in de zijbalk |
+| Identieke upload | Melding in het uploadpaneel rechtsonder: Bestaande openen · Annuleren · Toch uploaden |
+| Klantstartpagina in vaste volgorde | Klantportaal en projectlink |
+
+## Behouden (ongewijzigd in gedrag)
+
+Automatische statuswijzigingen bij klantacties en handmatige correctie met reden per versie; eenvoudig
+goedkeuren en apart definitief vrijgeven; inbox en optionele browsermeldingen; originele bestandsnamen in
+downloads en ZIP's; automatische en handmatige kwaliteit met afspeelversies; versies vergelijken,
+tekeningen, tijdsbereiken, reviewrondes, exports; wachtwoorden, vervaldatums en ingetrokken links;
+klantactiviteit, merken, briefing, opslag, archief en prullenbak; back-up en herstel (klantlinks standaard
+ongeldig na herstel); dashboard- en themavoorkeuren van elk account.
+
+## Eerdere herinrichting (bouwronde 5): inventarisatie en nieuwe plek van iedere functie
 
 Uitgangspunt: alle bestaande functies blijven bestaan en bereikbaar. Oude adressen (`/team`, `/merken`,
 `/opslag`, `/prullenbak`, `/archief`, `/taken`, `/projecten/...`, `/video/...`) blijven werken.

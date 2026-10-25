@@ -446,9 +446,18 @@ async function purgeDialog(ctx, item) {
 
 export async function viewBrands(ctx) {
   document.title = 'Merken — Studio Review';
-  const brands = await api('GET', '/api/brands');
+  const [brands, studio] = await Promise.all([api('GET', '/api/brands'), api('GET', '/api/settings/studio-name')]);
+  const studioInput = h('input', { type: 'text', maxlength: '80', value: studio.name, 'aria-label': 'Naam van de studio voor klanten' });
+  const studioSave = button('Opslaan', { size: 'sm', onClick: async (e) => {
+    const restore = busy(e.currentTarget);
+    try { await api('PUT', '/api/settings/studio-name', { name: studioInput.value }); toast('Naam opgeslagen', 'success'); } catch (err) { toast(err.message, 'error'); }
+    restore();
+  } });
   mount(ctx.pageEl, h('div', { class: 'page page-narrow' },
     ctx.pageHeader({ title: 'Merken', meta: 'Logo, naam en accentkleur van de klantweergave' }),
+    ctx.session.user.isAdmin ? h('section', { class: 'card' }, h('h2', { class: 'card-title' }, 'Naam van de studio'),
+      h('p', { class: 'small muted' }, 'Zo staat de studio bij de klant, bijvoorbeeld in “Bij Studio Brutaal” op de startpagina.'),
+      h('div', { class: 'inline-form' }, studioInput, studioSave)) : null,
     h('div', { class: 'notice notice-info' }, icon('info'), h('span', {}, 'Kies per project een merk via ', h('strong', {}, 'Project bewerken'), '. De klant ziet het in het klantportaal en op de reviewpagina’s. De opbouw van de pagina is voor elk merk gelijk; zonder merk ziet de klant de standaard Studio Review-weergave.')),
     brands.map((b) => brandCard(ctx, b))));
 }

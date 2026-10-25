@@ -57,7 +57,7 @@ brew install node ffmpeg
 
 | Wat | Standaardlocatie | Bij een update |
 |---|---|---|
-| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.6.0` | vervangen |
+| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.7.0` | vervangen |
 | Gegevens (database met accounts, projecten, reacties, links en rechten; video's in `media/`) | `~/Studio Review/gegevens` | blijft staan |
 | Back-ups | `~/Studio Review/backups` | blijft staan |
 | Instellingen | `~/Studio Review/instellingen.env` | blijft staan |
@@ -322,6 +322,39 @@ brew install node ffmpeg
 - Zonder tekeningen gaat de iPhone direct naar de ingebouwde schermvullende weergave, zoals voorheen.
 - Dit is getest met een nagebootste iPhone-omgeving in Chrome, **niet op een echte iPhone**.
 
+## Bouwronde 6: nieuwe vormgeving, rollen, freelancers, klantvragen en ⌘K
+
+- **Vormgeving**: neutrale zwart-witbasis met sterke koppen, lijnen in plaats van kaders, kleur alleen voor
+  status en het merk van de klant. Ontwerpregels en de plek van iedere functie:
+  [docs/HERINRICHTING.md](docs/HERINRICHTING.md). Er zijn geen huisstijlwaarden van Studio Brutaal
+  verzonnen: logo en kleur per merk stel je in onder **Instellingen › Merken** (de standaardkleuren zijn
+  plaatshouders); lettertypen kunnen later in `public/shared/huisstijl.css`.
+- **Klantstartpagina** in vaste volgorde: een samenvatting (“Er staan 3 video’s voor je klaar.”), dan
+  **Jouw acties** (per video het project, de exacte versie, wat er gevraagd wordt en de deadline;
+  verstreken deadlines eerst; één actie per video; goedkeuren alleen voor de aangewezen akkoordgever via
+  de persoonlijke link), **Bij Studio Brutaal** (feedback verstuurd), **Goedgekeurd** (ingeklapt),
+  **Definitieve bestanden** (alleen wat echt is vrijgegeven) en een ingeklapte route naar alle projecten
+  en video’s. Een bezoek of afspelen rondt nooit iets af; een verstreken deadline keurt nooit goed.
+- **Rollen en personen**: zie hieronder en [docs/ROLLEN.md](docs/ROLLEN.md). Vanuit het project:
+  **Personen** → bestaand persoon kiezen (of als beheerder een account maken) → rol en eventueel
+  tijdelijke toegang → toevoegen. Verlengen, nu intrekken en ontkoppelen in dezelfde lijst.
+- **Freelancers**: eigen alleen-lezen omgeving met gekoppelde projecten, verstuurde klantfeedback
+  (tijdcodes, fragmenten, tekeningen) op gepubliceerde versies en een eigen inbox. Alle andere teamroutes
+  zijn op de server dicht.
+- **Vraag aan klant**: een Projectleider deelt een vraag over het project of een exacte versie; de klant
+  ziet hem onder **Jouw acties** en antwoordt in het klantportaal of via de projectlink (naam van een
+  persoonlijke link = geverifieerd; zelf ingevulde naam staat er als zodanig bij). Het team krijgt een
+  melding. Herhaalde verzoeken maken geen dubbele vragen, antwoorden of meldingen. Een antwoord verandert
+  niets aan status of goedkeuring, en een goedkeuring beantwoordt geen vraag.
+- **Opdrachtbalk** (⌘K op de Mac, Ctrl+K elders, of **Opdrachten** in de zijbalk): zoeken in je
+  projecten, video’s en taken en toegestane acties starten (bijv. uploaden), volledig met het toetsenbord.
+  Zelfde rechten als de rest van de app; bevestigingen blijven gewoon.
+- **Identieke uploads**: de app vergelijkt de inhoud (SHA-256, gestreamd berekend), alleen binnen het
+  eigen project. Bij een identiek bestand: “Dit bestand staat al in dit project als …, versie …” met
+  **Bestaande openen**, **Annuleren** (verwijdert alleen de tijdelijke upload) of **Toch uploaden**
+  (gewone versie met de eigen bestandsnaam). Nooit automatisch samenvoegen of overschrijven. Oudere
+  versies krijgen hun hash op de achtergrond.
+
 ## Bouwronde 5: rustiger werken, klanten, inbox, kwaliteit en ZIP
 
 ### Indeling, dashboard, zoeken en thema
@@ -360,28 +393,23 @@ brew install node ffmpeg
 - De ZIP wordt **rechtstreeks gestreamd, zonder compressie** (video’s worden daar niet kleiner van) en zonder tijdelijk bestand: de grootte is vooraf bekend, zodat de browser de voortgang toont; er is geen extra schijfruimte nodig en er blijft niets achter dat later via een adres op te halen is. Bestanden boven 4 GB: ZIP64.
 - Toegang wordt bij het starten én vóór elk bestand opnieuw gecontroleerd. Wordt de link intussen ingetrokken, verloopt hij of wordt een oplevering teruggenomen, dan breekt de download af (geen pakket dat compleet lijkt).
 
-## Rechten per project
+## Rollen en rechten
 
-Er zijn twee soorten accounts:
-- **Beheerders** zien alles. Zij beheren teamleden, opslag, back-ups, de bewaartermijn van klantactiviteit en definitief verwijderen. Er blijft altijd minstens één actieve beheerder.
-- **Teamleden** (bijvoorbeeld freelancers) zien alleen de projecten waar ze toegang toe hebben.
+Volledige matrix en regels: [docs/ROLLEN.md](docs/ROLLEN.md). Kort:
 
-Per project krijgt een teamlid een van deze niveaus. Elk niveau omvat het vorige:
-
-| Niveau | Mag |
-|---|---|
-| Bekijken en reageren | afspelen, downloaden, reageren (ook tekenen/bereik), reacties afhandelen, taken zien en de eigen taakstatus wijzigen, vergelijken, exporteren, briefing lezen, klantweergave bekijken, opleveringen bekijken (zonder links) |
-| Uploaden | + nieuwe video's en versies, (interne) briefingonderdelen, titels en opleveringsgegevens wijzigen, klaarzetten, feedbacktaken maken en toewijzen |
-| Publiceren en delen | + publiceren naar de klant (met keuze van de reviewronde), rondes wijzigen, reviewlinks, klantportaal (projectlink), akkoordgever, briefing delen met de klant, definitief vrijgeven, vervangen en terugnemen, opleverlink en oplevertekst, klantactiviteit bekijken |
-| Beheren | + project bewerken, status corrigeren, archiveren, naar de prullenbak |
-
-- De server controleert dit bij elke aanvraag, ook voor videobestanden, thumbnails, reacties en uploads.
-- Zonder toegang bestaat een project voor dat account niet (404).
-- Bestaande accounts van vóór deze versie zijn beheerder geworden.
+- **Accounts**: beheerder (alles), teamlid (alleen gekoppelde projecten) of freelancer (alleen
+  klantfeedback bekijken in gekoppelde projecten). Er blijft altijd minstens één actieve beheerder.
+- **Rol per project**: **Projectleider** (beheren, personen koppelen, publiceren, delen, opleveren),
+  **Editor** (uploaden, versies, reageren, feedbacktaken), **Meekijker** (bekijken, niets wijzigen) of
+  **Freelancer** (alleen voor freelanceraccounts). Een rol geeft niets in andere projecten en nooit
+  toegang tot beheer.
+- **Tijdelijke toegang**: per koppeling een einddatum en -tijd, bij elk verzoek gecontroleerd.
+- De server controleert alles bij elke aanvraag, ook voor videobestanden, thumbnails, zoeken, aantallen,
+  meldingen en exports. Zonder toegang bestaat een project voor dat account niet (404).
 - Klantlinks en de akkoordgever werken los van accounts, net als voorheen.
 
 ## Versie en cache
-- Het versienummer staat onderin de zijbalk, in het profielmenu en onder **Instellingen › Opslag & back-ups**, bijvoorbeeld `0.6.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
+- Het versienummer staat onderin de zijbalk, in het profielmenu en onder **Instellingen › Opslag & back-ups**, bijvoorbeeld `0.7.0 (build 1a2b3c4d)`. Het werkt ook zonder Git:
   - de versie komt uit `package.json`;
   - de build is een vingerafdruk van de interfacebestanden.
 - Na een update is gewoon verversen genoeg. De pagina zelf wordt altijd gecontroleerd, en alle scripts en stijlen (ook geïmporteerde modules) komen van een adres per build.
@@ -460,18 +488,19 @@ Alle tests gebruiken eigen, tijdelijke mappen en raken je echte gegevens in `~/S
 ```bash
 npm test                                                   # 162 servertests (vereist ffmpeg en unzip)
 CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (52 controles)
-CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rechten, opslag, back-ups, prullenbak, archief (23)
-CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal, merk, opleveringen, briefing, desktop + mobiel (51)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rollen, freelanceraccount, opslag, back-ups, prullenbak, archief (28)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal (startpagina in vaste volgorde), merk, opleveringen, briefing, desktop + mobiel (52)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:feedback # taken, rondes, tekenen, bereik, vergelijken, export, desktop + mobiel (50)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:oplevering # opleveringen, klantactiviteit, statuscorrectie per versie, iPhone-uitleg (nagebootst), desktop + mobiel (52)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:update   # update met de vorige interface in de browsercache (7)
 npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (13)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:ui      # dashboard, zoeken, thema, bestandsnamen, thumbnail, desktop + mobiel (38)
-CHROME_PATH=/pad/naar/chrome npm run test:browser:klanten # klanten, klantportaal NL/EN, goedkeuren, vorige/volgende, wachtwoord, bezoekersthema, desktop + mobiel (45)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:klanten # klanten, klantportaal NL/EN, goedkeuren, vorige/volgende, wachtwoord, bezoekersthema, desktop + mobiel (47)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:inbox   # inbox, browsermeldingen (nagebootst), activiteitentijdlijn (24)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:kwaliteit # kwaliteitskeuze met hls.js, vertraagd netwerk, 4K/staand, geen origineel (23)
-npm run test:upgrade                                       # bijwerken vanaf 0.5.1 met echte gegevens + oude back-up terugzetten (34)
-npm run test:offline-update                                # ZIP-update vanaf 0.5.1 met de echte startknop, zonder netwerk (Linux: unshare + python3) (10)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:ronde6  # ⌘K met toetsenbord en beperkte rechten, identieke uploads in de wachtrij, klantvraag, freelancer verloopt (24)
+npm run test:upgrade                                       # bijwerken vanaf 0.6.0 met echte gegevens, rollen omgezet, oude en nieuwe back-up terugzetten (47)
+npm run test:offline-update                                # ZIP-update vanaf 0.6.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (10)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;

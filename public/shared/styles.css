@@ -326,7 +326,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; m
 .player.is-playing .pc-bigplay, .player.is-loading .pc-bigplay { display: none; }
 .pc-loading { position: absolute; inset: 0; margin: auto; display: none; }
 .player.is-loading .pc-loading { display: block; }
-.pc-error { position: absolute; left: 14px; right: 14px; bottom: 14px; background: rgba(10,10,12,.92); border: 1px solid var(--line-2); color: var(--text); padding: 12px 14px; border-radius: var(--r); font-size: 13.5px; }
+.pc-error { position: absolute; left: 14px; right: 14px; bottom: 14px; background: rgba(10,10,12,.92); border: 1px solid rgba(255,255,255,.2); color: #f4f4f2; padding: 12px 14px; border-radius: var(--r); font-size: 13.5px; }
 .pc-controls { padding: 4px 10px 6px; color: #eceae6; background: var(--stage); }
 .pc-row { display: flex; align-items: center; gap: 4px; }
 .pc-spacer { flex: 1; }
@@ -520,7 +520,7 @@ input[type=date], input[type=time] { color-scheme: dark; }
 .player.is-pagefull { position: fixed; inset: 0; z-index: 900; border-radius: 0; border: 0; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
 .player.is-pagefull .player-stage { flex: 1; max-height: none !important; min-height: 0; aspect-ratio: auto; }
 html.has-pagefull-player, html.has-pagefull-player body { overflow: hidden; }
-.pc-fschoice { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(92%, 380px); display: grid; gap: 8px; padding: 12px 14px; background: rgba(16, 17, 20, .96); border: 1px solid var(--line-2); border-radius: var(--r-lg); color: var(--text); font-size: 13.5px; box-shadow: var(--shadow); }
+.pc-fschoice { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(92%, 380px); display: grid; gap: 8px; padding: 12px 14px; background: rgba(16, 17, 20, .96); border: 1px solid rgba(255,255,255,.2); border-radius: var(--r-lg); color: #f4f4f2; font-size: 13.5px; box-shadow: var(--shadow); }
 .pc-fschoice[hidden] { display: none; }
 .pc-fschoice-head { display: flex; align-items: center; gap: 8px; }
 .pc-fschoice-head strong { flex: 1; }

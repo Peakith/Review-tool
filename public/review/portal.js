@@ -193,29 +193,75 @@ function renderClient(d) {
  * Route naar alles wat deze link mag zien: per project alle gepubliceerde video's, met briefing.
  * Afgeronde projecten staan apart en ingeklapt.
  */
+/**
+ * Optioneel vastzetten voor klanten: alleen in deze browser (geen account), per link. Vastgezette
+ * projecten staan bovenaan dit ingeklapte overzicht; de acties bovenaan de pagina gaan altijd voor.
+ */
+const pinKey = `rt-client-pins:${token}`;
+function readPins() {
+  try { return new Set(JSON.parse(localStorage.getItem(pinKey) || '[]').map(Number)); } catch { return new Set(); }
+}
+function writePins(set) {
+  try { localStorage.setItem(pinKey, JSON.stringify([...set])); } catch { /* opslag geblokkeerd: dan alleen voor deze weergave */ }
+}
+
+function clientPin(p, pins, onChange) {
+  const btn = h('button', { type: 'button', class: 'pin-btn is-compact' });
+  const draw = () => {
+    const on = pins.has(p.id);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.setAttribute('aria-label', on ? tr('{name} losmaken', { name: p.name }) : tr('{name} vastzetten', { name: p.name }));
+    btn.title = on ? tr('Vastgezet in deze browser. Klik om los te maken.') : tr('Vastzetten in deze browser (bovenaan dit overzicht)');
+    mount(btn, icon('star'));
+  };
+  draw();
+  btn.addEventListener('click', () => {
+    if (pins.has(p.id)) pins.delete(p.id); else pins.add(p.id);
+    writePins(pins);
+    draw();
+    onChange();
+  });
+  return btn;
+}
+
+/** Kleine projectcover (alleen uit gedeelde versies; de server levert niets anders aan klanten). */
+function smallCover(p) {
+  if (!p.cover) return null;
+  const img = h('img', { src: p.cover.url, alt: '', loading: 'lazy', decoding: 'async' });
+  const box = h('span', { class: 'k-cover', 'aria-hidden': 'true' }, img);
+  img.addEventListener('error', () => box.remove());
+  return box;
+}
+
 function allVideos(projects, { single = false, multi = false } = {}) {
-  const active = projects.filter((p) => !p.completed);
-  const completed = projects.filter((p) => p.completed);
+  const pins = single ? new Set() : readPins();
+  const ordered = () => [...projects].sort((a, b) => Number(pins.has(b.id)) - Number(pins.has(a.id)));
+  const active = ordered().filter((p) => !p.completed);
+  const completed = ordered().filter((p) => p.completed);
   const total = projects.reduce((n, p) => n + p.videos.length, 0);
   const projectBlock = (p) => {
     const id = `proj-${p.id}`;
     return h('section', { class: 'k-project', 'aria-labelledby': id },
       single ? null : h('div', { class: 'k-project-head' },
-        h('h3', { id }, p.name),
-        p.brand && multi ? h('span', { class: 'small muted' }, p.brand.name) : null,
+        smallCover(p),
+        h('div', { class: 'k-project-titles' },
+          h('h3', { id, title: p.name }, p.name),
+          p.brand && multi ? h('span', { class: 'small muted' }, p.brand.name) : null),
+        multi ? clientPin(p, pins, () => { const fresh = allVideos(projects, { single, multi }); fresh.open = true; box.replaceWith(fresh); fresh.querySelector(`#${id}`)?.closest('.k-project')?.querySelector('.pin-btn')?.focus(); }) : null,
         p.archived ? h('span', { class: 'badge badge-neutral' }, tr('gearchiveerd')) : null),
       p.intro && !single ? h('p', { class: 'p-intro' }, p.intro) : null,
       p.videos.length ? h('div', { class: 'p-list' }, p.videos.map((v) => compactRow({ project: p, video: v }, { multi: false })))
         : h('p', { class: 'small muted' }, tr('Er staan in dit project nog geen video’s voor je klaar.')),
       !single && p.briefing?.length ? briefingSection(p.briefing, `${id}-briefing`, 4) : null);
   };
-  return h('details', { class: 'p-group p-all p-collapsible' },
+  const box = h('details', { class: 'p-group p-all p-collapsible' },
     h('summary', {}, icon('chevronRight'), h('span', { class: 'p-collapsible-title' }, single ? tr('Alle video’s') : tr('Alle projecten en video’s')), h('span', { class: 'p-count' }, total)),
     h('div', { class: 'p-all-body' },
       active.map(projectBlock),
       completed.length ? h('details', { class: 'k-completed' },
         h('summary', {}, icon('history'), tr(completed.length === 1 ? 'Afgerond project ({n})' : 'Afgeronde projecten ({n})', { n: completed.length })),
         h('div', { class: 'k-completed-body' }, completed.map(projectBlock))) : null));
+  return box;
 }
 
 function previewBar(d) {

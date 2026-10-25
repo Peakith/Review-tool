@@ -4,6 +4,8 @@ import {
   newRequestId, formatDeadline, isPast, localToIso, isoToLocal,
 } from '/shared/util.js';
 import { createPlayer } from '/shared/player.js';
+import { blurBackdrop, projectCoverImg } from '/shared/cover.js';
+import { pinButton } from './pins.js';
 import { renderComments, markersFrom, commentCounts } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
 import { configureUploads, enqueue, checkFile, suggestTitle, createUploadTray, onUploadsChange } from './uploads.js';
@@ -465,15 +467,6 @@ function posterImg(versionId, alt = '') {
   const img = h('img', { src: `/api/versions/${versionId}/poster`, alt, loading: 'lazy', decoding: 'async' });
   img.addEventListener('error', () => img.replaceWith(h('div', { class: 'poster-empty' }, icon('film'))));
   return img;
-}
-
-/** Projectcover als beeld: volledig zichtbaar (geen bijsnijden), met een vage achtergrond bij afwijkende verhoudingen. */
-function projectCoverImg(p) {
-  if (!p.cover) return h('div', { class: 'poster-empty' }, icon('folder'));
-  const img = h('img', { src: p.cover.url, alt: '', loading: 'lazy', decoding: 'async' });
-  const wrap = h('span', { class: 'cover-fit' }, blurBackdrop(p.cover.url), img);
-  img.addEventListener('error', () => wrap.replaceWith(h('div', { class: 'poster-empty' }, icon('folder'))));
-  return wrap;
 }
 
 function projectCard(p, onPin) {
@@ -972,28 +965,6 @@ function coverBox(project, mayManage, { size = 'head' } = {}) {
     mayManage ? h('button', { type: 'button', class: 'cover-edit', onClick: () => coverDialog(project) }, icon('image'), h('span', {}, 'Omslag wijzigen')) : null);
 }
 
-/** Persoonlijk vastzetten (alleen voor jezelf; verandert niets voor anderen). */
-function pinButton(project, { compact = false, onChange = null } = {}) {
-  const btn = h('button', { type: 'button', class: `pin-btn${compact ? ' is-compact' : ''}` });
-  const draw = () => {
-    btn.setAttribute('aria-pressed', String(!!project.pinned));
-    btn.title = project.pinned ? 'Vastgezet: staat bovenaan je dashboard en projectenoverzicht. Klik om los te maken.' : 'Vastzetten op je dashboard en bovenaan het projectenoverzicht';
-    btn.setAttribute('aria-label', project.pinned ? `${project.name} losmaken` : `${project.name} vastzetten`);
-    mount(btn, icon('star'), compact ? null : h('span', { class: 'pin-label' }, project.pinned ? 'Vastgezet' : 'Vastzetten'));
-  };
-  draw();
-  btn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      project.pinned = (await api('PUT', `/api/pins/${project.id}`, { pinned: !project.pinned })).pinned;
-      draw();
-      onChange?.(project.pinned);
-    } catch (err) { toast(err.message, 'error'); }
-  });
-  return btn;
-}
-
 /** Afspeelbron van een versie voor de gedeelde speler (afspeelversies, anders het origineel voor het team). */
 function teamPlayerFor(version) {
   const levels = version.playback?.levels || [];
@@ -1104,13 +1075,6 @@ async function renameDialog(v, reload) {
       } catch (err) { toast(err.message, 'error'); return false; }
     },
   });
-}
-
-/** Vage achtergrond achter een staande video (het beeld zelf blijft volledig zichtbaar). Via CSSOM i.v.m. CSP. */
-function blurBackdrop(url) {
-  const el = h('span', { class: 'thumb-blur', 'aria-hidden': 'true' });
-  el.style.backgroundImage = `url("${url}")`;
-  return el;
 }
 
 /** Kaart in het video-overzicht: kiezen = in de voorvertoning tonen; de titel opent de werkplek. */

@@ -75,6 +75,7 @@ html { scroll-padding-bottom: 110px; }
   .r-actions-buttons .btn { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 6px 10px; white-space: normal; line-height: 1.2; font-size: 14px; }
   .r-actions-hint { width: 100%; justify-content: center; margin: 0; }
   .toast-host { bottom: 130px; }
+  body.is-typing .r-actions { display: none; }
 }
 
 .r-brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -297,3 +298,9 @@ html[lang="en"] .howto[open] summary::after { content: "Hide"; }
 .howto { background: none; border: 0; border-left: 3px solid var(--line-2); border-radius: 0; padding: 4px 0 4px 14px; }
 .identity:not(.is-verified) { background: none; border: 0; border-radius: 0; padding: 0; }
 .r-status { border-radius: var(--r); }
+
+/* Kleine projectcover en vastzetten in "Alle projecten" (ingeklapt; duwt de acties nooit omlaag) */
+.k-cover { width: 64px; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: #000; flex-shrink: 0; display: grid; }
+.k-cover img { width: 100%; height: 100%; object-fit: contain; }
+.k-project-titles { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.k-project-titles h3 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }

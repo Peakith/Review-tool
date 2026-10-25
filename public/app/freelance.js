@@ -8,6 +8,8 @@ import { THEMES, themePref } from '/shared/theme.js';
 import { saveTheme } from './settings.js';
 import { viewInbox, startInboxPolling, refreshInboxCount } from './inbox.js';
 import { openPalette, paletteShortcut } from './palette.js';
+import { projectCoverImg } from '/shared/cover.js';
+import { pinButton } from './pins.js';
 
 let shell = null;
 let pageEl = null;
@@ -99,13 +101,15 @@ async function viewStart(pageHeader) {
     h('p', { class: 'lede muted' }, 'Je kijkt mee met wat klanten terugsturen: tijdcodes, fragmenten en tekeningen. Reageren, uploaden en wijzigen doet het team.'),
     projects.length
       ? h('section', { class: 'card', 'aria-labelledby': 'fl-projects' }, h('h2', { class: 'card-title', id: 'fl-projects' }, 'Projecten'),
-        h('div', { class: 'row-list' }, projects.map((p) => h('a', { class: 'list-row', href: `/projecten/${p.id}`, 'data-nav': true },
-          h('span', { class: 'list-row-main' },
-            h('strong', { class: 'list-row-title' }, p.name),
-            h('span', { class: 'small muted' }, [p.clientName, plural(p.videoCount, 'video', 'video’s'), p.archived ? 'gearchiveerd' : null].filter(Boolean).join(' · '))),
-          p.expiresAt ? h('span', { class: 'list-row-note small', title: 'Je toegang tot dit project stopt automatisch op dit moment' }, icon('clock'), expiryText(p)) : null,
-          h('span', { class: 'list-row-count' }, icon('chat'), String(p.feedback)),
-          icon('chevronRight')))))
+        h('div', { class: 'project-list fl-projects' }, projects.map((p) => h('div', { class: `project-row${p.pinned ? ' is-pinned' : ''}` },
+          h('a', { class: 'project-row-link', href: `/projecten/${p.id}`, 'data-nav': true },
+            h('span', { class: 'project-row-cover' }, projectCoverImg(p)),
+            h('span', { class: 'project-row-main' },
+              h('strong', { class: 'project-name truncate', title: p.name }, p.name),
+              h('span', { class: 'small muted truncate' }, [p.clientName, plural(p.videoCount, 'video', 'video’s'), p.archived ? 'gearchiveerd' : null].filter(Boolean).join(' · ')),
+              p.expiresAt ? h('span', { class: 'list-row-note small', title: 'Je toegang tot dit project stopt automatisch op dit moment' }, icon('clock'), expiryText(p)) : null),
+            h('span', { class: 'list-row-count', title: 'Klantreacties' }, icon('chat'), String(p.feedback))),
+          pinButton(p, { compact: true })))))
       : h('div', { class: 'card' }, emptyState({ icon: 'folder', title: 'Nog geen projecten', text: 'Zodra een projectleider je aan een project koppelt, zie je het hier.' })),
     h('section', { class: 'card', 'aria-labelledby': 'fl-inbox' },
       h('div', { class: 'card-head' }, h('h2', { class: 'card-title', id: 'fl-inbox' }, 'Nieuw in je inbox'), h('a', { href: '/inbox', 'data-nav': true, class: 'btn btn-sm btn-ghost' }, h('span', { class: 'btn-label' }, 'Alle meldingen'))),
@@ -125,6 +129,7 @@ async function viewProject(id, pageHeader) {
       crumbs: [{ label: 'Mijn projecten', href: '/' }],
       title: h('h1', { class: 'page-title' }, project.name),
       meta: [project.clientName ? h('span', {}, project.clientName) : null, project.expiresAt ? h('span', { class: 'meta-item' }, icon('clock'), expiryText(project)) : null],
+      actions: [pinButton(project)],
     }),
     videos.length
       ? h('div', { class: 'video-list', role: 'list' }, videos.map((v) => h('a', { class: 'video-row', role: 'listitem', href: `/video/${v.id}`, 'data-nav': true },

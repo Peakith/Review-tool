@@ -1086,12 +1086,6 @@ dialog.palette { border: 1px solid var(--line-2); border-top: 1px solid var(--li
 .meta-link { color: var(--text-2); }
 .meta-link:hover { color: var(--sel); }
 .project-actions { align-self: center; }
-.pin-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font: 600 13px var(--font); cursor: pointer; }
-.pin-btn .icon { --icon-size: 16px; }
-.pin-btn:hover { border-color: var(--sel); color: var(--text); }
-.pin-btn[aria-pressed=true] { background: var(--sel-soft); border-color: var(--accent-line); color: var(--sel); }
-.pin-btn[aria-pressed=true] .icon svg { fill: currentColor; }
-.pin-btn.is-compact { width: 34px; padding: 0; justify-content: center; }
 .follow-btn { height: 34px; }
 .page-tabs { margin-bottom: 22px; }
 .page-tabs a { padding-bottom: 12px; }
@@ -1177,7 +1171,10 @@ dialog.palette { border: 1px solid var(--line-2); border-top: 1px solid var(--li
   .project-cover-box.is-head { width: 112px; }
   .cover-edit { right: 4px; bottom: 4px; padding: 5px; }
   .cover-edit span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .project-actions { grid-column: 1 / -1; }
+  .project-actions { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; }
+  .project-actions > .btn-primary { grid-column: 1 / -1; order: -1; }
+  .project-actions > * { min-width: 0; }
+  .project-actions .btn { width: 100%; }
   .project-meta { font-size: 13.5px; }
   .gallery-head { display: grid; }
   .gallery-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
@@ -1241,3 +1238,8 @@ dialog.palette { border: 1px solid var(--line-2); border-top: 1px solid var(--li
   .project-row .project-signal { display: none; }
   .project-row-cover { width: 84px; }
 }
+
+/* Freelancer: projectregels met cover en vastzetten binnen de kaart */
+.card .fl-projects { border: 0; border-radius: 0; background: transparent; margin: 0 -8px; }
+.fl-projects .list-row-note { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); }
+.fl-projects .list-row-count { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text-2); }

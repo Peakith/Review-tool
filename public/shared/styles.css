@@ -534,3 +534,11 @@ html.has-pagefull-player, html.has-pagefull-player body { overflow: hidden; }
 .pc-fschoice p { margin: 0; color: var(--text-2); line-height: 1.45; }
 .pc-fschoice-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .pc-fschoice-actions .btn { flex: 1 1 auto; justify-content: center; }
+
+/* Vastzetten (team: per account; klant: per browser) */
+.pin-btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font: 600 13px var(--font); cursor: pointer; }
+.pin-btn .icon { --icon-size: 16px; }
+.pin-btn:hover { border-color: var(--sel); color: var(--text); }
+.pin-btn[aria-pressed=true] { background: var(--sel-soft); border-color: var(--accent-line); color: var(--sel); }
+.pin-btn[aria-pressed=true] .icon svg { fill: currentColor; }
+.pin-btn.is-compact { width: 34px; padding: 0; justify-content: center; }

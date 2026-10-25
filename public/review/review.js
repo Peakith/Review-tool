@@ -299,6 +299,10 @@ function render() {
 
   commentsEl = h('div', { class: 'r-comments' });
   actionsEl = h('div', { class: 'r-actions', role: 'region', 'aria-label': tr('Feedback versturen of goedkeuren') });
+  // Mobiel: tijdens typen (toetsenbord open) wijkt de vaste actiebalk, zodat hij nooit invoer afdekt.
+  const typing = (e) => e.target?.matches?.('textarea, input:not([type=checkbox]):not([type=radio]):not([type=range])');
+  document.addEventListener('focusin', (e) => { if (typing(e)) document.body.classList.add('is-typing'); });
+  document.addEventListener('focusout', (e) => { if (typing(e)) document.body.classList.remove('is-typing'); });
 
   const howTo = howToCard();
   const compareBtn = info.versions.length > 1

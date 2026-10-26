@@ -5,6 +5,37 @@ Vanaf versie 0.2.0 staan programma en gegevens los van elkaar:
 - **Programma**: de uitgepakte map. Bij elke update komt er een nieuwe.
 - **Gegevens**: `~/Studio Review/` met daarin `gegevens/`, `backups/` en `instellingen.env`. Deze map blijft gewoon staan.
 
+## Van 0.8.0 naar 0.9.0 (bouwronde 8: vaste donkere stijl, rustiger, klantportaal)
+
+Alleen een nieuwe programmamap. Je gegevens in `~/Studio Review` (of je eigen `DATA_DIR`) blijven
+staan. Accounts, rollen, klantlinks, feedback, goedkeuringen, opleveringen, covers, vastgezette
+projecten, back-ups en je dashboardindeling blijven werken. Een gewone update maakt **geen** klantlinks ongeldig.
+
+1. **Maak eerst een back-up en controleer hem:** **Instellingen › Opslag & back-ups › Nu back-up maken**
+   (in 0.8.0 via het tandwiel rechtsboven). Wacht tot er bij de nieuwe back-up “compleet en gecontroleerd” staat.
+2. **Stop de app:** dubbelklik `Stop Studio Review.command` in de map van 0.8.0.
+3. **Pak de nieuwe ZIP uit in een nieuwe map.** Laat de map van 0.8.0 staan.
+4. **Dubbelklik in de nieuwe map op `Start Studio Review.command`.**
+5. **Ververs** een openstaand tabblad in je gewone browser. De app is direct donker, ook als hij eerder
+   op Licht stond, en onderaan staat **Studio Review 0.9.0 (build …)**.
+
+**Internet bij het installeren (eerlijk):** geen nieuwe npm-onderdelen ten opzichte van 0.8.0. De
+startknop haalt de bestaande onderdelen uit de npm-cache op je Mac (`~/.npm`). In de test (Linux, zonder
+netwerk, vanaf 0.8.0) werkte dat. Is die cache leeg, dan is er bij de eerste start **wel internet nodig**,
+of kopieer `node_modules` uit de map van 0.8.0. Node.js en ffmpeg moeten al geïnstalleerd zijn. Niet op
+jouw Mac getest.
+
+**Wat er bij de eerste start gebeurt:** niets wordt omgezet of opnieuw verwerkt. Een bewaarde themakeuze
+wordt genegeerd en opgeruimd zodra je je voorkeuren opnieuw opslaat. In de browser gebeurt dat bij het
+eerste bezoek.
+
+**Wat je direct merkt:** vaste donkere stijl; **Instellingen** staat in het profielmenu; het klantportaal
+begint met **Jouw acties**; in de klantreview heet de knop **Goedkeuren**. Alles wat verplaatst is:
+[docs/HERINRICHTING.md](docs/HERINRICHTING.md).
+
+**Terug naar 0.8.0?** Stop 0.9.0, zet de back-up van stap 1 terug met `npm run herstel` in de **nieuwe**
+map (klantlinks uit de back-up worden dan standaard ongeldig) en start de map van 0.8.0. Niet apart getest.
+
 ## Van 0.7.0 naar 0.8.0 (bouwronde 7: stijl 2 nachtblauw, omslagen, vastzetten)
 
 Weer alleen een nieuwe programmamap; je gegevens in `~/Studio Review` (of je eigen `DATA_DIR`) blijven

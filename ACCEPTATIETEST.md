@@ -140,7 +140,7 @@ Gebruik de aparte testgegevensmap. Doe klantstappen in een privévenster, in **S
 |---|---|---|---|
 | 72 | Log in. | Links: **Dashboard, Projecten, Klanten, Inbox**, daaronder **Mijn taken**; onderaan **Instellingen**. Het dashboard toont vier blokken. | ☐ |
 | 73 | **Dashboard aanpassen**: voeg “Opslag” toe, maak “Recente projecten” breed, verplaats een blok met de pijltjes, klik **Klaar**, ververs. | De indeling blijft bewaard. Buiten de aanpasmodus zie je geen bewerkknoppen. | ☐ |
-| 74 | Profielmenu (je naam linksonder) → **Licht**, daarna **Systeem**. | Het thema wisselt direct en blijft na verversen staan. | ☐ |
+| 74 | *Vervallen in 0.9.0:* er is geen themakeuze meer. Controleer in plaats daarvan: de app is donker, ook als je Mac op Licht staat. | Donkere nachtblauwe achtergrond. | ☐ |
 | 75 | Typ in het zoekveld (of druk op `/`) een woord uit een klantreactie. Kies het resultaat. | De juiste video en versie openen, met de reactie geselecteerd. | ☐ |
 | 76 | Werkplek → **Info** → pauzeer op een mooi beeld → **Huidig frame gebruiken**. | Projectoverzicht en klantportaal tonen dat frame (volledige beeldverhouding). **Automatisch** zet het terug. | ☐ |
 | 77 | **Klanten → Nieuwe klant** “Testklant”, standaardtaal Engels. **Project koppelen** → kies je testproject. Zet een tweede project op **Afgerond**. | De klantnaam bij een project koppelt niets vanzelf; alleen wat je kiest staat bij de klant. | ☐ |
@@ -178,7 +178,7 @@ getest (alleen Chrome op Linux en Pixel 7-emulatie): meld wat je ziet.
 | 100 | Klik bij de vraag **Beantwoorden**, typ een antwoord en je naam, klik twee keer snel op **Antwoord versturen**. | Eén antwoord, onder **Beantwoorde vragen** met “(naam zelf ingevuld)”. Het team krijgt één melding in de inbox. De status van de video verandert niet. | ☐ |
 | 101 | Upload in project A hetzelfde bestand nog eens, maar hernoem het eerst in de Finder. Upload tegelijk een ander bestand. | Bij het hernoemde bestand: “Dit bestand staat al in dit project als …, versie …” met **Bestaande openen**, **Annuleren** en **Toch uploaden**. Het andere bestand gaat gewoon door. **Annuleren** laat niets achter; **Toch uploaden** maakt een gewone nieuwe video met de nieuwe bestandsnaam. | ☐ |
 | 102 | Druk **⌘K** in een project, typ “upload”, kies **Video’s uploaden naar dit project** met de pijltjes en Enter. | De bestandskiezer opent (dezelfde als via de knop). | ☐ |
-| 103 | Wissel het thema (profielmenu) tussen Licht en Donker en bekijk een project, de werkplek en het klantportaal. Maak het venster ook smal (zoals een telefoon); een echte telefoon kan de links nog niet openen (alleen localhost). | Alles leesbaar in beide thema’s; het merk van de klant (logo, kleur) blijft zichtbaar. | ☐ |
+| 103 | Bekijk een project, de werkplek en het klantportaal (sinds 0.9.0 altijd donker). Maak het venster ook smal (zoals een telefoon); een echte telefoon kan de links nog niet openen (alleen localhost). | Alles leesbaar in beide thema’s; het merk van de klant (logo, kleur) blijft zichtbaar. | ☐ |
 
 ## M. Korte Mac-test 0.8.0: stijl 2, omslag, vastzetten (± 10 min)
 Doe dit na de update (zie [UPDATEN.md](UPDATEN.md)) eerst met je **echte** installatie alleen kijkend
@@ -194,7 +194,25 @@ Linux en Pixel 7-emulatie; **niet** in Safari, niet op jouw Mac en niet op een e
 | 108 | Klik de **ster** bij een project in **Projecten**. Herlaad; log uit en weer in. | Het project staat bovenaan en in het dashboardblok **Vastgezet**, ook na herladen en opnieuw inloggen. Een ander account ziet het niet als vastgezet. | ☐ |
 | 109 | Open als klant het klantportaal (privévenster) en klap **Alle projecten en video’s** open. Klik een ster en herlaad. | **Jouw acties** staat bovenaan; kleine omslagen alleen in het ingeklapte overzicht; het vastgezette project staat daar bovenaan (alleen in deze browser). | ☐ |
 | 110 | Maak het klantvenster smal (zoals een telefoon), open een video, klik in het reactieveld en typ. | De actiebalk onderaan (Feedback versturen · Deze versie goedkeuren) verdwijnt zolang je typt en komt daarna terug; hij dekt nooit de laatste reactie af. | ☐ |
-| 111 | Wissel in het profielmenu tussen Licht, Donker en Systeem. | Alles blijft leesbaar; de keuze blijft na herladen bewaard. | ☐ |
+| 111 | *Vervallen in 0.9.0:* geen themakeuze meer (zie deel N). | — | ☐ |
+
+## N. Korte Mac-test 0.9.0: donker, rustig, klantportaal (± 15 min)
+Doe dit na de update (zie [UPDATEN.md](UPDATEN.md)), eerst met je **gewone** browser waarin de app eerder
+licht was, daarna met de aparte testgegevensmap. Getest met Chrome op Linux en Pixel 7-emulatie; **niet** in
+Safari, niet op jouw Mac en niet op een echte telefoon.
+
+| # | Doe | Verwacht | ✓ |
+|---|---|---|---|
+| 112 | Start de app en ververs het tabblad in je gewone browser (waar de app eerder licht was). | Direct donker nachtblauw, zonder witte flits. Je bent nog ingelogd en je dashboardindeling is er nog. | ☐ |
+| 113 | Open het profielmenu (je initialen rechtsboven). | Geen Licht/Donker/Systeem meer. **Instellingen** staat hier (niet meer als tandwiel in de bovenbalk). | ☐ |
+| 114 | Open een adres dat niet bestaat, bijv. `http://localhost:3000/bestaat-niet`. | Een donkere pagina “Deze pagina bestaat niet” met een link naar de startpagina. | ☐ |
+| 115 | Open het klantportaal van een klant met meerdere projecten (privévenster). | Compacte kop met merk en klantnaam. Bovenaan **Jouw acties**, per project gegroepeerd, met kleine thumbnails en één knop per regel. Een deadline alleen als je er een hebt ingesteld. | ☐ |
+| 116 | Klik op een video bij Jouw acties, plaats een reactie en verstuur je feedback. | “Nog niet verstuurd” is neutraal (niet rood). Na versturen een korte bevestiging; de video speelt niet opnieuw vanaf het begin en getypte tekst blijft staan. | ☐ |
+| 117 | Ga terug naar het overzicht. | De video staat onder **In behandeling** met “Je feedback is verstuurd”; een open vraag in hetzelfde project staat nog bij Jouw acties. | ☐ |
+| 118 | Open het portaal via de **persoonlijke** link van de akkoordgever, open een video en klik **Goedkeuren**. | Eén korte bevestiging met videotitel en versienummer; daarna “Goedgekeurd door …” zonder dat de pagina opnieuw laadt. Met de algemene link is er geen Goedkeuren-knop. | ☐ |
+| 119 | Bekijk **Goedgekeurd en afgerond**. | Definitieve bestanden staan los van goedkeuringen; een goedgekeurde video zonder vrijgave toont “Nog niet vrijgegeven als download”. Afgeronde projecten zijn ingeklapt. | ☐ |
+| 120 | Maak het klantvenster smal (zoals een telefoon) en open een video. | Speler bovenaan, reacties eronder; de actiebalk onderaan dekt niets af en verdwijnt zolang je typt. | ☐ |
+| 121 | Log in als freelancer, open een project, en trek als beheerder de toegang in (Personen › ⋯). Ververs bij de freelancer. | Een duidelijke melding; het project staat niet meer op de startpagina en niet meer in de inbox. | ☐ |
 
 ## Handmatige browsertestlijst
 Automatisch getest (`npm run test:browser`, zie de PR): **Chrome 141 desktop (Linux, headless)** en **Chrome 141 met Pixel 7-emulatie**. Al het andere moet nog met de hand. Voer per browser minstens stappen 8–11, 13, 19–20 en 7 uit.

@@ -3,10 +3,54 @@
 Alle bestaande functies blijven bestaan en vindbaar; oude adressen blijven werken. Rollen en rechten:
 [ROLLEN.md](ROLLEN.md).
 
+## Bouwronde 8 (0.9.0): één vaste donkere stijl, rustiger, klantportaal eerst
+
+**Waarom de app licht bleef.** Drie oorzaken, alle drie weg:
+1. de server zette de bewaarde themakeuze van het account (`Licht`) in elke pagina;
+2. de browser onthield `rt-theme=light`; daarom zag een privévenster er wél goed uit;
+3. `Systeem` volgde een licht ingesteld besturingssysteem.
+
+**Nu:** één vaste nachtblauwe stijl voor team, klant en freelancer. Er is geen themakeuze meer.
+- Een oude lichte keuze (in het account of in de browser) heeft geen effect meer en wordt bij het eerstvolgende bezoek of opslaan opgeruimd. Alle andere voorkeuren, zoals de dashboardindeling, blijven staan.
+- Elke pagina komt al donker binnen (`data-theme="dark"`, `color-scheme: dark`, donkere achtergrond in de stylesheet), dus er is geen witte flits.
+- Ook inloggen, wachtwoordschermen, dialogen, meldingen, lege schermen en foutpagina's zijn donker. Een onbekend adres geeft nu een donkere pagina in plaats van de witte standaardmelding.
+
+| Gebruik | Kleur | Contrast (gemeten in de gebouwde interface) |
+|---|---|---|
+| Achtergrond / panelen / verhoogd | `#0B1424` / `#14233A` / `#1C304C` | — |
+| Primaire knop / hover | `#2563EB` / `#1D4ED8` met wit | 5,2 : 1 / 6,7 : 1 |
+| Uitgeschakelde knop | `#8FA5C2` op `#1C304C` | 5,3 : 1 |
+| Links, focus, selectie | `#7BB4FF` | 8,6 : 1 (focusring ≥ 3 : 1) |
+| Tekst / ondersteunend | `#E6EEF9` / `#B5C8E1` | 15,8 : 1 / 10,8 : 1 |
+| Randen | `#29415F` | — |
+
+De merkkleur van Studio Brutaal of Moviemates kleurt nu alleen het merkteken (logo of initialen). Knoppen en links blijven op elke klantpagina in de vaste stijl. Logo's en de merkkeuze per project blijven ongewijzigd.
+
+### Wat er verplaatst of veranderd is
+
+| Was (0.8.0) | Wordt (0.9.0) |
+|---|---|
+| Thema Licht/Donker/Systeem (profielmenu, Mijn account, rechtsboven op klantpagina's) | **Vervallen**: één vaste donkere stijl |
+| Tandwiel **Instellingen** in de bovenbalk (leek op een themaknop) | **Profielmenu › Instellingen** (de enige plek; zelfde pagina's) |
+| Klantportaal: grote titel met welkomstregel en tellers | **Compacte kop**: merk, klantnaam en (bij een persoonlijke link) “Persoonlijke link van …”; taal rechts |
+| Klantportaal: Jouw acties · Bij Studio Brutaal · Goedgekeurd · Definitieve bestanden | **Jouw acties** (per project) · **In behandeling** · **Goedgekeurd en afgerond** (definitieve bestanden, goedgekeurd, beantwoorde vragen, afgeronde projecten; alles behalve de bestanden ingeklapt) · **Alle projecten** |
+| Afgeronde projecten onder “Alle projecten en video’s” | Onder **Goedgekeurd en afgerond › Afgeronde projecten** (ingeklapt) |
+| Goedgekeurde video zonder aanduiding of er al iets te downloaden is | “Nog niet vrijgegeven als download” of “Versie n vrijgegeven om te downloaden” |
+| Klantreview: statuslabel in de kop én statusblok | Alleen het statusblok in het paneel |
+| Klantreview: “Versies vergelijken” en “Feedback downloaden” onder de speler | **Meer** (rechts onder de speler); **Download** blijft direct zichtbaar als dat mag |
+| Klantreview: “Zo werkt het” standaard open | Standaard ingeklapt (blijft open als je hem openklapt) |
+| Knop “Deze versie goedkeuren” | **Goedkeuren** (voorleesnaam “Versie n goedkeuren”); bevestiging met titel en exact versienummer |
+| Na feedback versturen of goedkeuren: hele pagina opnieuw geladen | Alleen het paneel wordt bijgewerkt; speler, afspeelpositie en getypte tekst blijven |
+| Werkplek team: status in de kop én in de versiekeuze | Alleen in de versiekeuze en de statusregel |
+| Reactiefilter (Alle 0 · Open 0 · Afgehandeld 0) zonder reacties | Verborgen tot er reacties zijn |
+| Projectkop: cover 300 px met tekstknop | Compacte cover (≈ 200 px) met een pictogramknop **Omslag wijzigen** |
+
+**Niet veranderd:** rechten, statusregels, goedkeuren en vrijgeven, klantvragen, tekenen, tijdsbereiken, vergelijken, exports, kwaliteitskeuze, downloadrechten, wachtwoorden, vervaldatums, intrekken, back-up en herstel, handmatige covers en vastgezette projecten.
+
 ## Bouwronde 7 (0.8.0): stijl 2 — nachtblauw met blauwe accenten
 
-Gekozen stijl, toegepast op de hele app (team, freelancer, klant). Licht/Donker/Systeem blijft; stijl 2 is
-het donkere thema. Opgeslagen themakeuzes blijven gelden. De merken Studio Brutaal en Moviemates
+Gekozen stijl, toegepast op de hele app (team, freelancer, klant). In 0.8.0 bleef Licht/Donker/Systeem
+bestaan; sinds 0.9.0 is stijl 2 de enige stijl (zie hierboven). De merken Studio Brutaal en Moviemates
 (logo en accentkleur in **Instellingen › Merken**) blijven ongewijzigd op de klantpagina's.
 
 | Gebruik | Donker (stijl 2) | Contrast |

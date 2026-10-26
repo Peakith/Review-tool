@@ -1,4 +1,4 @@
-// Ontwikkeltest: ZIP-update vanaf een vorige versie (standaard 0.7.0, 14d0aba) zonder internet, met de echte startknop (Start Studio Review.command).
+// Ontwikkeltest: ZIP-update vanaf een vorige versie (standaard 0.8.0, 5ae74b6) zonder internet, met de echte startknop (Start Studio Review.command).
 //  0. De vorige versie wordt "geïnstalleerd" zoals op de Mac: eerste start met internet (npm install vult
 //     de npm-cache), daarna gegevens: account, project, gedeelde video, reviewlink, akkoordlink, goedkeuring.
 //  1. Nieuwe versie vers uitgepakt (zonder node_modules), netwerk geblokkeerd, npm-cache van stap 0:
@@ -60,7 +60,7 @@ if (process.argv[2] === '--binnen') {
 }
 
 // ---- Buiten: voorbereiden en de drie situaties draaien ----
-const OLD_REV = process.argv[2] || '14d0aba';
+const OLD_REV = process.argv[2] || '5ae74b6';
 const { client, upload, makeVideo, rid } = require(path.join(REPO, 'test/helpers'));
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'offline-update-'));
 const DL = path.join(T, 'Downloads');

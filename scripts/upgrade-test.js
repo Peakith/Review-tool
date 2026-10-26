@@ -1,4 +1,4 @@
-// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard 14d0aba = 0.7.0) met echte gegevens.
+// Ontwikkeltest: bijwerken vanaf een vorige versie (standaard 5ae74b6 = 0.8.0) met echte gegevens.
 //  1. vorige versie (zonder .git) maakt account, project, video met twee versies, reviewlink, klantreactie,
 //     feedback, teamnotitie en -antwoord, akkoordlink en goedkeuring, en een back-up;
 //  2. de nieuwe code start op dezelfde gegevens: alles werkt nog, teamnotities zijn intern, antwoorden aan
@@ -19,7 +19,7 @@ const path = require('path');
 const net = require('net');
 const { spawn, execSync } = require('child_process');
 const REPO = path.resolve(__dirname, '..');
-const OLD_REV = process.argv[2] || '14d0aba';
+const OLD_REV = process.argv[2] || '5ae74b6';
 const { client, upload, makeVideo, rid } = require(path.join(REPO, 'test/helpers'));
 const { restoreBackup, listBackups } = require(path.join(REPO, 'server/backup'));
 

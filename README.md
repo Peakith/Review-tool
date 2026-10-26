@@ -57,7 +57,7 @@ brew install node ffmpeg
 
 | Wat | Standaardlocatie | Bij een update |
 |---|---|---|
-| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.8.0` | vervangen |
+| Programma (code) | de uitgepakte map, bijv. `~/Downloads/Review-tool-0.9.0` | vervangen |
 | Gegevens (database met accounts, projecten, reacties, links en rechten; video's in `media/`) | `~/Studio Review/gegevens` | blijft staan |
 | Back-ups | `~/Studio Review/backups` | blijft staan |
 | Instellingen | `~/Studio Review/instellingen.env` | blijft staan |
@@ -322,11 +322,27 @@ brew install node ffmpeg
 - Zonder tekeningen gaat de iPhone direct naar de ingebouwde schermvullende weergave, zoals voorheen.
 - Dit is getest met een nagebootste iPhone-omgeving in Chrome, **niet op een echte iPhone**.
 
+## Bouwronde 8 (0.9.0): één vaste donkere stijl, rustiger, klantportaal eerst
+
+- **Altijd donker**: één nachtblauwe stijl voor team, klant en freelancer; de keuze Licht/Donker/Systeem
+  is weg. Een oude lichte keuze (account of browser) maakt niets meer licht; overige voorkeuren blijven.
+  Pagina's komen direct donker binnen (geen witte flits), ook foutpagina's en onbekende adressen.
+- **Klantportaal**: compacte kop (merk, klantnaam, taal). Daaronder **Jouw acties** per project (kleine
+  thumbnail, korte toelichting, één knop; deadline alleen als die is ingesteld), **In behandeling** (“Je
+  feedback is verstuurd”), **Goedgekeurd en afgerond** (vrijgegeven bestanden los van goedkeuring;
+  afgeronde projecten ingeklapt) en **Alle projecten**. Zonder acties: een korte melding en de projecten
+  staan open.
+- **Klantreview**: compacte kop, één statusblok, extra's onder **Meer**, knop **Goedkeuren** met één
+  bevestiging. Na versturen of goedkeuren wordt alleen het paneel bijgewerkt (speler en invoer blijven).
+- **Teamschermen rustiger**: Instellingen alleen in het profielmenu, geen dubbele statuslabels, compactere
+  projectcover. Overzicht van wat verplaatst is: [docs/HERINRICHTING.md](docs/HERINRICHTING.md).
+- Merkkleur alleen op het merkteken; knoppen en links in de vaste stijl.
+
 ## Bouwronde 7 (0.8.0): stijl 2 — nachtblauw, omslagen en vastzetten
 
 - **Stijl 2** in de hele app: nachtblauwe vlakken (`#0B1424` / `#14233A` / `#1C304C`), primaire knoppen
   `#2563EB` met witte tekst, links/focus/selectie `#7BB4FF`, tekst `#E6EEF9` / `#B5C8E1`, lijnen
-  `#29415F`, hoeken 8–12 px. Licht/Donker/Systeem blijft (stijl 2 is Donker); je opgeslagen keuze blijft.
+  `#29415F`, hoeken 8–12 px. (Sinds 0.9.0 de enige stijl; zie bouwronde 8.)
   De merken Studio Brutaal en Moviemates op klantpagina's zijn ongewijzigd. Overzicht van wat waar staat:
   [docs/HERINRICHTING.md](docs/HERINRICHTING.md).
 - **Bovenbalk** in plaats van de zijbalk; versie en systeemstatus klein onderaan.
@@ -382,7 +398,7 @@ brew install node ffmpeg
 ### Indeling, dashboard, zoeken en thema
 - **Dashboard** per account: standaard vier blokken (Mijn taken, Nieuwe feedback, Wacht op klant, Recente projecten). Met **Dashboard aanpassen** voeg je blokken toe, verberg, verplaats (ook met het toetsenbord) en maak je ze breed; alleen dan zie je bewerkknoppen. Klantactiviteit en Opslag zijn er alleen voor wie de rechten heeft. Alles wordt op de server beperkt tot je eigen projecten.
 - **Zoeken** (veld in de bovenbalk, sneltoets `/`): projecten en klanten, videotitels, oorspronkelijke bestandsnamen, briefings en reacties, gegroepeerd. Een reactie opent de juiste video, versie en het juiste tijdstip. Zoekopdrachten bewaar je per account. Elke zoekopdracht (ook suggesties en aantallen) houdt rekening met je rechten.
-- **Thema**: Licht, Donker of Systeem in het profielmenu (per account). Klanten zonder account hebben dezelfde kleine keuze rechtsboven op hun pagina’s (onthouden in hun browser).
+- **Stijl**: sinds 0.9.0 één vaste donkere stijl (zie bouwronde 8).
 - **Eigen thumbnail** per versie: Info › *Huidig frame gebruiken*; *Automatisch* zet hem terug. Het videobestand blijft ongewijzigd en een interne versie lekt niet via klantweergaven.
 
 ### Klanten en klantportaal
@@ -508,7 +524,7 @@ Een nieuwe installatie zonder accounts vraagt om een **installatiecode**. Zo kan
 ### Tests
 Alle tests gebruiken eigen, tijdelijke mappen en raken je echte gegevens in `~/Studio Review` niet aan.
 ```bash
-npm test                                                   # 186 servertests (vereist ffmpeg en unzip)
+npm test                                                   # 189 servertests (vereist ffmpeg en unzip)
 CHROME_PATH=/pad/naar/chrome npm run test:browser          # klant- en teamflow in een echte browser (52 controles)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:beheer   # rollen, freelanceraccount, opslag, back-ups, prullenbak, archief (28)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:portaal  # klantportaal (startpagina in vaste volgorde), merk, opleveringen, briefing, desktop + mobiel (52)
@@ -516,14 +532,16 @@ CHROME_PATH=/pad/naar/chrome npm run test:browser:feedback # taken, rondes, teke
 CHROME_PATH=/pad/naar/chrome npm run test:browser:oplevering # opleveringen, klantactiviteit, statuscorrectie per versie, iPhone-uitleg (nagebootst), desktop + mobiel (52)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:update   # update met de vorige interface in de browsercache (7)
 npm run test:update-zip                                    # ZIP-update: oude versie → nieuwe map → gegevens overgenomen (14)
-CHROME_PATH=/pad/naar/chrome npm run test:browser:ui      # dashboard, zoeken, thema, bestandsnamen, thumbnail, desktop + mobiel (38)
-CHROME_PATH=/pad/naar/chrome npm run test:browser:klanten # klanten, klantportaal NL/EN, goedkeuren, vorige/volgende, wachtwoord, bezoekersthema, desktop + mobiel (47)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:ui      # dashboard, zoeken, vaste donkere stijl en contrast (ook hover/uitgeschakeld/focus), bestandsnamen, thumbnail (37)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:klanten # klanten, klantportaal NL/EN, goedkeuren, vorige/volgende, wachtwoord, vaste donkere stijl voor bezoekers, desktop + mobiel (47)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:inbox   # inbox, browsermeldingen (nagebootst), activiteitentijdlijn (24)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:kwaliteit # kwaliteitskeuze met hls.js, vertraagd netwerk, 4K/staand, geen origineel (23)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:ronde6  # ⌘K met toetsenbord en beperkte rechten, identieke uploads in de wachtrij, klantvraag, freelancer verloopt (24)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:ronde8  # donker in bestaande browser/privévenster/licht systeem, klantoverzicht (veel/geen acties, afgerond, fout + opnieuw, traag netwerk, ontbrekende thumbnails), reviewer vs akkoordgever, feedback zonder herladen, freelancer ingetrokken, mobiel, toetsenbord (40)
+CHROME_PATH=/pad/naar/chrome npm run test:browser:update-donker # 0.8.0 op Licht → update → gewoon verversen: donker, voorkeuren en sessie behouden (6)
 CHROME_PATH=/pad/naar/chrome npm run test:browser:ronde7  # voorvertoning wisselen (geen geluid op de achtergrond), omslag, vastzetten met twee accounts, freelancer verboden/verlopen, klantvolgorde, nieuwe versie, mobiele actiebalk (35)
-npm run test:upgrade                                       # bijwerken vanaf 0.7.0 met echte gegevens: voorkeuren, automatische omslag, back-ups met omslag en vastzetten terugzetten (50); `-- 98ff4da` voor 0.6.0
-npm run test:offline-update                                # ZIP-update vanaf 0.7.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (11)
+npm run test:upgrade                                       # bijwerken vanaf 0.8.0 met echte gegevens: dashboardindeling behouden, oude lichte voorkeur zonder effect, omslag en vastzetten in back-up/herstel (51); `-- 14d0aba` voor 0.7.0
+npm run test:offline-update                                # ZIP-update vanaf 0.8.0 met de echte startknop, zonder netwerk (Linux: unshare + python3) (11)
 ```
 - De servertests dekken onder meer:
   - rechten per niveau, ook voor media, thumbnails, reacties en uploads;

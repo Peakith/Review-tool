@@ -25,7 +25,7 @@ akkoordlink, opleverlink). Goedkeuren blijft per video, en alleen voor de aangew
 | Project voor jezelf vastzetten (0.8.0; geeft nooit extra toegang) | ✓ | ✓ | ✓ | ✓ | ✓ (alleen zolang de koppeling geldt) |
 | Personen aan het project koppelen (rol, einddatum) | ✓ | ✓ (bestaande accounts) | — | — | — |
 | Accounts maken, merken, opslag, back-ups, definitief verwijderen | ✓ | — | — | — | — |
-| Eigen inbox, voorkeuren, thema en wachtwoord | ✓ | ✓ | ✓ | ✓ | ✓ (alleen meldingen over klantfeedback) |
+| Eigen inbox, voorkeuren en wachtwoord | ✓ | ✓ | ✓ | ✓ | ✓ (alleen meldingen over klantfeedback) |
 
 Technisch: Projectleider = niveau `manage`, Editor = `upload`, Meekijker = `read`, Freelancer = `feedback`.
 De oude niveaus `view` en `publish` bestaan alleen nog als ze vóór de update zo waren opgeslagen; ze
@@ -38,7 +38,7 @@ worden bij de update omgezet (zie hieronder).
   Zichtbare antwoorden van het team aan de klant staan erbij; interne notities, interne antwoorden,
   taken, afhandelstatus en concepten van de klant niet.
 - Eigen eenvoudige omgeving: **Mijn projecten**, **Inbox** (alleen meldingen over verstuurde
-  klantfeedback) en **Mijn account** (thema, wachtwoord). Geen bewerkknoppen.
+  klantfeedback) en **Mijn account** (wachtwoord). Geen bewerkknoppen.
 - Alle andere teamroutes zijn op de server dicht voor een freelanceraccount (ook zoeken, aantallen,
   thumbnails, media, exports, klantgegevens en directe API-verzoeken). Ook een oude, hogere
   projectkoppeling geeft een freelanceraccount niet meer dan "Freelancer".

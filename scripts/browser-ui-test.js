@@ -256,7 +256,8 @@ const mp4 = (name, size = '1920x1080', sec = 6, pat = 'testsrc2') => {
   await shot(page, '56-projecten-licht');
 
   // ---------- Instellingen ----------
-  await page.click('.side-nav a:has-text("Instellingen")');
+  await page.click('.side-user');
+  await page.click('.profile-menu a:has-text("Instellingen")');
   const sections = await page.$$eval('.settings-nav a', (els) => els.map((e) => e.textContent));
   check('Instellingen bundelt account, team, merken, opslag, archief en prullenbak', ['Mijn account', 'Team & rechten', 'Merken', 'Opslag & back-ups', 'Archief', 'Prullenbak'].every((x) => sections.includes(x)), sections.join(', '));
   for (const old of ['/team', '/merken', '/opslag', '/prullenbak', '/archief']) {

@@ -277,7 +277,7 @@ function createApp(overrides = {}) {
   // Voorbeeldweergave voor het team: dezelfde klantpagina's, gevuld via het teamaccount.
   app.get('/voorbeeld/project/:id', sendPage('review/portal.html'));
   app.get('/voorbeeld/video/:id', sendPage('review/index.html'));
-  app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief', '/merken', '/taken', '/zoeken', '/instellingen*', '/klanten*', '/inbox'], sendPage('app/index.html'));
+  app.get(['/', '/login', '/account', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief', '/merken', '/taken', '/zoeken', '/instellingen*', '/klanten*', '/inbox'], sendPage('app/index.html'));
 
   // Onbekend adres: een rustige pagina in dezelfde stijl (geen witte standaardmelding).
   const notFound = (req, res) => {

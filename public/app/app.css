@@ -1247,3 +1247,22 @@ dialog.palette { border: 1px solid var(--line-2); border-top: 1px solid var(--li
 .top-nav a:focus-visible, .top-settings a:focus-visible { box-shadow: inset 0 0 0 2px var(--sel); border-radius: var(--r); }
 .top-nav a.is-active:focus-visible { box-shadow: inset 0 0 0 2px var(--sel), inset 0 -2px 0 var(--sel); }
 .topbar .side-search:focus-within { border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-soft); }
+
+/* ==========================================================================
+   0.9.0: rustiger teamschermen. Compacte projectcover en voorvertoning, kleinere koppen.
+   ========================================================================== */
+.project-head { gap: 22px; margin-bottom: 16px; }
+.project-cover-box.is-head { width: 196px; }
+.project-title-row .page-title { font-size: 26px; line-height: 1.2; }
+.project-meta { font-size: 14px; }
+.preview-stage { height: clamp(220px, 40vh, 420px); }
+.preview-title { font-size: 20px; }
+.page-title { font-weight: 650; }
+.cover-edit { padding: 5px 9px; font-size: 12px; }
+@media (max-width: 1180px) { .project-cover-box.is-head { width: 168px; } }
+@media (max-width: 640px) {
+  .project-cover-box.is-head { width: 96px; }
+  .project-title-row .page-title { font-size: 20px; }
+}
+.project-cover-box.is-head .cover-edit { right: 6px; bottom: 6px; padding: 5px; }
+.project-cover-box.is-head .cover-edit span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

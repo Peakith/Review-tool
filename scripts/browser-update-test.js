@@ -75,7 +75,7 @@ const stopServer = (child) => new Promise((r) => { child.once('exit', r); child.
     await page.waitForSelector('.side-version', { timeout: 15000 });
     const label = await page.textContent('.side-version');
     check('na gewoon verversen: nieuwe interface met versienummer', /\d+\.\d+\.\d+ \(build/.test(label), label);
-    check('nieuwe indeling zichtbaar: dashboard, projecten en instellingen', await page.isVisible('.side-nav a:has-text("Dashboard")') && await page.isVisible('.side-nav a:has-text("Instellingen")'));
+    check('nieuwe indeling zichtbaar: dashboard, projecten en instellingen', await page.isVisible('.side-nav a:has-text("Dashboard")') && await page.isVisible('.side-nav a:has-text("Inbox")') && await page.isVisible('.side-user'));
     check('ook geïmporteerde modules komen van de nieuwe build', fresh.some((u) => u.includes('/shared/util.js')) && fresh.some((u) => u.includes('/shared/icons.js')), `${fresh.length} bestanden via /assets/<build>/`);
     await page.waitForSelector('.dash-card');
     await page.click('.side-nav a:has-text("Projecten")');

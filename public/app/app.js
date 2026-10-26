@@ -146,7 +146,6 @@ function ensureShell() {
           navLink('/taken', 'tasks', 'tasks', 'Mijn taken', h('span', { class: 'side-count', id: 'my-task-count', hidden: true }))),
         h('div', { class: 'topbar-right' },
           searchBox({ navigate, onShortcut: () => openPalette(), shortcutLabel: paletteShortcut() }),
-          h('nav', { class: 'side-nav top-settings', 'aria-label': 'Instellingen' }, navLink('/instellingen', 'settings', 'gear', 'Instellingen')),
           profileMenu()))));
   pageEl = h('main', { class: 'page-host', id: 'main', tabindex: '-1' });
   shellEl = h('div', { class: 'app has-topbar' },
@@ -953,7 +952,7 @@ function coverBox(project, mayManage, { size = 'head' } = {}) {
   const fallback = h('div', { class: 'poster-empty' }, icon('film'));
   if (img) img.addEventListener('error', () => img.replaceWith(fallback));
   return h('div', { class: `project-cover-box is-${size}` }, img || fallback,
-    mayManage ? h('button', { type: 'button', class: 'cover-edit', onClick: () => coverDialog(project) }, icon('image'), h('span', {}, 'Omslag wijzigen')) : null);
+    mayManage ? h('button', { type: 'button', class: 'cover-edit', title: 'Omslag wijzigen', onClick: () => coverDialog(project) }, icon('image'), h('span', {}, 'Omslag wijzigen')) : null);
 }
 
 /** Afspeelbron van een versie voor de gedeelde speler (afspeelversies, anders het origineel voor het team). */
@@ -1141,6 +1140,8 @@ async function viewVideo(id) {
     tabCount.textContent = n.open ? String(n.open) : '';
     mount(filterBar, [['all', 'Alle', n.all], ['open', 'Open', n.open], ['resolved', 'Afgehandeld', n.resolved]].map(([key, label, count]) =>
       h('button', { type: 'button', 'aria-pressed': String(filter === key), onClick: () => { filter = key; drawComments(); } }, label, h('span', { class: 'seg-count' }, count))));
+    // Zonder reacties heeft filteren geen zin: de lege melding is genoeg.
+    filterBar.hidden = n.all === 0;
     renderComments(commentsEl, comments, {
       mode: 'team',
       // Meekijkers lezen alleen: geen antwoorden, afhandelen of taken.
@@ -1266,8 +1267,8 @@ async function viewVideo(id) {
     pageHeader({
       crumbs: [{ label: 'Projecten', href: '/projecten' }, { label: video.project.name, href: `/projecten/${video.project.id}` }],
       title: titleEditor(video, may('upload')),
+      // De status staat al in de versiekeuze en in de statusregel eronder; hier alleen wat de klant ziet.
       meta: [
-        statusPill(version.status, { small: true }),
         h('span', { class: 'meta-item' }, icon('eye'), h('span', { class: 'muted' }, ' Klant ziet: '), clientVersion ? `Versie ${clientVersion.number}` : 'nog niets gedeeld'),
         video.delivery ? h('a', { class: `meta-item delivery-chip${video.delivery.available ? '' : ' is-blocked'}`, href: `/projecten/${video.project.id}/oplevering`, 'data-nav': true, title: video.delivery.available ? 'Definitief vrijgegeven aan de klant' : video.delivery.reasonText },
           icon(video.delivery.available ? 'package' : 'lock'), h('span', { class: 'muted' }, ' Opgeleverd: '), `Versie ${video.delivery.versionNumber}`, video.delivery.available ? '' : ' (geblokkeerd)') : null,

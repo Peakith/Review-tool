@@ -89,7 +89,8 @@ const apiOf = (page, base) => ({
   check('versienummer zichtbaar in de zijbalk', /Studio Review \d+\.\d+\.\d+ \(build [0-9a-f]{8}\)/.test(await page.textContent('.side-version')), await page.textContent('.side-version'));
 
   // ---------- Team & rechten ----------
-  await page.click('.side-nav a:has-text("Instellingen")');
+  await page.click('.side-user');
+  await page.click('.profile-menu a:has-text("Instellingen")');
   await page.click('.settings-nav a:has-text("Team & rechten")');
   await page.waitForSelector('.member-list');
   // Bouwronde 6: een freelancer is een eigen accountsoort (alleen klantfeedback bekijken).
@@ -121,7 +122,7 @@ const apiOf = (page, base) => ({
   await f.waitForSelector('.is-freelance .page-title:has-text("Klantfeedback")');
   const fText = await f.textContent('main');
   check('freelancer: start toont alleen het eigen project', fText.includes('Voorjaarscampagne') && !fText.includes('Van Dijk'));
-  check('freelancer: geen teammenu (dashboard, klanten, instellingen, nieuw project)', !(await f.isVisible('.side-nav a:has-text("Klanten")')) && !(await f.isVisible('.side-nav a:has-text("Instellingen")')) && !(await f.isVisible('text=Nieuw project')));
+  check('freelancer: geen teammenu (dashboard, klanten, instellingen, nieuw project)', !(await f.isVisible('.side-nav a:has-text("Klanten")')) && !(await f.isVisible('.side-nav a:has-text("Instellingen")')) && !(await f.isVisible('a[href="/instellingen"]')) && !(await f.isVisible('text=Nieuw project')));
   for (const url of ['/api/storage', '/api/projects', `/api/versions/${vB.versionId}/media`, `/api/projects/${pB}`]) {
     const r = await f.request.get(`${srv.base}${url}`);
     check(`freelancer: ${url} rechtstreeks geweigerd`, r.status() === 403, String(r.status()));
@@ -138,7 +139,8 @@ const apiOf = (page, base) => ({
   check('freelancer: beheerpagina niet beschikbaar', /niet beschikbaar in je rol/.test(await f.textContent('main')));
 
   // ---------- Opslag & back-ups ----------
-  await page.click('.side-nav a:has-text("Instellingen")');
+  await page.click('.side-user');
+  await page.click('.profile-menu a:has-text("Instellingen")');
   await page.click('.settings-nav a:has-text("Opslag & back-ups")');
   await page.waitForSelector('.stat-tiles');
   check('opslagpagina toont schijfruimte en gebruik per project', await page.isVisible('.disk-bar') && (await page.locator('.data-table tbody tr').count()) >= 2);
@@ -166,7 +168,8 @@ const apiOf = (page, base) => ({
   await page.waitForSelector('.toast:has-text("prullenbak")');
   const clientMediaTrashed = await page.request.get(`${srv.base}/api/versions/${vB.versionId}/media`);
   check('video in prullenbak: ook voor beheerder niet direct op te vragen (410)', clientMediaTrashed.status() === 410);
-  await page.click('.side-nav a:has-text("Instellingen")');
+  await page.click('.side-user');
+  await page.click('.profile-menu a:has-text("Instellingen")');
   await page.click('.settings-nav a:has-text("Prullenbak")');
   await page.waitForSelector('.trash-item');
   await shot(page, '24-prullenbak');
@@ -214,7 +217,8 @@ const apiOf = (page, base) => ({
   await o.click('button[type=submit]');
   await o.waitForSelector('.system-banner.is-error');
   check('ontbrekende externe schijf: duidelijke melding', (await o.textContent('.system-banner')).includes('“StudioReviewSchijf” is niet aangesloten'));
-  await o.click('.side-nav a:has-text("Instellingen")');
+  await o.click('.side-user');
+  await o.click('.profile-menu a:has-text("Instellingen")');
   await o.click('.settings-nav a:has-text("Opslag & back-ups")');
   await o.waitForSelector('.notice-error:has-text("Opslag niet bereikbaar")');
   await shot(o, '28-externe-schijf-ontbreekt');

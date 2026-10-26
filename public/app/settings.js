@@ -1,7 +1,6 @@
 // Instellingen: alle beheer- en persoonlijke instellingen op één plek, met een eigen subnavigatie.
 // De bestaande schermen (team, merken, opslag, prullenbak, archief) worden hier ongewijzigd getoond.
 import { h, mount, icon, api, toast } from '/shared/util.js';
-import { THEMES, applyTheme, themePref } from '/shared/theme.js';
 import { viewTeam, viewStorage, viewTrash, viewArchive, viewBrands, viewMyAccount, passwordDialog } from './admin.js';
 
 const SECTIONS = [
@@ -43,17 +42,8 @@ export async function viewSettings(ctx, section) {
 async function viewAccount(ctx) {
   document.title = 'Mijn account — Studio Review';
   const { session } = ctx;
-  const themeGroup = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Thema' });
-  const drawTheme = () => mount(themeGroup, THEMES.map(([key, label]) => h('button', {
-    type: 'button', role: 'radio', 'aria-checked': String(themePref() === key), 'aria-pressed': String(themePref() === key),
-    onClick: () => saveTheme(key).then(drawTheme),
-  }, label)));
-  drawTheme();
-  const prefs = h('section', { class: 'card' },
-    h('h2', { class: 'card-title' }, 'Weergave'),
-    h('div', { class: 'pref-row' }, h('div', {}, h('strong', {}, 'Thema'), h('p', { class: 'small muted' }, 'Systeem volgt de instelling van je computer. Je keuze geldt voor jouw account.')), themeGroup));
   const sub = h('div', {});
-  mount(ctx.pageEl, h('div', { class: 'page page-narrow' }, ctx.pageHeader({ title: 'Mijn account', meta: `${session.user.name} · ${session.user.email}` }), prefs, sub));
+  mount(ctx.pageEl, h('div', { class: 'page page-narrow' }, ctx.pageHeader({ title: 'Mijn account', meta: `${session.user.name} · ${session.user.email}` }), sub));
   if (session.user.isAdmin) {
     mount(sub, h('section', { class: 'card' }, h('h2', { class: 'card-title' }, 'Wachtwoord'),
       h('p', { class: 'small muted' }, 'Na het wijzigen log je opnieuw in.'),
@@ -63,10 +53,3 @@ async function viewAccount(ctx) {
   }
 }
 
-/** Thema opslaan voor dit account en direct toepassen. */
-export async function saveTheme(pref) {
-  applyTheme(pref);
-  try {
-    await api('PUT', '/api/me/preferences', { theme: pref });
-  } catch (err) { toast(`${err.message} Het thema geldt nu alleen in deze browser.`, 'error'); }
-}

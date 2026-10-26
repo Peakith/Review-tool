@@ -129,8 +129,8 @@ test('voorkeuren: soort uitzetten = geen nieuwe meldingen van die soort', async 
   await guest.post(`/api/review/${A.token}/versions/${A.versionId}/feedback`, { authorName: 'Eva', requestId: rid() }, key);
   assert.equal((await inbox(edith.client)).items.filter((n) => n.type === 'feedback').length, 1, 'geen nieuwe feedbackmelding');
   assert.equal((await inbox(admin)).items.filter((n) => n.type === 'feedback').length, 2);
-  // Thema blijft bewaard naast de meldingsvoorkeuren
-  await edith.client.put('/api/me/preferences', { theme: 'light' });
+  // Andere voorkeuren opslaan raakt de meldingsvoorkeuren niet
+  await edith.client.put('/api/me/preferences', { dashboard: { widgets: [{ id: 'inbox' }] } });
   assert.equal((await edith.client.get('/api/inbox/preferences')).data.preferences.find((p) => p.key === 'feedback').on, false);
 });
 

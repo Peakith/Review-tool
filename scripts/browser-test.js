@@ -185,7 +185,7 @@ async function waitUploadsDone(page, n) {
   await client.goto(reviewUrl);
   await client.waitForSelector('.player');
   check('klant ziet titel, versie en status', (await client.textContent('.r-header')).includes('Campagnefilm — Hoofdvideo') && (await client.textContent('.version-chip')).includes('Versie 1'));
-  check('klant kan niet goedkeuren', (await client.locator('button:has-text("Deze versie goedkeuren")').count()) === 0);
+  check('klant kan niet goedkeuren', (await client.locator('button:has-text("Goedkeuren")').count()) === 0);
   await playAndMeasure(client, 'Desktop Chrome, MP4 zonder faststart');
   await seekViaTimeline(client, 0.5, 'Desktop Chrome');
   await pause(client);
@@ -264,7 +264,8 @@ async function waitUploadsDone(page, n) {
   await client.reload();
   await client.waitForSelector('.version-chip');
   check('na publiceren ziet klant Versie 2 met dezelfde link', (await client.textContent('.version-chip')).includes('Versie 2'));
-  check('versie 2 is niet goedgekeurd', await client.isVisible('.r-header .pill-in_review'));
+  // 0.9.0: de status staat één keer, in het statusblok van het paneel (niet ook als label in de kop).
+  check('versie 2 is niet goedgekeurd', await client.isVisible('.r-status.is-review') && !(await client.isVisible('.r-status.is-approved')));
   await client.selectOption('.version-pick select', { label: 'Versie 1' });
   await client.waitForSelector('.r-status.is-old');
   check('feedback op versie 1 blijft bewaard', (await client.locator('.comment').count()) >= 3);
@@ -307,7 +308,7 @@ async function waitUploadsDone(page, n) {
   await m.waitForSelector('.comment:has-text("Eindshot") .badge-verified');
   check('mobiel: reactie als geverifieerde akkoordgever', true);
   await shot(m, '08-klant-mobiel');
-  await m.tap('button:has-text("Deze versie goedkeuren")');
+  await m.tap('button:has-text("Goedkeuren")');
   await m.tap('dialog button:has-text("Ja, keur Versie 2 goed")');
   await m.waitForSelector('.r-status.is-approved');
   check('mobiel: Versie 2 goedgekeurd met bevestiging', await m.isVisible('.notice-ok:has-text("Versie 2 is goedgekeurd")'));

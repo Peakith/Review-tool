@@ -395,6 +395,8 @@ function mp4(name, { size = '1920x1080', seconds = 12, freq = 440, pattern = 'te
     await mp.goto(reviewUrl);
     await mp.waitForSelector('.r-header');
     const shared = (await (await mp.request.get(reviewUrl.replace('/r/', '/api/review/'))).json()).versions.length;
+    // 0.9.0: vergelijken en feedback downloaden staan onder "Meer".
+    await mp.click('.r-more > summary');
     await mp.click('button:has-text("Versies vergelijken")');
     await mp.waitForSelector('.cmp');
     check('klant: vergelijken alleen met gepubliceerde versies', (await mp.locator('.cmp-pane:first-child option').count()) === shared, `${shared} gepubliceerd`);
@@ -477,6 +479,7 @@ function mp4(name, { size = '1920x1080', seconds = 12, freq = 440, pattern = 'te
     const cp = await c3.newPage();
     watch(cp, 'klant-C');
     await cp.goto(reviewUrl);
+    await cp.click('.r-more > summary');
     await cp.waitForSelector('.r-export');
     const [dl3] = await Promise.all([cp.waitForEvent('download'), cp.click('.r-export a:has-text("PDF")')]);
     const clientPdf = path.join(S, 'downloads', `klant-${dl3.suggestedFilename()}`);

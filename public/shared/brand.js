@@ -2,9 +2,7 @@
 // logo of, zonder logo, een nette naammarkering. De basisinterface is voor elk merk gelijk.
 import { h, icon } from './util.js';
 
-const BG_DARK = [15, 16, 18]; // --bg (donker)
-const BG_LIGHT = [245, 245, 243]; // --bg (licht)
-const currentMode = () => (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+const BG = [11, 20, 36]; // --bg (#0B1424), de enige achtergrond
 
 const hexToRgb = (hex) => {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
@@ -20,40 +18,36 @@ const lum = (rgb) => {
 export const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 const mix = (rgb, to, t) => rgb.map((v, i) => v + (to[i] - v) * t);
 
-/** Lichter (donker thema) of donkerder (licht thema) maken tot het contrast minstens `min` is. */
-function liftTo(rgb, min, mode) {
-  const bg = mode === 'light' ? BG_LIGHT : BG_DARK;
-  const to = mode === 'light' ? [0, 0, 0] : [255, 255, 255];
+/** Lichter maken tot het contrast op de nachtblauwe achtergrond minstens `min` is. */
+function liftTo(rgb, min) {
   let out = rgb;
-  for (let t = 0; t <= 1 && contrast(out, bg) < min; t += 0.05) out = mix(rgb, to, t);
+  for (let t = 0; t <= 1 && contrast(out, BG) < min; t += 0.05) out = mix(rgb, [255, 255, 255], t);
   return out;
 }
 
-/** CSS-variabelen voor een accentkleur, leesbaar in het huidige thema. */
-export function palette(hex, mode = currentMode()) {
+/** CSS-variabelen voor een merkkleur, leesbaar op de nachtblauwe achtergrond. */
+export function palette(hex) {
   const base = hexToRgb(hex);
   if (!base) return null;
-  const accent = liftTo(base, 3, mode); // knoppen en focusrand: minstens 3:1 op de achtergrond
-  const strong = liftTo(base, 4.5, mode); // tekst en links: minstens 4,5:1
+  const accent = liftTo(base, 3); // merkteken: minstens 3:1 op de achtergrond
+  const strong = liftTo(base, 4.5); // tekst in merkkleur: minstens 4,5:1
   const ink = contrast(accent, [255, 255, 255]) >= contrast(accent, [17, 17, 17]) ? '#ffffff' : '#111111';
   const [r, g, b] = accent.map(Math.round);
   return {
-    '--accent': toHex(accent),
-    '--accent-strong': toHex(strong),
-    '--accent-ink': ink,
-    '--accent-soft': `rgba(${r}, ${g}, ${b}, 0.14)`,
-    '--accent-line': `rgba(${r}, ${g}, ${b}, 0.45)`,
+    '--brand': toHex(accent),
+    '--brand-strong': toHex(strong),
+    '--brand-ink': ink,
+    '--brand-soft': `rgba(${r}, ${g}, ${b}, 0.14)`,
   };
 }
 
-/** Past het merk toe op de hele pagina (of herstelt de standaard bij brand = null). */
-let lastBrand;
-window.addEventListener('themechange', () => { if (lastBrand !== undefined) applyBrand(lastBrand); });
-
+/**
+ * Past het merk toe: alleen het merkteken (logo of initialen) krijgt de merkkleur. Knoppen, links en
+ * focus blijven in de vaste stijl (blauw), zodat elke klantpagina rustig en gelijk aanvoelt.
+ */
 export function applyBrand(brand, target = document.documentElement) {
-  if (target === document.documentElement) lastBrand = brand;
   const vars = palette(brand?.accent);
-  for (const k of ['--accent', '--accent-strong', '--accent-ink', '--accent-soft', '--accent-line']) {
+  for (const k of ['--brand', '--brand-strong', '--brand-ink', '--brand-soft']) {
     if (vars) target.style.setProperty(k, vars[k]); else target.style.removeProperty(k);
   }
   target.dataset.brand = brand?.slug || '';

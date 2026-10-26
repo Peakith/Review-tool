@@ -148,6 +148,11 @@ function portalDto(db, project, { videoLink, posterUrl, fileUrl }) {
       approval,
       round: clientRound(db, ver).round,
       approverName: v.approver_name || null,
+      // Definitief vrijgegeven (los van goedkeuren): welke versie de klant kan downloaden.
+      released: (() => {
+        const r = db.prepare('SELECT ver.number FROM deliveries d JOIN versions ver ON ver.id = d.version_id WHERE d.video_id = ? AND d.withdrawn_at IS NULL').get(v.id);
+        return r ? { versionNumber: r.number } : null;
+      })(),
       archived: archivedProject || !!v.archived_at,
       href: videoLink(v),
     });

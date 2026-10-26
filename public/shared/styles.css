@@ -1,8 +1,9 @@
 /* ==========================================================================
-   Studio Review — ontwerpsysteem "stijl 2: nachtblauw" (bouwronde 7)
-   Donker: nachtblauwe achtergrond, panelen en verhoogde vlakken, primaire knoppen in blauw
-   (#2563EB, witte tekst) en lichtblauw (#7BB4FF) voor links, focus en selectie. Licht: dezelfde
-   opbouw op een lichte basis. Afronding 8–12 px, rustige vlakken met subtiele randen.
+   Studio Review — ontwerpsysteem "stijl 2: nachtblauw" (vast sinds 0.9.0)
+   Eén vaste donkere stijl voor team, klant en freelancer: nachtblauwe achtergrond, panelen en
+   verhoogde vlakken, primaire knoppen in blauw (#2563EB, witte tekst) en lichtblauw (#7BB4FF) voor
+   links, focus en selectie. Afronding 8–12 px, rustige vlakken met subtiele randen. Er is geen
+   lichte variant meer; oude themavoorkeuren worden genegeerd.
    Merkkleur en logo van de klantweergave komen uit Instellingen › Merken (per merk); die
    overschrijven op klantpagina's alleen het accent. Lettertypen: zie huisstijl.css.
    ========================================================================== */
@@ -19,7 +20,7 @@
   --text-2: #B5C8E1;
   --text-3: #8FA5C2;
   --accent: #2563EB;           /* primaire knoppen */
-  --accent-strong: #3B76F0;
+  --accent-strong: #1D4ED8;      /* hover van primaire knoppen (wit erop ≥ 4,5:1) */
   --accent-ink: #FFFFFF;
   --accent-soft: rgba(123, 180, 255, 0.12);
   --accent-line: rgba(123, 180, 255, 0.55);
@@ -70,60 +71,8 @@
   --auth-glow: #14233A;
 }
 
-/* Licht thema: dezelfde opbouw op een lichte basis. De speler blijft donker. */
-:root[data-theme="light"] {
-  color-scheme: light;
-  --bg: #F4F7FB;
-  --bg-2: #EDF2F8;
-  --surface: #FFFFFF;
-  --surface-2: #E8F0FB;
-  --surface-3: #DCE6F3;
-  --line: #D5DFEC;
-  --line-2: #B9C8DC;
-  --text: #0F1B2D;
-  --text-2: #3E5170;
-  --text-3: #556780;
-  --accent: #2563EB;
-  --accent-strong: #1D4ED8;
-  --accent-ink: #FFFFFF;
-  --accent-soft: rgba(37, 99, 235, 0.08);
-  --accent-line: rgba(37, 99, 235, 0.45);
-  --sel: #1D4ED8;
-  --sel-soft: rgba(37, 99, 235, 0.09);
-  --danger: #B42318;
-  --danger-soft: rgba(180, 35, 24, 0.08);
-  --st-concept: #556780;       --st-concept-bg: rgba(85, 103, 128, 0.10);
-  --st-ready: #1D4ED8;         --st-ready-bg: rgba(29, 78, 216, 0.09);
-  --st-review: #845500;        --st-review-bg: rgba(214, 150, 20, 0.14);
-  --st-changes: #B0402A;       --st-changes-bg: rgba(176, 64, 42, 0.09);
-  --st-approved: #16733F;      --st-approved-bg: rgba(22, 115, 63, 0.10);
-  --shadow: 0 14px 34px rgba(15, 27, 45, 0.12);
-  --hover-line: #8FA5C2;
-  --placeholder: #6B7C95;
-  --info-text: #1B4B96;
-  --warn-text: #6A4500;
-  --ok-text: #135B35;
-  --danger-text: #9C2C1F;
-  --line-info: rgba(29, 78, 216, .25);
-  --line-warn: rgba(170, 115, 0, .35);
-  --line-ok: rgba(22, 115, 63, .3);
-  --line-danger: rgba(180, 35, 24, .4);
-  --toast-bg: #FFFFFF;
-  --backdrop: rgba(15, 27, 45, .4);
-  --active-bg: #E8F0FB;
-  --row-hover: #F2F6FC;
-  --drop-overlay: rgba(244, 247, 251, .92);
-  --poster-empty-fg: #8FA5C2;
-  --poster-empty-bg: linear-gradient(135deg, #E8F0FB, #DCE6F3);
-  --bar-bg: rgba(255, 255, 255, .96);
-  --preview-bg: #E8F0FB;
-  --preview-text: #0F1B2D;
-  --approve-ink: #FFFFFF;
-  --approve-hover: #12603A;
-  --auth-glow: #E8F0FB;
-}
-
 * { box-sizing: border-box; }
+html { background: #0B1424; color-scheme: dark; }
 html, body { margin: 0; }
 body {
   background: var(--bg);
@@ -165,7 +114,7 @@ a[class] { text-decoration: none; }
   transition: background .12s, border-color .12s, color .12s;
 }
 .btn:hover { background: var(--surface-2); border-color: var(--hover-line); text-decoration: none; }
-.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn:disabled, .btn:disabled:hover { opacity: 1; cursor: not-allowed; background: var(--surface-2); color: var(--text-3); border-color: var(--line); box-shadow: none; }
 .btn .icon { --icon-size: 16px; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
@@ -436,7 +385,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; m
 .brand-lockup .brand-mark .icon { --icon-size: 14px; margin-left: 1px; }
 .brand-logo { display: block; max-height: 34px; max-width: 180px; width: auto; height: auto; object-fit: contain; }
 .brand-namemark { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
-.brand-initials { width: 30px; height: 30px; border-radius: var(--r); background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 12.5px; font-weight: 800; letter-spacing: .02em; flex-shrink: 0; }
+.brand-initials { width: 30px; height: 30px; border-radius: var(--r); background: var(--brand, var(--accent)); color: var(--brand-ink, var(--accent-ink)); display: grid; place-items: center; font-size: 12.5px; font-weight: 800; letter-spacing: .02em; flex-shrink: 0; }
 .brand-name { font-size: 15px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Zichtbaarheid: intern of zichtbaar voor de klant (altijd icoon + tekst) */
 .badge-internal { background: var(--surface-3); color: var(--text-2); }

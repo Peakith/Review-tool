@@ -7,7 +7,8 @@
 //     die back-up zijn daarbij (veilige standaard) ongeldig gemaakt;
 //  4. bouwronde 6: een nieuwe back-up met projectkoppelingen (einddatums) en klantvragen terugzetten;
 //     een verstreken einddatum blijft verstreken;
-//  5. bouwronde 7: voorkeuren (thema, eigen dashboardindeling) blijven na de update; bestaande projecten
+//  5. bouwronde 7/8: de eigen dashboardindeling blijft na de update en een oude lichte themakeuze
+//     maakt niets meer licht; bestaande projecten
 //     hebben zonder instellen een automatische omslag; omslag (eigen frame) en vastgezette projecten gaan
 //     mee in een back-up en komen terug bij herstel.
 // Gebruik: npm run test:upgrade [-- <oude-commit>]
@@ -151,7 +152,11 @@ const freePort = () => new Promise((r) => { const s = net.createServer().listen(
   // Bouwronde 6 op bestaande gegevens
   // Bouwronde 7 op bestaande gegevens
   const prefs = (await t2.get('/api/me/preferences')).data;
-  if (prefsSet.status === 200) ok('voorkeuren behouden: thema en eigen dashboardindeling', prefs.theme === 'light' && JSON.stringify(prefs.dashboard.widgets) === '[{"id":"tasks","size":"wide"},{"id":"recent","size":"normal"}]', JSON.stringify(prefs));
+  if (prefsSet.status === 200) {
+    ok('voorkeuren: eigen dashboardindeling behouden, oude lichte themakeuze zonder effect', !('theme' in prefs) && JSON.stringify(prefs.dashboard.widgets) === '[{"id":"tasks","size":"wide"},{"id":"recent","size":"normal"}]', JSON.stringify(prefs));
+    const html = await (await fetch(`${base}/`, { headers: { cookie: t2.cookie() } })).text();
+    ok('pagina na de update vast donker (ook met een oude lichte voorkeur)', html.includes('<html lang="nl" data-theme="dark">') && !html.includes('data-theme-pref'));
+  }
   const proj = (await t2.get(`/api/projects/${projectId}`)).data;
   ok('bestaand project heeft zonder instellen een automatische omslag', proj.cover?.mode === 'auto' && (await fetch(`${base}${proj.cover.url}`, { headers: { cookie: t2.cookie() } })).status === 200);
   ok('beheerder blijft beheerder na de update', (await t2.get('/api/session')).data.user.role === 'admin' && (await t2.get('/api/storage')).status === 200);

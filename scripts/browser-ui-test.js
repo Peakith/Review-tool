@@ -128,44 +128,53 @@ const mp4 = (name, size = '1920x1080', sec = 6, pat = 'testsrc2') => {
   check('freelancer: geen opslag- of klantactiviteitblok beschikbaar', !fAdd.some((t) => /Opslag|Klantactiviteit/.test(t)), fAdd.join(', '));
   await f.click('.dash-editbar button:has-text("Klaar")');
 
-  // ---------- Thema ----------
-  check('standaard donker thema', (await page.getAttribute('html', 'data-theme')) === 'dark');
+  // ---------- Vaste donkere stijl (0.9.0) ----------
+  check('donkere stijl', (await page.getAttribute('html', 'data-theme')) === 'dark');
   await page.click('.side-user');
-  check('profielmenu: kleine themakeuze', await page.isVisible('.profile-menu .menu-item:has-text("Licht")') && await page.isVisible('.profile-menu .menu-item:has-text("Systeem")'));
-  await page.click('.profile-menu .menu-item:has-text("Licht")');
-  await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
-  const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  check('licht thema direct toegepast', bodyBg === 'rgb(244, 247, 251)', bodyBg);
+  check('profielmenu: geen themakeuze meer', !(await page.isVisible('.profile-menu .menu-item:has-text("Licht")')) && !(await page.isVisible('.profile-menu .menu-item:has-text("Systeem")')));
   await page.keyboard.press('Escape');
+  // Bestaande browser met een oude lichte voorkeur (account én browser) en een licht ingesteld systeem.
+  const me = (await (await page.request.get(`${BASE}/api/session`)).json()).user.id;
+  server.db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify({ theme: 'light' }), me);
+  await page.evaluate(() => localStorage.setItem('rt-theme', 'light'));
+  await page.emulateMedia({ colorScheme: 'light' });
+  const served = await (await page.request.get(`${BASE}/`)).text();
+  check('pagina komt al donker binnen (geen witte flits): data-theme, color-scheme en achtergrond vóór de scripts', /<html lang="nl" data-theme="dark">/.test(served) && /<meta name="color-scheme" content="dark">/.test(served) && !served.includes('data-theme-pref'));
   await page.reload();
   await page.waitForSelector('.dash-card');
-  check('themakeuze bewaard voor dit account (na herladen, zonder flits)', (await page.getAttribute('html', 'data-theme-pref')) === 'light' && (await page.getAttribute('html', 'data-theme')) === 'light');
-  await shot(page, '53-dashboard-licht');
-  await f.reload();
-  await f.waitForSelector('.dash-card');
-  check('ander account houdt zijn eigen thema', (await f.getAttribute('html', 'data-theme')) === 'dark');
-  // Systeem volgt de computer, ook bij wisselen
-  await f.click('.side-user');
-  await f.click('.profile-menu .menu-item:has-text("Systeem")');
-  await f.emulateMedia({ colorScheme: 'light' });
-  await f.waitForFunction(() => document.documentElement.dataset.theme === 'light');
-  await f.emulateMedia({ colorScheme: 'dark' });
-  await f.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
-  check('Systeem volgt licht/donker van de computer', true);
-  // Contrast van de belangrijkste tekstkleuren in beide thema's (WCAG AA 4,5:1)
-  const contrastOf = (p) => p.evaluate(() => {
-    const rgb = (c) => c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
-    const lum = ([r, g, b]) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const htmlBg = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
+  check('oude lichte voorkeur + licht systeem → toch donker #0B1424', (await page.getAttribute('html', 'data-theme')) === 'dark' && bodyBg === 'rgb(11, 20, 36)' && htmlBg === 'rgb(11, 20, 36)', `${bodyBg} ${htmlBg}`);
+  check('oude themakeuze in deze browser opgeruimd', (await page.evaluate(() => localStorage.getItem('rt-theme'))) === null);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  // Contrast in de gebouwde interface: tekstkleuren, knoppen (ook hover en uitgeschakeld) en focus.
+  const contrastJs = `const lum = ([r, g, b]) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
     const cr = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
-    const probe = (v) => { const el = document.createElement('span'); el.style.color = `var(${v})`; document.body.append(el); const c = getComputedStyle(el).color; el.remove(); return rgb(c); };
+    const rgb = (c) => c.match(/\\d+(\\.\\d+)?/g).slice(0, 3).map(Number);`;
+  const cTokens = await page.evaluate(`(() => { ${contrastJs}
+    const probe = (v) => { const el = document.createElement('span'); el.style.color = 'var(' + v + ')'; document.body.append(el); const c = getComputedStyle(el).color; el.remove(); return rgb(c); };
     const bg = rgb(getComputedStyle(document.body).backgroundColor);
-    const surface = (() => { const el = document.createElement('div'); el.style.background = 'var(--surface)'; document.body.append(el); const c = getComputedStyle(el).backgroundColor; el.remove(); return rgb(c); })();
-    return Object.fromEntries(['--text', '--text-2', '--text-3', '--sel', '--warn-text', '--danger-text', '--ok-text', '--info-text'].map((v) => [v, Math.min(cr(probe(v), bg), cr(probe(v), surface)).toFixed(2)]));
-  });
-  const cLight = await contrastOf(page);
-  const cDark = await contrastOf(f);
-  check('contrast tekstkleuren licht thema ≥ 4,5:1', Object.values(cLight).every((x) => Number(x) >= 4.5), JSON.stringify(cLight));
-  check('contrast tekstkleuren donker thema ≥ 4,5:1', Object.values(cDark).every((x) => Number(x) >= 4.5), JSON.stringify(cDark));
+    const surf = (v) => { const el = document.createElement('div'); el.style.background = 'var(' + v + ')'; document.body.append(el); const c = getComputedStyle(el).backgroundColor; el.remove(); return rgb(c); };
+    const s1 = surf('--surface'); const s2 = surf('--surface-2');
+    return Object.fromEntries(['--text', '--text-2', '--text-3', '--sel', '--warn-text', '--danger-text', '--ok-text', '--info-text'].map((v) => [v, Math.min(cr(probe(v), bg), cr(probe(v), s1), cr(probe(v), s2)).toFixed(2)]));
+  })()`);
+  check('contrast tekstkleuren ≥ 4,5:1 op achtergrond, panelen en verhoogde vlakken', Object.values(cTokens).every((x) => Number(x) >= 4.5), JSON.stringify(cTokens));
+  const btnContrast = async (sel) => page.evaluate(`(() => { ${contrastJs} const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return 0; const s = getComputedStyle(e); let bgc = s.backgroundColor; if (/rgba\\(0, 0, 0, 0\\)|transparent/.test(bgc)) bgc = getComputedStyle(document.body).backgroundColor; return cr(rgb(s.color), rgb(bgc)).toFixed(2); })()`);
+  await page.goto(`${BASE}/projecten`);
+  await page.waitForSelector('.btn-primary');
+  const cPrimary = await btnContrast('.btn-primary');
+  await page.hover('.btn-primary');
+  await page.waitForTimeout(250);
+  const cPrimaryHover = await btnContrast('.btn-primary');
+  const cSecondary = await btnContrast('.view-toggle button, .btn-secondary, .btn');
+  await page.evaluate(() => { const b = document.createElement('button'); b.className = 'btn btn-primary test-disabled'; b.disabled = true; b.textContent = 'Uitgeschakeld'; document.querySelector('main').prepend(b); });
+  const cDisabled = await btnContrast('.test-disabled');
+  await page.evaluate(() => document.querySelector('.test-disabled').remove());
+  await page.focus('.side-nav a:has-text("Projecten")');
+  await page.keyboard.press('Tab');
+  const focusRing = await page.evaluate(`(() => { ${contrastJs} const s = getComputedStyle(document.activeElement); const m = s.boxShadow.match(/rgb\\([^)]+\\)/g) || []; const ring = m.length ? rgb(m[m.length - 1]) : null; return ring ? cr(ring, rgb(getComputedStyle(document.body).backgroundColor)).toFixed(2) : 0; })()`);
+  check('contrast knoppen: primair, primair hover, secundair en uitgeschakeld ≥ 4,5:1; focusring ≥ 3:1', [cPrimary, cPrimaryHover, cSecondary, cDisabled].every((x) => Number(x) >= 4.5) && Number(focusRing) >= 3,
+    JSON.stringify({ cPrimary, cPrimaryHover, cSecondary, cDisabled, focusRing }));
 
   // ---------- Zoeken ----------
   await page.click('.side-search input');

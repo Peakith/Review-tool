@@ -474,7 +474,7 @@ function brandCard(ctx, brand) {
     applyBrand({ ...current, accent: hex.value }, preview);
     const pal = palette(hex.value);
     contrastNote.textContent = !pal ? 'Vul een geldige kleur in, bijvoorbeeld #38c6b8.'
-      : pal['--accent'].toLowerCase() !== hex.value.toLowerCase() ? 'Op de donkere achtergrond wordt deze kleur iets lichter getoond, zodat knoppen en tekst goed leesbaar blijven.' : 'Goed leesbaar op de donkere achtergrond.';
+      : pal['--brand'].toLowerCase() !== hex.value.toLowerCase() ? 'Op de donkere achtergrond wordt het merkteken iets lichter getoond, zodat het goed zichtbaar blijft. Knoppen en links blijven in de vaste stijl.' : 'Goed zichtbaar op de donkere achtergrond. Knoppen en links blijven in de vaste stijl.';
     mount(preview,
       h('div', { class: 'bp-header' }, brandMark({ ...current, name: name.value || brand.name })),
       h('div', { class: 'bp-body' },
@@ -483,7 +483,7 @@ function brandCard(ctx, brand) {
           h('div', { class: 'bp-thumb' }, icon('film')),
           h('div', { class: 'bp-card-body' }, h('strong', {}, 'Hoofdvideo'), clientPill('in_review', { small: true }),
             h('span', { class: 'btn btn-sm btn-primary' }, icon('chat'), h('span', { class: 'btn-label' }, 'Bekijken en reageren')))),
-        h('a', { class: 'bp-link small', href: '#', onClick: (e) => e.preventDefault() }, 'Voorbeeldlink in accentkleur')));
+        h('a', { class: 'bp-link small', href: '#', onClick: (e) => e.preventDefault() }, 'Voorbeeldlink')));
   };
   color.addEventListener('input', () => { hex.value = color.value; drawPreview(); });
   hex.addEventListener('input', () => { if (/^#[0-9a-f]{6}$/i.test(hex.value)) color.value = hex.value; drawPreview(); });

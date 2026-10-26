@@ -10,7 +10,6 @@ const { TYPES: ACTIVITY_TYPES } = require('../activity');
  * waar deze gebruiker nu toegang toe heeft; ook aantallen, fragmenten en suggesties.
  */
 
-const THEMES = ['dark', 'light', 'system'];
 
 // Dashboardblokken. need: 'publish' = alleen projecten waar je mag publiceren/delen; 'admin' = beheerder.
 const WIDGETS = {
@@ -63,16 +62,15 @@ function meRoutes(router, db, config, { access, storage, feedbackItems, notifier
 
   router.get('/me/preferences', (req, res) => {
     const p = prefsOf(req.user.id);
-    res.json({ theme: THEMES.includes(p.theme) ? p.theme : 'dark', dashboard: { widgets: layoutFor(req.user) } });
+    res.json({ dashboard: { widgets: layoutFor(req.user) } });
   });
 
   router.put('/me/preferences', (req, res) => {
     const body = req.body || {};
     const p = prefsOf(req.user.id);
-    if (body.theme !== undefined) {
-      if (!THEMES.includes(body.theme)) throw new HttpError(400, 'Kies Licht, Donker of Systeem.');
-      p.theme = body.theme;
-    }
+    // Sinds 0.9.0 is er één vaste donkere stijl. Een themawaarde (van een oude pagina) wordt genegeerd
+    // en een eerder bewaarde keuze opgeruimd; de overige voorkeuren blijven ongemoeid.
+    delete p.theme;
     if (body.dashboard !== undefined) {
       if (body.dashboard === null) { delete p.dashboard; } else {
         const allowed = new Set(availableWidgets(req.user).map((w) => w.id));
@@ -89,7 +87,7 @@ function meRoutes(router, db, config, { access, storage, feedbackItems, notifier
       }
     }
     db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify(p), req.user.id);
-    res.json({ ok: true, theme: THEMES.includes(p.theme) ? p.theme : 'dark', dashboard: { widgets: layoutFor(req.user) } });
+    res.json({ ok: true, dashboard: { widgets: layoutFor(req.user) } });
   });
 
   // ---------- Dashboard ----------
@@ -275,7 +273,7 @@ function meRoutes(router, db, config, { access, storage, feedbackItems, notifier
     res.json({ ok: true });
   });
 
-  return { prefsOf, THEMES };
+  return { prefsOf };
 }
 
-module.exports = { meRoutes, WIDGETS, DEFAULT_LAYOUT, THEMES };
+module.exports = { meRoutes, WIDGETS, DEFAULT_LAYOUT };

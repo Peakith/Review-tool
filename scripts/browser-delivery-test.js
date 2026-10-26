@@ -100,7 +100,7 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   await cp.click('.pc-btn[aria-label^="Pauzeren"]');
   await cp.click('.pc-bigplay'); // nogmaals afspelen: telt niet opnieuw
   await cp.waitForTimeout(300);
-  await cp.click('.r-actions button:has-text("Deze versie goedkeuren")');
+  await cp.click('.r-actions button:has-text("Goedkeuren")');
   await cp.click('dialog button:has-text("Ja, keur Versie 1 goed")');
   await cp.waitForSelector('.notice-ok:has-text("goedgekeurd")');
   const acts = server.db.prepare('SELECT type, source_label, version_id FROM client_activity ORDER BY id').all();
@@ -215,8 +215,8 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   await apiT('POST', `/api/versions/${v2.versionId}/share`, { round: 'new', requestId: 'share-v2-bbbbbbbb' });
   const ap = await clientCtx.newPage();
   await ap.goto(mainApprover);
-  await ap.waitForSelector('.r-actions button:has-text("Deze versie goedkeuren")');
-  await ap.click('.r-actions button:has-text("Deze versie goedkeuren")');
+  await ap.waitForSelector('.r-actions button:has-text("Goedkeuren")');
+  await ap.click('.r-actions button:has-text("Goedkeuren")');
   await ap.click('dialog button:has-text("Ja, keur Versie 2 goed")');
   await ap.waitForSelector('.notice-ok:has-text("goedgekeurd")');
   await ap.close();
@@ -258,7 +258,7 @@ function mp4(name, { size = '1920x1080', seconds = 8, freq = 440, pattern = 'tes
   await (async () => {
     const p2 = await clientCtx.newPage();
     await p2.goto(mainApprover);
-    await p2.click('.r-actions button:has-text("Deze versie goedkeuren")');
+    await p2.click('.r-actions button:has-text("Goedkeuren")');
     await p2.click('dialog button:has-text("Ja, keur Versie 2 goed")');
     await p2.waitForSelector('.notice-ok:has-text("goedgekeurd")');
     await p2.close();

@@ -451,7 +451,7 @@ code { font: 12.5px var(--mono); background: var(--surface-3); padding: 1px 5px;
 .kind-head .icon { --icon-size: 15px; color: var(--text-3); }
 .video-row-meta { margin-top: -2px; }
 .brand-chip { display: inline-flex; align-items: center; gap: 6px; }
-.brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface-3); }
+.brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand, var(--accent)); box-shadow: 0 0 0 2px var(--surface-3); }
 .delivery-meta { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .delivery-meta .link-btn { white-space: nowrap; }
 .composer-visibility { margin-bottom: 8px; }
@@ -1018,7 +1018,6 @@ dialog.palette::backdrop { background: var(--backdrop); }
 .drop-overlay .icon, .tray-head > .icon { color: var(--sel); }
 .auth-card { border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); }
 .auth-wrap { background: radial-gradient(1100px 600px at 50% -10%, #1C304C 0%, var(--bg) 60%); }
-:root[data-theme="light"] .auth-wrap { background: radial-gradient(1100px 600px at 50% -10%, #E8F0FB 0%, var(--bg) 60%); }
 .tab-static { border-bottom-color: var(--sel); }
 .tabs { background: var(--surface); }
 .tabs [role=tab][aria-selected=true] { color: var(--text); border-bottom-color: var(--sel); font-weight: 600; }

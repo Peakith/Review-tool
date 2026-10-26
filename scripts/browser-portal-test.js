@@ -241,11 +241,13 @@ function logo() {
   const allTitles = await cp.locator('.p-all .p-card-title').allTextContents();
   check('portaal: alleen gepubliceerde video’s', titles.length === 3 && allTitles.length === 3 && !portalText.includes('Interne testmontage'), titles.join(', '));
   check('portaal: hoofdvideo toont gepubliceerde Versie 1, niet de interne Versie 2', /Versie 1/.test(await cp.textContent('.p-card:has-text("Hoofdvideo")')));
-  check('portaal: “Jouw acties” met 3 video’s en samenvatting bovenaan', /Jouw acties\s*3/.test(await cp.textContent('.p-group-todo h2')) && portalText.includes('Er staan 3 video’s voor je klaar.'));
-  check('portaal: geen goedkeurknop, wel uitleg', !(await cp.isVisible('text=Deze versie goedkeuren')) && portalText.includes('Goedkeuren doet de aangewezen akkoordgever'));
+  // 0.9.0: compacte kop zonder welkomstbanner of statistiekenregel; het aantal staat bij "Jouw acties".
+  check('portaal: “Jouw acties” met 3 video’s bovenaan, geen welkomstbanner', /Jouw acties\s*3/.test(await cp.textContent('.p-group-todo h2')) && !(await cp.isVisible('.p-hero')) && !portalText.includes('voor je klaar.'));
+  check('portaal: geen goedkeurknop, wel uitleg', !(await cp.isVisible(':is(button:has-text("Goedkeuren"), a:has-text("goedkeuren"))')) && portalText.includes('Goedkeuren doet de aangewezen akkoordgever'));
   check('portaal: alleen gedeelde briefing', portalText.includes('Moodboard') && portalText.includes('referentie-kleuren') && !portalText.includes('Doelgroep') && !portalText.includes('Script v2'));
-  const accent = await cp.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
-  check('portaal: accentkleur van het merk', accent.toLowerCase() === '#38c6b8', accent);
+  // 0.9.0: de merkkleur kleurt alleen het merkteken; knoppen blijven in de vaste stijl.
+  const [accent, brandColor] = await cp.evaluate(() => ['--accent', '--brand'].map((k) => getComputedStyle(document.documentElement).getPropertyValue(k).trim()));
+  check('portaal: merkkleur op het merkteken, knoppen in de vaste stijl', brandColor.toLowerCase() === '#38c6b8' && accent.toUpperCase() === '#2563EB', `${brandColor} / ${accent}`);
   // Verticale thumbnail past helemaal in het kader (niet bijgesneden): even hoog als het kader.
   const thumb = await cp.$eval('.p-card:has-text("Social reel") .p-thumb', (el) => ({ box: el.clientHeight, img: el.querySelector('img').clientHeight, fit: getComputedStyle(el.querySelector('img')).objectFit }));
   check('portaal: verticale thumbnail niet bijgesneden', thumb.fit === 'contain' && Math.abs(thumb.box - thumb.img) <= 1, JSON.stringify(thumb));
@@ -277,7 +279,7 @@ function logo() {
   const reviewText = await cp.evaluate(() => document.body.innerText);
   check('review via portaal: terug-link, merk en type', await cp.isVisible('a.r-back') && await cp.isVisible('.r-header img.brand-logo') && reviewText.includes('Hoofdvideo · 16:9 · YouTube en website'));
   check('review via portaal: zichtbare teamnotitie wel, interne niet', reviewText.includes('eindtitel') && !reviewText.includes('Muziek nog licenseren'));
-  check('review via portaal: geen goedkeurknop', !(await cp.isVisible('button:has-text("Deze versie goedkeuren")')));
+  check('review via portaal: geen goedkeurknop', !(await cp.isVisible('button:has-text("Goedkeuren")')));
   await cp.click('.pc-bigplay');
   await cp.waitForTimeout(1500);
   const t = await cp.evaluate(() => document.querySelector('video').currentTime);
@@ -325,14 +327,14 @@ function logo() {
   await apiT('PATCH', `/api/videos/${vTeaser.id}`, { approverName: 'Joris de Klant', approverEmail: 'joris@bakkerijjansen.nl' });
   const approverUrl = (await apiT('POST', `/api/videos/${vTeaser.id}/links`, { role: 'approver' })).url.replace(/^https?:\/\/[^/]+/, BASE);
   await mp.goto(approverUrl);
-  await mp.click('.r-actions button:has-text("Deze versie goedkeuren")');
+  await mp.click('.r-actions button:has-text("Goedkeuren")');
   await mp.click('dialog button:has-text("keur Versie 1 goed")');
   await mp.waitForSelector('.notice-ok:has-text("is goedgekeurd")');
   await mp.goto(portalUrl);
   await mp.waitForSelector('.p-group-done');
-  check('portaal: goedgekeurde teaser onder “Goedgekeurd” met naam', /Teaser 15 sec[\s\S]*Goedgekeurd door Joris de Klant/.test(await mp.textContent('.p-group-done')));
+  check('portaal: goedgekeurde teaser onder “Goedgekeurd” met naam', /Teaser 15 sec[\s\S]*goedgekeurd door Joris de Klant/i.test(await mp.textContent('.p-group-done')));
   check('portaal: “Goedgekeurd” standaard ingeklapt, na acties en “Bij …”', await mp.$eval('.p-group-done', (el) => el.tagName === 'DETAILS' && !el.open)
-    && await mp.evaluate(() => { const g = [...document.querySelectorAll('.p-main > .p-group')].map((e) => e.className.match(/p-group-(\w+)/)?.[1]); return g.indexOf('todo') < g.indexOf('done'); }));
+    && await mp.evaluate(() => { const g = [...document.querySelectorAll('.p-main > .p-group')].map((e) => e.className.match(/p-group-(\w+)/)?.[1]); return g.indexOf('todo') < g.indexOf('finished') && !!document.querySelector('.p-group-finished .p-group-done'); }));
   await shot(mp, '49-portaal-mobiel-goedgekeurd', { fullPage: true });
 
   // Akkoordgever wijzigen terwijl er al een akkoordlink is (oude link wordt ingetrokken)

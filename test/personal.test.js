@@ -49,14 +49,25 @@ before(async () => {
 });
 after(() => srv.close());
 
-test('voorkeuren per gebruiker: thema en dashboard los per account, gevalideerd', async () => {
-  assert.equal((await admin.get('/api/session')).data.theme, 'dark', 'standaard donker');
+test('voorkeuren per gebruiker: dashboard los per account, gevalideerd; vaste donkere stijl', async () => {
+  // Sinds 0.9.0 geen themakeuze meer: een oude lichte voorkeur in de database maakt niets licht.
+  const adminId = (await admin.get('/api/session')).data.user.id;
+  srv.db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify({ theme: 'light', dashboard: { widgets: [{ id: 'inbox', size: 'wide' }] } }), adminId);
+  const session = (await admin.get('/api/session')).data;
+  assert.ok(!('theme' in session), 'sessie bevat geen thema meer');
+  const page = await fetch(`${srv.base}/`, { headers: { cookie: admin.cookie() } });
+  const html = await page.text();
+  assert.match(html, /<html lang="nl" data-theme="dark">/);
+  assert.ok(!html.includes('data-theme-pref'), 'geen themavoorkeur in de pagina');
+  assert.match(html, /<meta name="color-scheme" content="dark">/);
+  const prefs = (await admin.get('/api/me/preferences')).data;
+  assert.ok(!('theme' in prefs));
+  assert.deepEqual(prefs.dashboard.widgets, [{ id: 'inbox', size: 'wide' }], 'overige voorkeuren blijven');
+  // Een oude pagina die nog een thema stuurt: genegeerd, geen fout; de bewaarde waarde wordt opgeruimd.
   assert.equal((await admin.put('/api/me/preferences', { theme: 'light' })).status, 200);
-  assert.equal((await free.put('/api/me/preferences', { theme: 'system' })).status, 200);
-  assert.equal((await admin.get('/api/session')).data.theme, 'light');
-  assert.equal((await free.get('/api/session')).data.theme, 'system');
-  assert.equal((await viewer.get('/api/session')).data.theme, 'dark');
-  assert.equal((await free.put('/api/me/preferences', { theme: 'roze' })).status, 400);
+  const stored = JSON.parse(srv.db.prepare('SELECT preferences FROM users WHERE id = ?').get(adminId).preferences);
+  assert.ok(!('theme' in stored) && stored.dashboard.widgets[0].id === 'inbox', JSON.stringify(stored));
+  assert.equal((await admin.put('/api/me/preferences', { dashboard: null })).status, 200);
   // Dashboard: standaard vier blokken (bouwronde 7: Aandacht nodig, Vastgezet, Inbox, Bij de klant)
   const d = (await free.get('/api/me/preferences')).data.dashboard.widgets.map((w) => w.id);
   assert.deepEqual(d, ['attention', 'pinned', 'inbox', 'waiting']);

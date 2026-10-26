@@ -4,8 +4,6 @@
 import { h, mount, icon, button, api, emptyState, errorState, formatDateZone, relativeDate, plural, timecode, toast, busy } from '/shared/util.js';
 import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom } from '/shared/comments.js';
-import { THEMES, themePref } from '/shared/theme.js';
-import { saveTheme } from './settings.js';
 import { viewInbox, startInboxPolling, refreshInboxCount } from './inbox.js';
 import { openPalette, paletteShortcut } from './palette.js';
 import { projectCoverImg } from '/shared/cover.js';
@@ -185,12 +183,8 @@ async function viewAccount(pageHeader, logout) {
   document.title = 'Mijn account — Studio Review';
   const pw = h('input', { type: 'password', id: 'fl-pw', autocomplete: 'new-password', minlength: '10', required: true });
   const save = h('button', { type: 'submit', class: 'btn btn-primary' }, h('span', { class: 'btn-label' }, 'Wachtwoord wijzigen'));
-  const themes = h('div', { class: 'segmented', role: 'group', 'aria-label': 'Thema' });
-  const drawThemes = () => mount(themes, THEMES.map(([key, label]) => h('button', { type: 'button', 'aria-pressed': String(themePref() === key), onClick: async () => { await saveTheme(key); drawThemes(); } }, label)));
-  drawThemes();
   mount(pageEl, h('div', { class: 'page page-narrow' },
     pageHeader({ title: 'Mijn account', meta: [h('span', {}, session.user.email)] }),
-    h('section', { class: 'card' }, h('h2', { class: 'card-title' }, 'Thema'), themes),
     h('section', { class: 'card' }, h('h2', { class: 'card-title' }, 'Wachtwoord'),
       h('form', { class: 'stack-form', onSubmit: async (e) => {
         e.preventDefault();

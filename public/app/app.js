@@ -12,8 +12,7 @@ import { configureUploads, enqueue, checkFile, suggestTitle, createUploadTray, o
 import { can, menuButton } from './admin.js';
 import { viewDashboard } from './dashboard.js';
 import { searchBox, viewSearch } from './search.js';
-import { viewSettings, settingsSection, saveTheme } from './settings.js';
-import { THEMES, applyTheme, themePref } from '/shared/theme.js';
+import { viewSettings, settingsSection } from './settings.js';
 import { viewBriefing } from './briefing.js';
 import { taskDialog, taskChip, viewFeedback, viewMyTasks } from './tasks.js';
 import { createCompare } from '/shared/compare.js';
@@ -61,8 +60,6 @@ async function route() {
     return;
   }
   if (!session.user) { shellEl = null; return session.needsSetup ? viewSetup() : viewLogin(); }
-  // Thema van dit account (ook direct na inloggen, zonder herladen).
-  if (session.theme && session.theme !== themePref()) applyTheme(session.theme);
   initPalette({ navigate, session });
   setPaletteActions([]);
   // Freelancers krijgen hun eigen, alleen-lezen omgeving (geen teamschermen).
@@ -166,7 +163,7 @@ function ensureShell() {
   startInboxPolling();
 }
 
-/** Profielmenu: thema (klein), instellingen en uitloggen. */
+/** Profielmenu: account, instellingen en uitloggen. */
 function profileMenu() {
   const menu = h('div', { class: 'menu profile-menu', role: 'menu', hidden: true });
   const trigger = h('button', { type: 'button', class: 'side-user', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `Profielmenu van ${session.user.name}` },
@@ -177,12 +174,6 @@ function profileMenu() {
   const outside = (e) => { if (!wrap.contains(e.target)) close(); };
   function draw() {
     mount(menu,
-      h('div', { class: 'menu-label' }, 'Thema'),
-      THEMES.map(([key, label]) => h('button', {
-        type: 'button', class: 'menu-item', role: 'menuitemradio', 'aria-checked': String(themePref() === key),
-        onClick: async () => { await saveTheme(key); draw(); },
-      }, h('span', { class: 'menu-check', 'aria-hidden': 'true' }, themePref() === key ? icon('check') : null), label)),
-      h('div', { class: 'menu-sep', role: 'separator' }),
       h('a', { class: 'menu-item', role: 'menuitem', href: '/instellingen/account', 'data-nav': true, onClick: close }, icon('users'), 'Mijn account'),
       h('a', { class: 'menu-item', role: 'menuitem', href: '/instellingen', 'data-nav': true, onClick: close }, icon('wrench'), 'Instellingen'),
       h('button', { type: 'button', class: 'menu-item', role: 'menuitem', onClick: () => { close(); logout(); } }, icon('logout'), 'Uitloggen'),

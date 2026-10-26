@@ -304,3 +304,174 @@ html[lang="en"] .howto[open] summary::after { content: "Hide"; }
 .k-cover img { width: 100%; height: 100%; object-fit: contain; }
 .k-project-titles { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .k-project-titles h3 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+
+/* Foutpagina's (onbekend adres, serverfout) */
+.fatal-page { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.fatal-page .empty { max-width: 480px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 36px 28px; }
+
+/* ==========================================================================
+   Klantoverzicht (0.9.0): rustig, compact, eerst wat de klant moet doen.
+   Kop met merk en klantnaam; secties als panelen; regels met kleine thumbnail en één knop.
+   ========================================================================== */
+.p-header-inner { gap: 16px; }
+.p-header-titles { flex: 1; min-width: 0; display: grid; gap: 1px; padding-left: 14px; border-left: 1px solid var(--line); }
+.p-header-title { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-header-sub { margin: 0; font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-header .p-identity { margin: 0; font-size: 12.5px; gap: 6px; align-items: center; }
+.p-header .p-identity .icon { --icon-size: 13px; margin: 0; color: var(--sel); }
+
+.p-main { max-width: 920px; padding: 28px 24px 56px; gap: 20px; }
+.p-main > .p-intro { margin: 0; }
+.p-group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px 20px; gap: 12px; }
+.p-group-head h2 { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; gap: 8px; }
+.p-group-todo > .p-group-head, .p-group-busy > .p-group-head, .p-group-files > .p-group-head { border-top: 0; padding-top: 0; }
+.p-group-text { margin: 4px 0 0; color: var(--text-2); font-size: 14px; }
+.p-count { min-width: 20px; height: 20px; padding: 0 6px; font-size: 11.5px; font-weight: 650; border-radius: 999px; background: var(--surface-2); color: var(--text-2); }
+.p-group-todo .p-count { background: var(--sel-soft); color: var(--sel); }
+
+.p-project-groups { display: grid; gap: 14px; }
+.p-project-name { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-list > .p-card:first-child { border-top: 0; }
+.p-card { grid-template-columns: 112px minmax(0, 1fr) auto; gap: 14px; padding: 10px 8px; margin: 0 -8px; border-bottom: 0; border-top: 1px solid var(--line); border-radius: var(--r); }
+.p-list > .p-card + .p-card { border-top-color: var(--line); }
+a.p-card:hover { background: var(--row-hover); }
+a.p-card:hover .p-card-title { color: var(--sel); }
+a.p-card:focus-visible { box-shadow: var(--focus); }
+.p-compact { grid-template-columns: 80px minmax(0, 1fr) auto; padding: 8px; }
+.p-thumb { border-radius: var(--r-sm); }
+.p-card-title { font-size: 15px; font-weight: 600; -webkit-line-clamp: 1; line-height: 1.35; }
+.p-compact .p-card-title { font-size: 14px; font-weight: 600; }
+.p-card-meta { margin: 0; font-size: 13px; color: var(--text-2); }
+.p-due { font-size: 13px; font-weight: 500; color: var(--text-2); margin: 0; }
+.p-due.is-late { color: var(--warn-text); }
+.p-note { margin: 0; font-size: 12.5px; color: var(--text-3); }
+.p-note.is-mine { color: var(--text-2); font-weight: 500; }
+.p-note.is-mine .icon { color: var(--sel); }
+.p-card-action .btn .icon { --icon-size: 15px; margin-right: -4px; }
+.p-row-icon { width: 112px; aspect-ratio: 16 / 9; border-radius: var(--r-sm); background: var(--surface-2); color: var(--sel); display: grid; place-items: center; }
+.p-row-icon .icon { --icon-size: 20px; }
+.p-compact .p-row-icon, .p-delivery-card .p-row-icon { width: 80px; }
+
+/* Vragen: zelfde regelopbouw; het antwoordveld verschijnt onder de regel. */
+.p-question { grid-template-columns: 112px minmax(0, 1fr) auto; align-items: center; }
+.p-q-icon { background: var(--surface-2); color: var(--sel); width: auto; height: auto; }
+.p-question.is-answered { grid-template-columns: 80px minmax(0, 1fr); }
+.p-question.is-answered .p-q-icon { width: 80px; color: var(--text-3); }
+.p-q-text { font-size: 15px; font-weight: 600; -webkit-line-clamp: 3; display: -webkit-box; white-space: normal; }
+.p-q-open { grid-column: auto; }
+.p-q-form, .p-q-answer { grid-column: 2 / -1; }
+
+/* Definitieve bestanden en inklapbare blokken binnen "Goedgekeurd en afgerond". */
+.p-finished { display: grid; gap: 4px; }
+.p-subgroup { display: grid; gap: 4px; padding-bottom: 6px; }
+.p-subtitle { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0; }
+.p-delivery-card { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 8px; margin: 0 -8px; border: 0; border-top: 1px solid var(--line); border-radius: var(--r); }
+.p-list > .p-delivery-card:first-child { border-top: 0; }
+.p-delivery-card h4 { font-size: 14px; }
+.p-fold { border-top: 1px solid var(--line); }
+.p-fold > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 0; cursor: pointer; list-style: none; font-weight: 600; font-size: 14px; }
+.p-fold > summary::-webkit-details-marker { display: none; }
+.p-fold > summary > .icon { --icon-size: 16px; color: var(--text-3); transition: transform .15s; }
+.p-fold[open] > summary > .icon { transform: rotate(90deg); }
+.p-fold > summary:focus-visible { box-shadow: var(--focus); border-radius: var(--r-sm); }
+.p-fold > .p-list { padding-bottom: 8px; }
+.p-fold .k-project { padding: 6px 0 10px; }
+
+/* Alle projecten */
+.p-all { padding: 6px 20px; border-top: 1px solid var(--line); }
+.p-all > summary { font-family: var(--font); font-weight: 650; font-size: 15px; min-height: 48px; }
+.p-all-body { gap: 14px; padding-bottom: 14px; }
+.k-project { gap: 6px; }
+.k-project + .k-project { border-top: 1px solid var(--line); padding-top: 14px; }
+.k-project-head { flex-wrap: nowrap; gap: 12px; }
+.k-cover { width: 72px; border-radius: var(--r-sm); background: var(--stage); }
+.k-cover.is-empty { place-items: center; color: var(--text-3); background: var(--surface-2); }
+.k-cover.is-empty .icon { --icon-size: 16px; }
+.k-project-titles h3 { font-size: 15px; font-weight: 600; -webkit-line-clamp: 1; }
+.p-empty { border-top: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.p-foot { border-top: 0; color: var(--text-3); padding: 0 4px; }
+.p-export { padding: 0 4px; color: var(--text-2); }
+
+@media (max-width: 640px) {
+  .p-header-titles { padding-left: 10px; }
+  .p-main { padding: 14px 12px 40px; gap: 14px; }
+  .p-group { padding: 14px 14px; }
+  .p-all { padding: 4px 14px; }
+  .p-card, .p-question { grid-template-columns: 88px minmax(0, 1fr); gap: 6px 12px; align-items: start; }
+  .p-row-icon { width: 88px; }
+  .p-compact, .p-delivery-card, .p-question.is-answered { grid-template-columns: 64px minmax(0, 1fr); }
+  .p-compact .p-row-icon, .p-delivery-card .p-row-icon, .p-question.is-answered .p-q-icon { width: 64px; }
+  .p-card-action, .p-card-status, .p-delivery-card > .btn { grid-column: 2; justify-self: start; }
+  .p-card-title { -webkit-line-clamp: 2; }
+  .k-cover { width: 56px; }
+}
+/* Lange titels mogen de breedte nooit opdrijven (gridkolommen mogen krimpen). */
+.p-main { grid-template-columns: minmax(0, 1fr); }
+.p-group, .p-project-groups, .p-project-group, .p-list, .p-finished, .p-subgroup, .p-fold, .p-all-body, .k-project { min-width: 0; }
+.p-group { grid-template-columns: minmax(0, 1fr); }
+.p-header .p-identity span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) {
+  .p-header .brand-namemark .brand-name { display: none; }
+  .p-header .brand-logo { max-width: 96px; }
+}
+
+/* ==========================================================================
+   Klantreview (0.9.0): compacte kop, rustig paneel, extra's onder "Meer".
+   ========================================================================== */
+.r-header { background: var(--bg); }
+.r-header-inner { padding: 12px 24px; align-items: flex-end; }
+.r-brand { margin-bottom: 6px; gap: 14px; }
+.r-title-row { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.r-title-row h1 { font-size: 19px; font-weight: 650; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.r-title-row .version-pick select { min-height: 30px; padding-top: 3px; padding-bottom: 3px; font-size: 13px; }
+.r-project { margin: 3px 0 0; font-size: 12.5px; color: var(--text-2); }
+.r-nav { padding-bottom: 10px; }
+.r-nav-link { padding: 5px 10px; background: transparent; }
+.r-main { grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; padding-top: 14px; }
+.r-panel { gap: 10px; }
+.r-status { padding: 11px 14px; border: 1px solid var(--line); border-left-width: 1px; background: var(--surface); }
+.r-status > .icon { --icon-size: 18px; }
+.r-round { padding: 10px 14px; }
+.r-round-head .icon { color: var(--text-3); }
+.r-compose-area { display: grid; gap: 10px; }
+.howto { font-size: 13px; }
+.r-stage-foot { padding: 6px 2px; }
+.r-more { position: relative; }
+.r-more > summary { list-style: none; cursor: pointer; }
+.r-more > summary::-webkit-details-marker { display: none; }
+.r-more-menu { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 30; min-width: 240px; display: grid; gap: 6px; padding: 10px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.r-more-menu .btn { justify-content: flex-start; }
+.r-more-menu .r-export { padding: 4px 6px; color: var(--text-2); }
+.r-actions-hint { color: var(--text-2); }
+.r-actions-hint.is-pending { color: var(--warn-text); }
+@media (max-width: 980px) {
+  .r-header-inner { padding: 10px 14px; }
+  .r-title-row h1 { font-size: 17px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .r-main { grid-template-columns: minmax(0, 1fr); }
+  .r-more-menu { right: 0; }
+}
+.r-deadline { display: flex; align-items: center; gap: 6px; margin: 0; }
+.r-deadline .icon { --icon-size: 15px; }
+.r-deadline.is-past { color: var(--warn-text); }
+.identity.is-verified { display: flex; align-items: center; gap: 8px; padding: 2px 2px; background: none; border: 0; color: var(--text-2); font-size: 13px; }
+.identity.is-verified .icon { --icon-size: 15px; color: var(--sel); }
+.identity.is-verified strong { color: var(--text); }
+/* Speler past met de regel eronder boven de vaste actiebalk. */
+@media (min-width: 981px) {
+  .r-stage .player-stage { max-height: calc(100vh - 290px); }
+}
+@media (max-width: 980px) {
+  .r-header-inner { position: relative; }
+  .r-version { position: absolute; top: 8px; right: 14px; }
+  .r-brand { padding-right: 104px; margin-bottom: 4px; }
+  .r-back { font-size: 12.5px; }
+  .r-nav { padding: 0 14px 8px; gap: 8px; }
+  .r-nav-link { padding: 4px 8px; }
+  .r-nav-text > .small { display: none; }
+  .r-nav-text .truncate { font-size: 13px; }
+  .r-stage-foot { padding: 4px 14px; }
+}
+.r-stage-foot { flex-wrap: nowrap; }
+.r-stage-foot > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-stage-actions { flex-shrink: 0; }
+.p-q-open .btn { pointer-events: auto; }

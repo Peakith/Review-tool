@@ -8,7 +8,7 @@ import { createPlayer } from '/shared/player.js';
 import { renderComments, markersFrom } from '/shared/comments.js';
 import { createComposer } from '/shared/composer.js';
 import { applyBrand, brandMark } from '/shared/brand.js';
-import { clientPill, metaLine } from '/shared/client.js';
+import { metaLine } from '/shared/client.js';
 import { createCompare } from '/shared/compare.js';
 
 const token = location.pathname.split('/').filter(Boolean).pop();
@@ -193,11 +193,12 @@ let commentsEl;
 let composerRequest = null;
 let actionsEl;
 let nameInput;
+let statusHost;
+let composeArea;
 
 function render() {
   const { info, version } = state;
   const latest = info.versions[0];
-  const status = clientStatus(version);
 
   const pb = playbackFor(version);
   const player = createPlayer({
@@ -224,43 +225,29 @@ function render() {
     : null;
   if (versionPicker) versionPicker.querySelector('select').value = String(version.id);
 
+  // Compacte kop: merk en terug naar het overzicht, dan titel met versie; taal rechts.
   const meta = metaLine(info.meta);
   const header = h('header', { class: 'r-header' },
     h('div', { class: 'r-header-inner' },
       h('div', { class: 'r-titles' },
         h('div', { class: 'r-brand' }, brandMark(info.brand, { size: 'sm' }),
           info.portal ? h('a', { class: 'r-back', href: info.portal.url, onClick: (e) => { e.preventDefault(); leaveTo(info.portal.url); } }, icon('arrowLeft'), info.portal.url.startsWith('/k/') ? tr('Naar het overzicht') : tr('Alle video’s van dit project')) : null),
-        h('div', { class: 'r-project truncate' }, [info.project.clientName, info.project.name].filter(Boolean).join(' · ')),
-        h('h1', { title: info.title }, info.title),
-        meta ? h('div', { class: 'r-meta-line' }, meta) : null),
+        h('div', { class: 'r-title-row' },
+          h('h1', { title: info.title }, info.title),
+          h('span', { class: 'version-chip' }, h('strong', {}, tr('Versie {n}', { n: version.number })), version.isLatest ? h('span', { class: 'version-latest' }, tr('nieuwste')) : h('span', { class: 'version-old' }, tr('van {n}', { n: latest.number }))),
+          versionPicker),
+        h('div', { class: 'r-project truncate', title: [info.project.clientName, info.project.name, meta].filter(Boolean).join(' · ') }, [info.project.name, meta].filter(Boolean).join(' · '))),
       h('div', { class: 'r-version' },
-        h('span', { class: 'version-chip' }, h('strong', {}, tr('Versie {n}', { n: version.number })), version.isLatest ? h('span', { class: 'version-latest' }, tr('nieuwste')) : h('span', { class: 'version-old' }, tr('van {n}', { n: latest.number }))),
-        versionPicker,
-        clientPill(version.status),
         preview ? null : viewerControls(() => { const t = state.player?.video.currentTime || 0; render(); if (t) state.player.seek(t); }))),
     navBar(info.nav));
 
-  // ---- Statusuitleg ----
-  const statusCard = h('section', { class: `r-status ${status.cls}`, 'aria-live': 'polite' },
-    icon(status.icon),
-    h('div', {}, h('strong', {}, status.title), h('p', {}, status.text)),
-    !version.isLatest ? button(tr('Naar Versie {n}', { n: latest.number }), { size: 'sm', onClick: () => showVersion(latest) }) : null);
-
-  // ---- Ronde, deadline en wat er is aangepast (bij precies deze versie) ----
-  const open = version.isLatest && ['in_review', 'changes_requested'].includes(version.status) && !info.archived;
-  const r = version.round;
-  const roundCard = r || version.changeNote ? h('section', { class: 'r-round', 'aria-label': tr('Reviewronde') },
-    r ? h('div', { class: 'r-round-head' }, icon('history'), h('strong', {}, tr('Reviewronde {n}', { n: r.number })),
-      r.deadline && open ? h('span', { class: isPast(r.deadline) ? 'r-deadline is-past' : 'r-deadline' }, tr('· graag je reactie vóór {date}', { date: formatDeadline(r.deadline) })) : null) : null,
-    r?.deadline && open && isPast(r.deadline) ? h('p', { class: 'small' }, tr('Deze datum is verstreken. Je kunt nog steeds reageren en feedback versturen.')) : null,
-    r?.note ? h('p', { class: 'r-round-note' }, r.note) : null,
-    version.changeNote ? h('div', { class: 'r-change' }, h('strong', {}, tr('Aangepast in versie {n}', { n: version.number })), h('p', {}, version.changeNote)) : null) : null;
+  statusHost = h('div', { class: 'r-status-host' });
 
   // ---- Identiteit ----
   let identity;
   if (isApprover()) {
-    identity = h('div', { class: 'identity is-verified' }, icon('shield'),
-      h('div', {}, h('div', {}, tr('Je reviewt als '), h('strong', {}, info.identity.name)), h('div', { class: 'small' }, tr('Aangewezen akkoordgever · bevestigd via je persoonlijke link'))));
+    identity = h('div', { class: 'identity is-verified', title: tr('Aangewezen akkoordgever · bevestigd via je persoonlijke link') }, icon('shield'),
+      h('div', {}, tr('Je reviewt als '), h('strong', {}, info.identity.name), h('span', { class: 'muted' }, ` · ${tr('akkoordgever')}`)));
   } else {
     nameInput = h('input', {
       type: 'text', id: 'reviewer-name', autocomplete: 'name', maxlength: '80', placeholder: tr('Bijv. Eva Jansen'),
@@ -305,14 +292,19 @@ function render() {
   document.addEventListener('focusout', (e) => { if (typing(e)) document.body.classList.remove('is-typing'); });
 
   const howTo = howToCard();
+  // Minder gebruikte mogelijkheden onder "Meer": versies vergelijken en feedback downloaden.
   const compareBtn = info.versions.length > 1
     ? button(tr('Versies vergelijken'), { icon: 'compare', size: 'sm', variant: 'ghost', onClick: () => showCompare(version) })
     : null;
   const exportLinks = !preview ? h('span', { class: 'r-export small' }, icon('fileDown'), tr('Feedback downloaden:'),
     h('a', { href: `${base}/export.pdf` }, 'PDF'), h('a', { href: `${base}/export.csv` }, 'CSV')) : null;
+  const more = compareBtn || exportLinks ? h('details', { class: 'r-more' },
+    h('summary', { class: 'btn btn-sm btn-ghost' }, icon('more'), h('span', { class: 'btn-label' }, tr('Meer'))),
+    h('div', { class: 'r-more-menu' }, compareBtn, exportLinks)) : null;
   const download = info.allowDownload
     ? h('a', { class: 'btn btn-sm btn-ghost', href: `${base}/versions/${version.id}/download` }, icon('download'), h('span', { class: 'btn-label' }, tr('Download')))
     : null;
+  composeArea = h('div', { class: 'r-compose-area', hidden: !canAct() }, howTo, identity, composer.el);
 
   mount(root,
     preview ? h('div', { class: 'preview-bar', role: 'note' }, icon('eye'),
@@ -323,20 +315,59 @@ function render() {
       h('section', { class: 'r-stage', 'aria-label': 'Video' }, player.el,
         h('div', { class: 'r-stage-foot small muted' },
           h('span', {}, tr('Je bekijkt Versie {n} van {total}', { n: version.number, total: latest.number }), version.sharedAt ? ` · ${tr('gedeeld {date}', { date: formatDate(version.sharedAt) })}` : ''),
-          h('span', { class: 'r-stage-actions' }, compareBtn, exportLinks, download)),
+          h('span', { class: 'r-stage-actions' }, download, more)),
         preview ? null : expiryNote(info.linkExpiresAt)),
       h('aside', { class: 'r-panel', 'aria-label': tr('Reacties') },
-        statusCard,
-        revokedApprovalNote(version),
-        roundCard,
-        state.justSent ? sentConfirmation() : null,
-        canAct() ? howTo : null,
-        canAct() ? identity : null,
-        canAct() ? composer.el : null,
+        statusHost,
+        composeArea,
         h('div', { class: 'r-comments-head' }, h('h2', {}, tr('Reacties')), h('span', { class: 'small muted', id: 'comment-count' })),
         commentsEl)),
-    canAct() ? actionsEl : null);
+    actionsEl);
+  drawStatus();
   drawComments();
+}
+
+/**
+ * Status, ronde en bevestiging bovenaan het paneel. Wordt na versturen of goedkeuren opnieuw
+ * getekend zonder de speler of het invoerveld te vervangen.
+ */
+function drawStatus() {
+  const { info, version } = state;
+  const latest = info.versions[0];
+  const status = clientStatus(version);
+  const statusCard = h('section', { class: `r-status ${status.cls}`, 'aria-live': 'polite' },
+    icon(status.icon),
+    h('div', {}, h('strong', {}, status.title), h('p', {}, status.text)),
+    !version.isLatest ? button(tr('Naar Versie {n}', { n: latest.number }), { size: 'sm', onClick: () => showVersion(latest) }) : null);
+  // Ronde, deadline (alleen als die echt is ingesteld) en wat er is aangepast, bij precies deze versie.
+  const open = version.isLatest && ['in_review', 'changes_requested'].includes(version.status) && !info.archived;
+  const r = version.round;
+  const deadline = r?.deadline && open ? r.deadline : null;
+  const roundCard = deadline || r?.note || version.changeNote ? h('section', { class: 'r-round', 'aria-label': tr('Reviewronde') },
+    r ? h('div', { class: 'r-round-head' }, icon('history'), h('strong', {}, tr('Reviewronde {n}', { n: r.number }))) : null,
+    deadline ? h('p', { class: isPast(deadline) ? 'r-deadline is-past' : 'r-deadline' }, icon('clock'), tr('Graag je reactie vóór {date}', { date: formatDeadline(deadline) })) : null,
+    deadline && isPast(deadline) ? h('p', { class: 'small' }, tr('Deze datum is verstreken. Je kunt nog steeds reageren en feedback versturen.')) : null,
+    r?.note ? h('p', { class: 'r-round-note' }, r.note) : null,
+    version.changeNote ? h('div', { class: 'r-change' }, h('strong', {}, tr('Aangepast in versie {n}', { n: version.number })), h('p', {}, version.changeNote)) : null) : null;
+  mount(statusHost, state.justSent ? sentConfirmation() : null, statusCard, revokedApprovalNote(version), roundCard);
+  if (composeArea) composeArea.hidden = !canAct();
+  if (actionsEl) actionsEl.hidden = !canAct();
+}
+
+/** Na versturen of goedkeuren: gegevens opnieuw ophalen en alleen het paneel bijwerken. */
+async function refreshAfterAction(versionId) {
+  try {
+    state.info = await api('GET', base);
+    const v = state.info.versions.find((x) => x.id === versionId);
+    if (!v || v.id !== state.version.id) return load(versionId);
+    state.version = v;
+    state.comments = await api('GET', urls.comments(v.id), undefined, keyHeader);
+  } catch {
+    return load(versionId);
+  }
+  drawStatus();
+  drawComments();
+  statusHost.scrollIntoView({ block: 'nearest' });
 }
 
 const reportedPlayback = new Set();
@@ -349,14 +380,14 @@ function reportPlayback(versionId) {
 }
 
 function howToCard() {
-  const collapsed = store.get('rt-howto-collapsed') === '1';
-  const details = h('details', { class: 'howto', open: !collapsed },
+  // Standaard ingeklapt; wie hem openklapt, ziet hem bij een volgende video weer open.
+  const details = h('details', { class: 'howto', open: store.get('rt-howto-collapsed') === '0' },
     h('summary', {}, icon('info'), tr('Zo werkt het')),
     h('ol', {},
       h('li', {}, h('strong', {}, tr('Reageer op het juiste moment. ')), tr('Pauzeer de video en typ je opmerking; het tijdstip wordt automatisch gekoppeld.')),
       h('li', {}, h('strong', {}, tr('Verstuur je feedback. ')), tr('Je reacties zijn pas definitief voor het team als je op “Feedback versturen” klikt.')),
       isApprover()
-        ? h('li', {}, h('strong', {}, tr('Akkoord? ')), tr('Klik op “Deze versie goedkeuren”. Je goedkeuring geldt alleen voor deze versie.'))
+        ? h('li', {}, h('strong', {}, tr('Akkoord? ')), tr('Klik op “Goedkeuren”. Je goedkeuring geldt alleen voor deze versie.'))
         : h('li', {}, state.info.approver ? tr('Goedkeuren doet {name} via een persoonlijke link.', { name: state.info.approver.name }) : tr('Goedkeuren doet de aangewezen akkoordgever via een persoonlijke link.'))));
   details.addEventListener('toggle', () => store.set('rt-howto-collapsed', details.open ? '0' : '1'));
   return details;
@@ -414,13 +445,15 @@ function drawComments() {
 
 /** Onderbalk: feedback versturen en (alleen akkoordgever) goedkeuren. */
 function drawActions() {
-  if (!actionsEl || !canAct()) return;
+  if (!actionsEl) return;
+  actionsEl.hidden = !canAct();
+  if (!canAct()) return;
   const n = myPending();
   const feedbackBtn = button(n ? tr('Feedback versturen ({n})', { n }) : tr('Feedback versturen'), { icon: 'send', variant: isApprover() ? 'secondary' : 'primary', size: 'lg', onClick: submitFeedback });
-  const approveBtn = isApprover() ? button(tr('Deze versie goedkeuren'), { icon: 'checkCircle', variant: 'approve', size: 'lg', onClick: approve }) : null;
+  const approveBtn = isApprover() ? button(tr('Goedkeuren'), { icon: 'checkCircle', variant: 'approve', size: 'lg', onClick: approve, 'aria-label': tr('Versie {n} goedkeuren', { n: state.version.number }) }) : null;
   const hint = n
     ? h('span', { class: 'r-actions-hint is-pending' }, icon('clock'), tr('{count} nog niet verstuurd', { count: plural(n, tr('reactie'), tr('reacties')) }))
-    : h('span', { class: 'r-actions-hint' }, icon('info'), isApprover() ? tr('Klaar met kijken? Verstuur feedback of keur goed.') : state.info.approver ? tr('Goedkeuren gebeurt door {name}.', { name: state.info.approver.name }) : tr('Goedkeuren gebeurt door de akkoordgever.'));
+    : h('span', { class: 'r-actions-hint' }, isApprover() ? tr('Alles bekeken? Verstuur je feedback of keur Versie {n} goed.', { n: state.version.number }) : tr('Alle reacties verstuurd.'));
   mount(actionsEl, h('div', { class: 'r-actions-inner' }, hint, h('div', { class: 'r-actions-buttons' }, feedbackBtn, approveBtn)));
 }
 
@@ -491,7 +524,7 @@ async function submitFeedback() {
   draftStore.set(draftKey, '');
   state.justSent = { type: 'feedback', count: result.commentCount, at: new Date().toISOString() };
   toast(tr('Je feedback is verstuurd naar het team.'), 'success');
-  await load(v.id);
+  await refreshAfterAction(v.id);
 }
 
 async function approve() {
@@ -523,7 +556,7 @@ async function approve() {
   if (!result) return;
   state.justSent = { type: 'approved', number: v.number };
   toast(tr('Versie {n} is goedgekeurd. Dank je wel!', { n: v.number }), 'success');
-  await load(v.id);
+  await refreshAfterAction(v.id);
 }
 
 let playbackTimer = null;

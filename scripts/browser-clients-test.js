@@ -123,29 +123,29 @@ const mp4 = (name, size = '1280x720', sec = 4) => {
   await c.goto(generalUrl);
   await c.waitForSelector('.p-group-todo');
   // Bouwronde 6: acties eerst; alle projecten via de ingeklapte route "Alle projecten en video’s".
-  check('portaal: acties eerst, projectnaam per actie', (await c.textContent('.p-hero h1')) === 'Bakkerij Jansen' && /Voorjaarscampagne/.test(await c.textContent('.p-group-todo .p-card-kicker')));
+  // 0.9.0: compacte kop met de klantnaam; acties gegroepeerd per project (projectnaam als kop).
+  check('portaal: acties eerst, gegroepeerd per project', (await c.textContent('.p-header-title')) === 'Bakkerij Jansen' && /Voorjaarscampagne/.test(await c.textContent('.p-group-todo .p-project-name')));
   await c.click('.p-all > summary');
-  check('portaal: klant → projecten; afgerond project ingeklapt', await c.isVisible('.k-project h3:has-text("Voorjaarscampagne")') && !(await c.isVisible('h3:has-text("Kerstfilm 2025")')) && await c.isVisible('.k-completed summary:has-text("Afgerond project (1)")'));
+  check('portaal: klant → projecten; afgerond project ingeklapt', await c.isVisible('.k-project h3:has-text("Voorjaarscampagne")') && !(await c.isVisible('h3:has-text("Kerstfilm 2025")')) && /Afgerond project\s*1/.test(await c.textContent('.p-group-completed > summary')));
   check('portaal: niet-gekoppeld project onzichtbaar', !(await c.textContent('main')).includes('Niet gekoppelde video'));
   check('algemene link: geen goedkeurknop of “Jij bent de akkoordgever”', !(await c.isVisible('text=Bekijken en goedkeuren')) && !(await c.isVisible('.p-note.is-mine')));
   await shot(c, '62-klantportaal');
   await c.click('.lang-toggle button[lang=en]');
   await c.waitForSelector('html[lang=en]');
-  check('EN: interface vertaald, inhoud (titels) niet', /Your actions/.test(await c.textContent('main')) && /Hoofdfilm voorjaar/.test(await c.textContent('main')) && /Finished project \(1\)/.test(await c.textContent('.k-completed summary')));
+  check('EN: interface vertaald, inhoud (titels) niet', /Your actions/.test(await c.textContent('main')) && /Hoofdfilm voorjaar/.test(await c.textContent('main')) && /Finished project\s*1/.test(await c.textContent('.p-group-completed > summary')));
   await c.reload();
   await c.waitForSelector('.p-group-todo');
   check('EN-keuze blijft bewaard in deze browser', (await c.getAttribute('html', 'lang')) === 'en');
   await shot(c, '63-klantportaal-en');
-  // Thema voor bezoekers zonder account (alleen in deze browser onthouden)
-  await c.selectOption('.theme-select', 'light');
-  await c.waitForSelector('html[data-theme=light]');
+  // 0.9.0: één vaste donkere stijl. Een oude lichte keuze in deze browser en een licht ingesteld
+  // systeem maken de pagina niet meer licht; er is geen themakeuze meer.
+  await c.evaluate(() => localStorage.setItem('rt-theme', 'light'));
+  await c.emulateMedia({ colorScheme: 'light' });
   await c.reload();
   await c.waitForSelector('.p-group-todo');
-  check('bezoeker: themakeuze (Light) direct toegepast en onthouden', (await c.getAttribute('html', 'data-theme')) === 'light' && (await c.inputValue('.theme-select')) === 'light');
-  await shot(c, '63b-klantportaal-licht');
-  await c.selectOption('.theme-select', 'dark');
-  await c.click('.p-all > summary');
-  await c.click('.k-completed summary');
+  const bg = await c.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  check('bezoeker: oude lichte keuze en licht systeem → toch donker, geen themakeuze', (await c.getAttribute('html', 'data-theme')) === 'dark' && bg === 'rgb(11, 20, 36)' && !(await c.isVisible('.theme-select')) && (await c.evaluate(() => localStorage.getItem('rt-theme'))) === null, bg);
+  await c.click('.p-group-completed > summary');
   check('afgerond project openklappen toont de video', await c.isVisible('.p-card:has-text("Kerstfilm")'));
 
   // Video openen, vorige/volgende, niet-verstuurde invoer beschermen
@@ -179,14 +179,14 @@ const mp4 = (name, size = '1280x720', sec = 4) => {
   watch(j, 'akkoordgever');
   await j.goto(personalUrl);
   await j.waitForSelector('.p-identity');
-  check('persoonlijke link: “Persoonlijke link van Joris Bakker”, samenvatting bovenaan', /Persoonlijke link van Joris Bakker/.test(await j.textContent('.p-identity')) && /Er sta(at|an) \d+ video/.test(await j.textContent('.p-hero')), await j.textContent('.p-hero'));
+  check('persoonlijke link: “Persoonlijke link van Joris Bakker” in de kop, acties bovenaan', /Persoonlijke link van Joris Bakker/.test(await j.textContent('.p-header .p-identity')) && (await j.$eval('main', (m) => m.firstElementChild?.classList.contains('p-group-todo'))));
   check('alleen bij de eigen video: “Jij bent de akkoordgever” en “Bekijken en goedkeuren”', await j.isVisible('.p-group-todo .p-card:has-text("Hoofdfilm voorjaar") .p-note.is-mine') && !(await j.isVisible('.p-group-todo .p-card:has-text("Reel 9:16") .p-note.is-mine'))
     && /Bekijken en goedkeuren/.test(await j.textContent('.p-group-todo .p-card:has-text("Hoofdfilm voorjaar")')) && /Bekijken en reageren/.test(await j.textContent('.p-group-todo .p-card:has-text("Reel 9:16")')));
   check('één actie per video (geen dubbele regels)', (await j.locator('.p-group-todo .p-card:has-text("Hoofdfilm voorjaar")').count()) === 1);
   await shot(j, '65-portaal-persoonlijk');
   await j.click('.p-group-todo .p-card:has-text("Hoofdfilm voorjaar")');
-  await j.waitForSelector('button:has-text("Deze versie goedkeuren")');
-  await j.click('button:has-text("Deze versie goedkeuren")');
+  await j.waitForSelector('button:has-text("Goedkeuren")');
+  await j.click('button:has-text("Goedkeuren")');
   await j.waitForSelector('dialog[open] .approve-what');
   const confirmText = await j.textContent('dialog[open]');
   check('één korte bevestiging met videotitel en exacte versie', /Hoofdfilm voorjaar/.test(confirmText) && /Versie 1/.test(confirmText) && await j.isVisible('dialog[open] button:has-text("Ja, keur Versie 1 goed")'));
@@ -198,7 +198,7 @@ const mp4 = (name, size = '1280x720', sec = 4) => {
   await j.waitForSelector('.p-card');
   await j.click('.p-group-todo .p-card:has-text("Reel 9:16")');
   await j.waitForSelector('.r-actions');
-  check('andere video (andere akkoordgever): geen goedkeurknop', !(await j.isVisible('button:has-text("Deze versie goedkeuren")')));
+  check('andere video (andere akkoordgever): geen goedkeurknop', !(await j.isVisible('button:has-text("Goedkeuren")')));
   // Team trekt de goedkeuring in (statuscorrectie): duidelijke uitleg voor de akkoordgever
   await apiT('POST', `/api/versions/${main.versionId}/status`, { status: 'in_review', note: 'Muziek nog vervangen' });
   await j.goto(personalUrl);
@@ -206,7 +206,7 @@ const mp4 = (name, size = '1280x720', sec = 4) => {
   check('portaal: “Eerdere goedkeuring ingetrokken: opnieuw goedkeuren nodig”', await j.isVisible('.p-group-todo .p-card:has-text("Hoofdfilm voorjaar") .p-note.is-warn'));
   await j.click('.p-group-todo .p-card:has-text("Hoofdfilm voorjaar")');
   await j.waitForSelector('.r-revoked');
-  check('review: uitleg ingetrokken goedkeuring met wie, wanneer en wat nu', /Joris Bakker keurde deze versie goed op/.test(await j.textContent('.r-revoked')) && /keur hem dan opnieuw goed/.test(await j.textContent('.r-revoked')) && await j.isVisible('button:has-text("Deze versie goedkeuren")'));
+  check('review: uitleg ingetrokken goedkeuring met wie, wanneer en wat nu', /Joris Bakker keurde deze versie goed op/.test(await j.textContent('.r-revoked')) && /keur hem dan opnieuw goed/.test(await j.textContent('.r-revoked')) && await j.isVisible('button:has-text("Goedkeuren")'));
   await shot(j, '67-goedkeuring-ingetrokken');
 
   // ---------- D. Linkbeveiliging ----------

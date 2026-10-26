@@ -119,14 +119,8 @@ function createApp(overrides = {}) {
   api.get('/session', async (req, res) => {
     const user = auth.sessionUser(db, req);
     const needsSetup = db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
-    let preferences = null;
-    if (user) {
-      try { preferences = JSON.parse(db.prepare('SELECT preferences FROM users WHERE id = ?').get(user.id)?.preferences || '{}'); } catch { preferences = {}; }
-    }
     res.json({
       user, needsSetup, formats: Object.keys(FORMATS), maxUploadBytes: config.maxUploadBytes,
-      // Alleen het thema hoort al bij het laden van de pagina; de rest via /api/me/preferences.
-      theme: preferences && ['dark', 'light', 'system'].includes(preferences.theme) ? preferences.theme : 'dark',
       version: versionInfo(),
       // Naam van de studio voor het woordmerk in de bovenbalk (Instellingen › Merken).
       studio: require('./client').studioName(db),
@@ -256,14 +250,8 @@ function createApp(overrides = {}) {
     return { html, csp: CSP.replace("script-src 'self'", `script-src 'self' 'sha256-${hash}'`) };
   }
   const sendPage = (file) => (req, res) => {
-    let { html, csp } = renderPage(file);
-    // Teampagina's: het thema van het ingelogde account staat er direct in (geen flits bij laden).
-    if (file.startsWith('app/')) {
-      const user = auth.sessionUser(db, req);
-      let pref = null;
-      try { pref = user ? JSON.parse(db.prepare('SELECT preferences FROM users WHERE id = ?').get(user.id)?.preferences || '{}').theme : null; } catch { pref = null; }
-      if (['dark', 'light', 'system'].includes(pref)) html = html.replace('<html lang="nl">', `<html lang="nl" data-theme-pref="${pref}">`);
-    }
+    // Eén vaste donkere stijl: de pagina staat al op data-theme="dark"; oude themavoorkeuren tellen niet.
+    const { html, csp } = renderPage(file);
     res.setHeader('Content-Security-Policy', csp);
     res.setHeader('Cache-Control', 'no-cache');
     res.type('html').send(html);
@@ -291,6 +279,18 @@ function createApp(overrides = {}) {
   app.get('/voorbeeld/video/:id', sendPage('review/index.html'));
   app.get(['/', '/login', '/projecten*', '/video*', '/team', '/opslag', '/prullenbak', '/archief', '/merken', '/taken', '/zoeken', '/instellingen*', '/klanten*', '/inbox'], sendPage('app/index.html'));
 
+  // Onbekend adres: een rustige pagina in dezelfde stijl (geen witte standaardmelding).
+  const notFound = (req, res) => {
+    const { html, csp } = renderPage('review/notfound.html');
+    res.status(404).setHeader('Content-Security-Policy', csp);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(html);
+  };
+  app.use((req, res) => {
+    if (req.method === 'GET' && req.accepts(['html', 'json']) === 'html') return notFound(req, res);
+    res.status(404).type('text').send('Niet gevonden');
+  });
+
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     const status = err.status || err.statusCode || 500;
@@ -301,6 +301,13 @@ function createApp(overrides = {}) {
       : status >= 500 && !expected ? 'Er ging iets mis op de server' : err.message;
     if (req.path.startsWith('/api')) {
       res.status(status).json({ error: message, ...(expected && err.code ? { code: err.code } : {}), ...(expected && err.extra ? err.extra : {}), ...(expected && err.details ? { details: err.details } : {}) });
+    }
+    else if (req.accepts(['html', 'text']) === 'html') {
+      // Ook een fout buiten de API in dezelfde donkere stijl, met de melding als gewone tekst.
+      const esc = String(message).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const { html, csp } = renderPage('review/notfound.html');
+      res.status(status).setHeader('Content-Security-Policy', csp);
+      res.type('html').send(html.replace(/<h1 class="empty-title">[^<]*<\/h1>\s*<p class="empty-text">[\s\S]*?<\/p>/, `<h1 class="empty-title">${esc}</h1>\n      <p class="empty-text">Probeer het zo nog eens.</p>`).replace('<title>Pagina niet gevonden</title>', '<title>Er ging iets mis</title>'));
     }
     else res.status(status).send(message);
   });

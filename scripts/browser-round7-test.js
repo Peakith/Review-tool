@@ -204,11 +204,12 @@ const mp4 = (name, sec, size = '640x360', pattern = 'testsrc2') => {
   await c.goto(personal);
   await c.waitForSelector('.p-group');
   const order = await c.$$eval('main .p-group', (els) => els.map((x) => [...x.classList].find((k) => k.startsWith('p-group-') && k !== 'p-group')?.slice(8) || (x.classList.contains('p-all') ? 'all' : '?')));
-  const want = ['todo', 'busy', 'done', 'answered', 'files', 'all'];
+  // 0.9.0: Jouw acties → In behandeling → Goedgekeurd en afgerond (met o.a. definitieve bestanden) → Alle projecten.
+  const want = ['todo', 'busy', 'finished', 'all'];
   const idx = order.map((k) => want.indexOf(k));
-  check('klantportaal: Jouw acties → Bij studio → Goedgekeurd → Definitieve bestanden', order[0] === 'todo' && idx.every((x, i) => x >= 0 && (i === 0 || x > idx[i - 1])), order.join(' > '));
+  check('klantportaal: Jouw acties → In behandeling → Goedgekeurd en afgerond → Alle projecten', order[0] === 'todo' && idx.every((x, i) => x >= 0 && (i === 0 || x > idx[i - 1])), order.join(' > '));
   check('klantportaal: Goedgekeurd standaard ingeklapt', !(await c.isVisible('.p-group-done .p-list')) || (await c.getAttribute('.p-group-done', 'open')) === null);
-  check('klantportaal: omslagen alleen in het ingeklapte overzicht (duwen acties niet omlaag)', (await c.locator('.k-cover').count()) === (await c.locator('.p-all .k-cover').count()));
+  check('klantportaal: omslagen alleen in ingeklapte overzichten (duwen acties niet omlaag)', (await c.locator('.p-group-todo .k-cover, .p-group-busy .k-cover').count()) === 0 && (await c.locator('.p-all .k-cover').count()) >= 1);
   // Nieuwe versie van de goedgekeurde video: goedkeuring niet overgenomen
   const v2 = await apiT('POST', `/api/videos/${bfilm.videoId}/versions`, { uploadId: await upload(nieuw, { videoId: bfilm.videoId }) });
   await apiT('POST', `/api/versions/${v2.versionId}/ready`);
@@ -240,8 +241,8 @@ const mp4 = (name, sec, size = '640x360', pattern = 'testsrc2') => {
   await m.goto(personal);
   await m.waitForSelector('.p-group-todo');
   await m.click('.p-group-todo .p-card:has-text("Hoofdfilm")');
-  await m.waitForSelector('.r-actions button:has-text("Deze versie goedkeuren")');
-  check('mobiel: actiebalk met Feedback versturen en Deze versie goedkeuren', await m.isVisible('.r-actions button:has-text("Feedback versturen")'));
+  await m.waitForSelector('.r-actions button:has-text("Goedkeuren")');
+  check('mobiel: actiebalk met Feedback versturen en Goedkeuren', await m.isVisible('.r-actions button:has-text("Feedback versturen")'));
   await m.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await m.waitForTimeout(300);
   const covered = await m.evaluate(() => {

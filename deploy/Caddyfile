@@ -1,0 +1,14 @@
+{$DOMAIN} {
+	# Afscherming van de hele testomgeving met één gedeeld wachtwoord.
+	# Hash maken: docker run --rm caddy:2.8 caddy hash-password --plaintext 'jouw-wachtwoord'
+	# Haal dit blok weg voor livegang (klantlinks moeten dan zonder extra wachtwoord werken).
+	basic_auth {
+		{$PREVIEW_USER} {$PREVIEW_PASSWORD_HASH}
+	}
+
+	request_body {
+		max_size 20MB
+	}
+	encode gzip
+	reverse_proxy app:3000
+}

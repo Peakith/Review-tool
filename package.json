@@ -1,0 +1,47 @@
+{
+  "name": "review-tool",
+  "version": "0.9.0",
+  "private": true,
+  "description": "Videoreviewplatform voor filmagency: delen, feedback, versies en goedkeuring.",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch server/index.js",
+    "create-user": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/create-user.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
+    "test:browser": "node --disable-warning=ExperimentalWarning scripts/browser-test.js",
+    "test:browser:beheer": "node --disable-warning=ExperimentalWarning scripts/browser-admin-test.js",
+    "test:browser:update": "node --disable-warning=ExperimentalWarning scripts/browser-update-test.js",
+    "test:browser:portaal": "node --disable-warning=ExperimentalWarning scripts/browser-portal-test.js",
+    "test:browser:feedback": "node --disable-warning=ExperimentalWarning scripts/browser-feedback-test.js",
+    "test:browser:oplevering": "node --disable-warning=ExperimentalWarning scripts/browser-delivery-test.js",
+    "test:browser:ui": "node --disable-warning=ExperimentalWarning scripts/browser-ui-test.js",
+    "test:browser:klanten": "node --disable-warning=ExperimentalWarning scripts/browser-clients-test.js",
+    "test:browser:inbox": "node --disable-warning=ExperimentalWarning scripts/browser-inbox-test.js",
+    "test:browser:kwaliteit": "node --disable-warning=ExperimentalWarning scripts/browser-quality-test.js",
+    "test:browser:ronde6": "node --disable-warning=ExperimentalWarning scripts/browser-round6-test.js",
+    "test:browser:ronde7": "node --disable-warning=ExperimentalWarning scripts/browser-round7-test.js",
+    "test:browser:ronde8": "node --disable-warning=ExperimentalWarning scripts/browser-round8-test.js",
+    "test:browser:update-donker": "node --disable-warning=ExperimentalWarning scripts/browser-update-dark-test.js",
+    "test:update-zip": "WORKTREE=1 node --disable-warning=ExperimentalWarning scripts/zip-update-test.js",
+    "test:upgrade": "node --disable-warning=ExperimentalWarning scripts/upgrade-test.js",
+    "test:offline-update": "node --disable-warning=ExperimentalWarning scripts/offline-update-test.js",
+    "check": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/check.js",
+    "backup": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/backup.js",
+    "herstel": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/restore.js",
+    "verhuis": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/migrate-data.js",
+    "verplaats-opslag": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/move-storage.js",
+    "launch": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/launcher.js",
+    "stop": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env scripts/stop.js"
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "pdfkit": "^0.17.2"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

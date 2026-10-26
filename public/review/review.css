@@ -1,0 +1,477 @@
+#root { min-height: 100vh; display: flex; flex-direction: column; }
+.fatal { flex: 1; display: grid; place-items: center; padding: 24px; }
+.fatal .empty { max-width: 460px; }
+
+/* ---------- Kop ---------- */
+.r-header { background: var(--bg-2); border-bottom: 1px solid var(--line); }
+.r-header-inner { max-width: 1600px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
+.r-titles { min-width: 0; flex: 1 1 320px; }
+.r-project { font-size: 12.5px; color: var(--text-3); margin-bottom: 2px; }
+.r-titles h1 { font-size: 20px; overflow-wrap: anywhere; }
+.r-version { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.version-chip { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; padding: 5px 12px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); }
+.version-latest { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text); }
+.version-old { font-size: 12px; color: var(--text-3); }
+.version-pick select { width: auto; padding: 6px 30px 6px 10px; font-size: 13px; }
+
+/* ---------- Indeling ---------- */
+.r-main { flex: 1; width: 100%; max-width: 1600px; margin: 0 auto; padding: 18px 24px 24px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px; align-items: start; }
+.r-stage { min-width: 0; position: sticky; top: 16px; }
+.r-stage-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 4px; flex-wrap: wrap; }
+.r-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding-bottom: 110px; }
+
+.r-status { display: flex; gap: 12px; align-items: flex-start; padding: 13px 14px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--st-review); }
+.r-status > .icon { --icon-size: 20px; margin-top: 1px; color: var(--st-review); }
+.r-status > div { flex: 1; min-width: 0; }
+.r-status strong { font-size: 14.5px; }
+.r-status p { margin: 2px 0 0; color: var(--text-2); font-size: 13.5px; }
+.r-status.is-approved { border-left-color: var(--st-approved); }
+.r-status.is-approved > .icon { color: var(--st-approved); }
+.r-status.is-changes { border-left-color: var(--st-changes); }
+.r-status.is-changes > .icon { color: var(--st-changes); }
+.r-status.is-old, .r-status.is-closed { border-left-color: var(--text-3); }
+.r-status.is-old > .icon, .r-status.is-closed > .icon { color: var(--text-3); }
+
+.howto { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 14px; }
+.howto summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; font-size: 13.5px; list-style: none; }
+.howto summary::-webkit-details-marker { display: none; }
+.howto summary .icon { color: var(--text); --icon-size: 16px; }
+.howto summary::after { content: "Tonen"; margin-left: auto; font-size: 12px; font-weight: 500; color: var(--text-3); }
+.howto[open] summary::after { content: "Verbergen"; }
+.howto ol { margin: 10px 0 2px; padding-left: 20px; display: grid; gap: 6px; color: var(--text-2); font-size: 13px; }
+.howto ol strong { color: var(--text); }
+
+.identity { display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px; }
+.identity.is-verified { display: flex; gap: 10px; align-items: flex-start; background: var(--st-approved-bg); border-color: var(--line-ok); color: var(--ok-text); }
+.identity.is-verified > .icon { margin-top: 2px; }
+.identity.is-verified strong { color: var(--text); }
+
+.r-comments-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 6px; }
+.r-comments-head h2 { font-size: 14px; color: var(--text-2); }
+
+/* ---------- Actiebalk ---------- */
+.r-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--bar-bg); backdrop-filter: blur(10px); border-top: 1px solid var(--line-2); }
+.r-actions-inner { max-width: 1600px; margin: 0 auto; padding: 12px 24px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: flex-end; gap: 10px 18px; flex-wrap: wrap; }
+.r-actions-hint { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-3); margin-right: auto; }
+.r-actions-hint .icon { --icon-size: 15px; }
+.r-actions-hint.is-pending { color: var(--st-review); font-weight: 500; }
+.r-actions-buttons { display: flex; gap: 10px; }
+.toast-host { bottom: 90px; }
+
+/* Gefocuste velden en knoppen niet onder de vaste speler of de actiebalk laten verdwijnen. */
+html { scroll-padding-bottom: 110px; }
+@media (max-width: 980px) {
+  html { scroll-padding-top: calc(38vh + 70px); scroll-padding-bottom: 150px; }
+  .r-header-inner { padding: 12px 14px; }
+  .r-titles h1 { font-size: 18px; }
+  .r-main { grid-template-columns: 1fr; padding: 0 0 16px; gap: 0; }
+  .r-stage { position: sticky; top: 0; z-index: 10; background: var(--bg); }
+  .r-stage .player { border-radius: 0; border-left: 0; border-right: 0; }
+  .r-stage .player-stage { max-height: 38vh; min-height: 0; }
+  .r-stage-foot { padding: 6px 14px; }
+  .r-panel { padding: 12px 14px 140px; }
+  .r-actions-inner { padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); }
+  .r-actions-buttons { width: 100%; }
+  .r-actions-buttons .btn { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 6px 10px; white-space: normal; line-height: 1.2; font-size: 14px; }
+  .r-actions-hint { width: 100%; justify-content: center; margin: 0; }
+  .toast-host { bottom: 130px; }
+  body.is-typing .r-actions { display: none; }
+}
+
+.r-brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.r-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+.r-back .icon { --icon-size: 15px; }
+.r-back:hover { color: var(--text); }
+.r-meta-line { font-size: 12.5px; color: var(--text-3); margin-top: 3px; }
+
+/* ---------- Voorbeeldbalk (team) ---------- */
+.preview-bar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 24px; background: var(--preview-bg); color: var(--preview-text); font-size: 13.5px; border-bottom: 1px solid rgba(173, 159, 255, .35); }
+.preview-bar > .icon { --icon-size: 17px; }
+.preview-bar > span:not(.icon) { flex: 1 1 260px; }
+.preview-bar strong { color: var(--text); }
+
+/* ---------- Klantportaal ---------- */
+.p-header .r-header-inner { padding-top: 12px; padding-bottom: 12px; }
+.p-client { max-width: 50%; }
+.p-main { flex: 1; width: 100%; max-width: 960px; margin: 0 auto; padding: 36px 24px 56px; display: grid; gap: 30px; align-content: start; }
+.p-hero h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; overflow-wrap: anywhere; }
+.p-intro { margin: 10px 0 0; max-width: 720px; color: var(--text-2); font-size: 15px; line-height: 1.55; white-space: pre-line; }
+.p-summary { margin: 14px 0 0; font-size: 17px; color: var(--text-2); }
+.p-summary strong { color: var(--text); font-weight: 750; }
+.p-group { display: grid; gap: 10px; }
+.p-group-head h2 { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.p-group-head p { margin: 4px 0 0; }
+.p-group-todo > .p-group-head { border-top: 3px solid var(--text); padding-top: 12px; }
+.p-group-busy > .p-group-head, .p-group-files > .p-group-head { border-top: 1px solid var(--line-2); padding-top: 14px; }
+.p-count { font-size: 12px; font-weight: 700; min-width: 22px; height: 22px; padding: 0 7px; border-radius: var(--r-sm); display: inline-grid; place-items: center; background: var(--surface-3); color: var(--text-2); }
+.p-group-todo .p-count { background: var(--text); color: var(--bg); }
+/* Rijen in plaats van kaarten: thumbnail, wat en welke versie, en één duidelijke knop. */
+.p-list { display: grid; }
+.p-card { display: grid; grid-template-columns: 168px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none !important; }
+.p-list > .p-card:first-child { border-top: 1px solid var(--line); }
+a.p-card:hover { background: var(--row-hover, var(--surface)); }
+a.p-card:hover .p-card-title { text-decoration: underline; text-underline-offset: 3px; }
+a.p-card:focus-visible { box-shadow: var(--focus); outline: none; }
+.p-compact { grid-template-columns: 96px minmax(0, 1fr) auto; padding: 8px 0; }
+.p-thumb { position: relative; aspect-ratio: 16 / 9; background: var(--stage); display: grid; place-items: center; overflow: hidden; border-radius: var(--r); }
+.p-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.p-thumb.is-portrait img, .p-thumb.is-square img { object-fit: contain; }
+.p-thumb .poster-empty { width: 100%; height: 100%; display: grid; place-items: center; color: var(--text-3); }
+.p-thumb .thumb-duration { position: absolute; right: 6px; bottom: 6px; font-size: 11px; font-weight: 600; padding: 1px 5px; border-radius: var(--r-sm); background: rgba(0, 0, 0, .72); color: #fff; font-variant-numeric: tabular-nums; }
+.p-compact .thumb-duration { display: none; }
+.p-card-body { display: grid; gap: 3px; min-width: 0; align-content: center; }
+.p-card-kicker { font-size: 12px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-card-title { font-size: 16px; font-weight: 750; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.p-compact .p-card-title { font-size: 14.5px; font-weight: 650; -webkit-line-clamp: 1; }
+.p-card-status { display: flex; justify-content: flex-end; }
+.p-due { display: flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 600; color: var(--text); margin-top: 2px; }
+.p-due .icon { --icon-size: 14px; }
+.p-due.is-late { color: var(--st-changes); }
+.p-note { display: flex; gap: 6px; align-items: flex-start; font-size: 12.5px; color: var(--text-3); }
+.p-note .icon { --icon-size: 14px; margin-top: 1px; }
+.p-note.is-ok { color: var(--ok-text); }
+.p-card-action .btn { pointer-events: none; white-space: nowrap; }
+.p-collapsible { border-top: 1px solid var(--line-2); }
+.p-collapsible > summary { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 0; cursor: pointer; list-style: none; font-family: var(--font-display); font-weight: 800; font-size: 17px; }
+.p-collapsible > summary::-webkit-details-marker { display: none; }
+.p-collapsible > summary > .icon { transition: transform .15s; color: var(--text-3); }
+.p-collapsible[open] > summary > .icon { transform: rotate(90deg); }
+.p-collapsible > summary:focus-visible { box-shadow: var(--focus); outline: none; }
+.p-all-body { display: grid; gap: 18px; padding-bottom: 8px; }
+.p-empty { padding: 20px 0; border-top: 3px solid var(--text); }
+.p-foot { display: flex; gap: 8px; align-items: flex-start; padding-top: 6px; border-top: 1px solid var(--line); }
+.p-foot .icon { --icon-size: 15px; margin-top: 1px; }
+
+/* Briefing en referenties (klant) */
+.brief-list { display: grid; gap: 8px; }
+.brief-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); color: var(--text); text-decoration: none !important; min-width: 0; }
+a.brief-item:hover { border-color: var(--line-2); }
+.brief-icon { width: 34px; height: 34px; border-radius: var(--r); background: var(--surface-3); color: var(--text); display: grid; place-items: center; flex-shrink: 0; }
+.brief-main { flex: 1; min-width: 0; }
+.brief-main h3 { font-size: 14px; }
+.brief-body { margin: 6px 0 0; color: var(--text-2); font-size: 13.5px; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
+.brief-item.is-link > .icon { color: var(--text-3); --icon-size: 16px; margin-top: 8px; }
+.brief-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+@media (max-width: 640px) {
+  .preview-bar { padding: 8px 14px; }
+  .p-main { padding: 18px 14px 40px; gap: 22px; }
+  .p-hero h1 { font-size: 26px; }
+  .p-card { grid-template-columns: 104px minmax(0, 1fr); gap: 4px 12px; align-items: start; }
+  .p-card-action, .p-card-status { grid-column: 2; justify-content: flex-start; }
+  .p-compact { grid-template-columns: 72px minmax(0, 1fr); }
+  .p-card-title { font-size: 15px; }
+  .p-client { display: none; }
+  .brief-item.is-file { flex-wrap: wrap; }
+}
+
+/* ---------- Reviewronde en wijzigingen ---------- */
+.r-round { display: grid; gap: 6px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); font-size: 13.5px; }
+.r-round-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.r-round-head .icon { --icon-size: 16px; color: var(--text); }
+.r-deadline { color: var(--text-2); }
+.r-deadline.is-past { color: var(--st-review); }
+.r-round p { margin: 0; color: var(--text-2); }
+.r-round-note { white-space: pre-line; }
+.r-change { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+.r-change p { white-space: pre-line; margin-top: 2px; }
+.r-stage-actions { display: inline-flex; gap: 6px; align-items: center; }
+.r-compare { width: 100%; max-width: 1600px; margin: 0 auto; padding: 16px 24px 32px; display: grid; gap: 10px; }
+@media (max-width: 980px) { .r-compare { padding: 10px 12px 24px; } }
+.r-export, .p-export { display: inline-flex; gap: 8px; align-items: center; color: var(--text-3); flex-wrap: wrap; }
+.r-export .icon, .p-export .icon { --icon-size: 15px; }
+.p-export { margin: 0; }
+
+/* ---------- Definitieve oplevering ---------- */
+.d-eyebrow { display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 6px; font-size: 12.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text); }
+.d-eyebrow .icon { --icon-size: 16px; }
+.p-hero > .r-back + .d-eyebrow { margin-top: 14px; }
+.d-list { display: grid; gap: 12px; }
+.d-item { display: grid; grid-template-columns: 220px minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.d-item.is-unavailable { opacity: .85; border-style: dashed; }
+.d-thumb { border-radius: var(--r); }
+.d-body { display: grid; gap: 6px; min-width: 0; }
+.d-title { font-size: 16px; line-height: 1.3; overflow-wrap: anywhere; }
+.d-facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 2px 0 0; }
+.d-facts div { display: flex; gap: 6px; }
+.d-facts dt { color: var(--text-3); }
+.d-facts dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+.d-name { display: flex; align-items: center; gap: 5px; }
+.d-name .icon { --icon-size: 14px; flex-shrink: 0; }
+.d-action { display: grid; gap: 6px; justify-items: end; padding-right: 6px; max-width: 240px; }
+.d-download { min-width: 150px; justify-content: center; }
+.d-download.is-disabled { opacity: .55; cursor: not-allowed; }
+.d-unavailable { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); padding: 8px 10px; border-radius: var(--r); background: var(--surface-3); }
+.d-unavailable .icon { --icon-size: 15px; margin-top: 1px; flex-shrink: 0; }
+.d-error { margin: 0; color: var(--danger-text); text-align: right; }
+.p-delivery-card { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none !important; }
+.p-list > .p-delivery-card:first-child { border-top: 1px solid var(--line); }
+.p-delivery-card:hover h3 { text-decoration: underline; text-underline-offset: 3px; }
+.p-delivery-card .brief-icon { width: 40px; height: 40px; }
+.p-delivery-card > div:nth-child(2) { flex: 1 1 220px; }
+.p-delivery-card h2, .p-delivery-card h3 { font-size: 16px; }
+@media (max-width: 760px) {
+  .d-item { grid-template-columns: 1fr; gap: 12px; }
+  .d-action { justify-items: stretch; max-width: none; padding-right: 0; }
+  .d-download { width: 100%; }
+  .d-error { text-align: left; }
+}
+
+/* ---------- Bouwronde 5: taal, navigatie, beveiligde links, klantportaal ---------- */
+html[lang="en"] .howto summary::after { content: "Show"; }
+html[lang="en"] .howto[open] summary::after { content: "Hide"; }
+.lang-toggle { margin-left: auto; }
+.lang-toggle button { min-width: 38px; }
+.r-version .lang-toggle { margin-left: 4px; }
+
+.r-nav { max-width: 1600px; margin: 0 auto; padding: 0 24px 12px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.r-nav-link { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--text); text-decoration: none !important; }
+.r-nav-link:hover { border-color: var(--line-2); }
+.r-nav-link.is-prev { justify-self: start; max-width: 100%; }
+.r-nav-link.is-next { justify-self: end; text-align: right; max-width: 100%; }
+.r-nav-link.is-empty { visibility: hidden; }
+.r-nav-text { display: grid; min-width: 0; line-height: 1.25; }
+.r-nav-text .truncate { max-width: 34ch; font-weight: 500; font-size: 13.5px; }
+.r-nav-pos { white-space: nowrap; }
+
+.link-expiry { display: flex; align-items: center; gap: 6px; margin: 4px 4px 0; }
+.link-expiry .icon { --icon-size: 14px; }
+
+.gate { align-content: center; }
+.gate-card { width: min(420px, 100%); display: grid; gap: 12px; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.gate-head { display: flex; align-items: center; gap: 10px; }
+.gate-head .icon { --icon-size: 22px; color: var(--text); }
+.gate-head h1 { font-size: 19px; }
+.gate-form { display: grid; gap: 8px; }
+.gate-form .btn { justify-self: start; margin-top: 4px; }
+.gate-lang { display: flex; justify-content: flex-end; }
+.field-error { color: var(--danger-text, var(--danger)); font-size: 13px; margin: 0; }
+
+.r-revoked p { margin: 4px 0 0; }
+.approve-what { display: grid; gap: 2px; font-size: 16px; margin: 0 0 6px; }
+.approve-version { font-size: 14px; color: var(--text-2); }
+
+.p-note.is-mine { color: var(--text); font-weight: 500; }
+.p-note.is-warn { color: var(--warn-text, var(--st-review)); }
+.p-identity { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 0; max-width: 680px; color: var(--text-2); }
+.p-identity .icon { --icon-size: 15px; margin-top: 2px; color: var(--st-approved); }
+.p-identity strong { color: var(--text); }
+.k-project { display: grid; gap: 8px; }
+.k-project-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.k-project-head h3 { font-size: 16px; overflow-wrap: anywhere; }
+.k-project .p-group-head h3 { font-size: 15px; }
+.k-completed { border-top: 1px solid var(--line); }
+.k-completed > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 0; cursor: pointer; font-weight: 600; list-style: none; }
+.k-completed > summary::-webkit-details-marker { display: none; }
+.k-completed > summary .icon { color: var(--text-3); }
+.k-completed-body { padding: 0 0 12px; display: grid; gap: 16px; }
+
+@media (max-width: 720px) {
+  .r-nav { padding: 0 14px 10px; grid-template-columns: 1fr 1fr; }
+  .r-nav-pos { display: none; }
+  .r-nav-link.is-empty { display: none; }
+  .r-nav-link.is-next { grid-column: 2; }
+  .r-nav-text .truncate { max-width: 18ch; }
+}
+.d-package { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; }
+.viewer-controls { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.viewer-controls .lang-toggle { margin-left: 0; }
+.theme-select { width: auto; padding: 5px 26px 5px 8px; font-size: 12.5px; }
+.r-version .viewer-controls { margin-left: 4px; }
+
+/* Vragen van het team (bouwronde 6) */
+.p-question { grid-template-columns: 40px minmax(0, 1fr); align-items: start; }
+.p-q-icon { width: 36px; height: 36px; border-radius: var(--r); display: grid; place-items: center; background: var(--text); color: var(--bg); }
+.p-question.is-answered .p-q-icon { background: var(--surface-3); color: var(--text-2); }
+.p-q-text { -webkit-line-clamp: unset; display: block; font-size: 16px; white-space: pre-line; }
+.p-q-open { grid-column: 2; }
+.p-q-form, .p-q-answer { grid-column: 2; display: grid; gap: 6px; max-width: 640px; }
+.p-q-answer p { margin: 0; white-space: pre-line; }
+.p-q-form textarea { min-height: 76px; }
+@media (max-width: 640px) { .p-question { grid-template-columns: 36px minmax(0, 1fr); } }
+
+/* Bouwronde 6: regels in plaats van kaders op de klantpagina's. */
+.brief-item, .r-round, .d-item { background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding-left: 0; padding-right: 0; }
+.brief-item:first-child, .r-round:first-child, .d-item:first-child { border-top: 1px solid var(--line); }
+.brief-list, .d-list, .r-rounds { gap: 0 !important; }
+.gate-card { border-top: 4px solid var(--text); border-radius: var(--r); }
+.howto { background: none; border: 0; border-left: 3px solid var(--line-2); border-radius: 0; padding: 4px 0 4px 14px; }
+.identity:not(.is-verified) { background: none; border: 0; border-radius: 0; padding: 0; }
+.r-status { border-radius: var(--r); }
+
+/* Kleine projectcover en vastzetten in "Alle projecten" (ingeklapt; duwt de acties nooit omlaag) */
+.k-cover { width: 64px; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: #000; flex-shrink: 0; display: grid; }
+.k-cover img { width: 100%; height: 100%; object-fit: contain; }
+.k-project-titles { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.k-project-titles h3 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+
+/* Foutpagina's (onbekend adres, serverfout) */
+.fatal-page { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.fatal-page .empty { max-width: 480px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 36px 28px; }
+
+/* ==========================================================================
+   Klantoverzicht (0.9.0): rustig, compact, eerst wat de klant moet doen.
+   Kop met merk en klantnaam; secties als panelen; regels met kleine thumbnail en één knop.
+   ========================================================================== */
+.p-header-inner { gap: 16px; }
+.p-header-titles { flex: 1; min-width: 0; display: grid; gap: 1px; padding-left: 14px; border-left: 1px solid var(--line); }
+.p-header-title { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-header-sub { margin: 0; font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-header .p-identity { margin: 0; font-size: 12.5px; gap: 6px; align-items: center; }
+.p-header .p-identity .icon { --icon-size: 13px; margin: 0; color: var(--sel); }
+
+.p-main { max-width: 920px; padding: 28px 24px 56px; gap: 20px; }
+.p-main > .p-intro { margin: 0; }
+.p-group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px 20px; gap: 12px; }
+.p-group-head h2 { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; gap: 8px; }
+.p-group-todo > .p-group-head, .p-group-busy > .p-group-head, .p-group-files > .p-group-head { border-top: 0; padding-top: 0; }
+.p-group-text { margin: 4px 0 0; color: var(--text-2); font-size: 14px; }
+.p-count { min-width: 20px; height: 20px; padding: 0 6px; font-size: 11.5px; font-weight: 650; border-radius: 999px; background: var(--surface-2); color: var(--text-2); }
+.p-group-todo .p-count { background: var(--sel-soft); color: var(--sel); }
+
+.p-project-groups { display: grid; gap: 14px; }
+.p-project-name { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-list > .p-card:first-child { border-top: 0; }
+.p-card { grid-template-columns: 112px minmax(0, 1fr) auto; gap: 14px; padding: 10px 8px; margin: 0 -8px; border-bottom: 0; border-top: 1px solid var(--line); border-radius: var(--r); }
+.p-list > .p-card + .p-card { border-top-color: var(--line); }
+a.p-card:hover { background: var(--row-hover); }
+a.p-card:hover .p-card-title { color: var(--sel); }
+a.p-card:focus-visible { box-shadow: var(--focus); }
+.p-compact { grid-template-columns: 80px minmax(0, 1fr) auto; padding: 8px; }
+.p-thumb { border-radius: var(--r-sm); }
+.p-card-title { font-size: 15px; font-weight: 600; -webkit-line-clamp: 1; line-height: 1.35; }
+.p-compact .p-card-title { font-size: 14px; font-weight: 600; }
+.p-card-meta { margin: 0; font-size: 13px; color: var(--text-2); }
+.p-due { font-size: 13px; font-weight: 500; color: var(--text-2); margin: 0; }
+.p-due.is-late { color: var(--warn-text); }
+.p-note { margin: 0; font-size: 12.5px; color: var(--text-3); }
+.p-note.is-mine { color: var(--text-2); font-weight: 500; }
+.p-note.is-mine .icon { color: var(--sel); }
+.p-card-action .btn .icon { --icon-size: 15px; margin-right: -4px; }
+.p-row-icon { width: 112px; aspect-ratio: 16 / 9; border-radius: var(--r-sm); background: var(--surface-2); color: var(--sel); display: grid; place-items: center; }
+.p-row-icon .icon { --icon-size: 20px; }
+.p-compact .p-row-icon, .p-delivery-card .p-row-icon { width: 80px; }
+
+/* Vragen: zelfde regelopbouw; het antwoordveld verschijnt onder de regel. */
+.p-question { grid-template-columns: 112px minmax(0, 1fr) auto; align-items: center; }
+.p-q-icon { background: var(--surface-2); color: var(--sel); width: auto; height: auto; }
+.p-question.is-answered { grid-template-columns: 80px minmax(0, 1fr); }
+.p-question.is-answered .p-q-icon { width: 80px; color: var(--text-3); }
+.p-q-text { font-size: 15px; font-weight: 600; -webkit-line-clamp: 3; display: -webkit-box; white-space: normal; }
+.p-q-open { grid-column: auto; }
+.p-q-form, .p-q-answer { grid-column: 2 / -1; }
+
+/* Definitieve bestanden en inklapbare blokken binnen "Goedgekeurd en afgerond". */
+.p-finished { display: grid; gap: 4px; }
+.p-subgroup { display: grid; gap: 4px; padding-bottom: 6px; }
+.p-subtitle { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0; }
+.p-delivery-card { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 8px; margin: 0 -8px; border: 0; border-top: 1px solid var(--line); border-radius: var(--r); }
+.p-list > .p-delivery-card:first-child { border-top: 0; }
+.p-delivery-card h4 { font-size: 14px; }
+.p-fold { border-top: 1px solid var(--line); }
+.p-fold > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 0; cursor: pointer; list-style: none; font-weight: 600; font-size: 14px; }
+.p-fold > summary::-webkit-details-marker { display: none; }
+.p-fold > summary > .icon { --icon-size: 16px; color: var(--text-3); transition: transform .15s; }
+.p-fold[open] > summary > .icon { transform: rotate(90deg); }
+.p-fold > summary:focus-visible { box-shadow: var(--focus); border-radius: var(--r-sm); }
+.p-fold > .p-list { padding-bottom: 8px; }
+.p-fold .k-project { padding: 6px 0 10px; }
+
+/* Alle projecten */
+.p-all { padding: 6px 20px; border-top: 1px solid var(--line); }
+.p-all > summary { font-family: var(--font); font-weight: 650; font-size: 15px; min-height: 48px; }
+.p-all-body { gap: 14px; padding-bottom: 14px; }
+.k-project { gap: 6px; }
+.k-project + .k-project { border-top: 1px solid var(--line); padding-top: 14px; }
+.k-project-head { flex-wrap: nowrap; gap: 12px; }
+.k-cover { width: 72px; border-radius: var(--r-sm); background: var(--stage); }
+.k-cover.is-empty { place-items: center; color: var(--text-3); background: var(--surface-2); }
+.k-cover.is-empty .icon { --icon-size: 16px; }
+.k-project-titles h3 { font-size: 15px; font-weight: 600; -webkit-line-clamp: 1; }
+.p-empty { border-top: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.p-foot { border-top: 0; color: var(--text-3); padding: 0 4px; }
+.p-export { padding: 0 4px; color: var(--text-2); }
+
+@media (max-width: 640px) {
+  .p-header-titles { padding-left: 10px; }
+  .p-main { padding: 14px 12px 40px; gap: 14px; }
+  .p-group { padding: 14px 14px; }
+  .p-all { padding: 4px 14px; }
+  .p-card, .p-question { grid-template-columns: 88px minmax(0, 1fr); gap: 6px 12px; align-items: start; }
+  .p-row-icon { width: 88px; }
+  .p-compact, .p-delivery-card, .p-question.is-answered { grid-template-columns: 64px minmax(0, 1fr); }
+  .p-compact .p-row-icon, .p-delivery-card .p-row-icon, .p-question.is-answered .p-q-icon { width: 64px; }
+  .p-card-action, .p-card-status, .p-delivery-card > .btn { grid-column: 2; justify-self: start; }
+  .p-card-title { -webkit-line-clamp: 2; }
+  .k-cover { width: 56px; }
+}
+/* Lange titels mogen de breedte nooit opdrijven (gridkolommen mogen krimpen). */
+.p-main { grid-template-columns: minmax(0, 1fr); }
+.p-group, .p-project-groups, .p-project-group, .p-list, .p-finished, .p-subgroup, .p-fold, .p-all-body, .k-project { min-width: 0; }
+.p-group { grid-template-columns: minmax(0, 1fr); }
+.p-header .p-identity span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) {
+  .p-header .brand-namemark .brand-name { display: none; }
+  .p-header .brand-logo { max-width: 96px; }
+}
+
+/* ==========================================================================
+   Klantreview (0.9.0): compacte kop, rustig paneel, extra's onder "Meer".
+   ========================================================================== */
+.r-header { background: var(--bg); }
+.r-header-inner { padding: 12px 24px; align-items: flex-end; }
+.r-brand { margin-bottom: 6px; gap: 14px; }
+.r-title-row { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.r-title-row h1 { font-size: 19px; font-weight: 650; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.r-title-row .version-pick select { min-height: 30px; padding-top: 3px; padding-bottom: 3px; font-size: 13px; }
+.r-project { margin: 3px 0 0; font-size: 12.5px; color: var(--text-2); }
+.r-nav { padding-bottom: 10px; }
+.r-nav-link { padding: 5px 10px; background: transparent; }
+.r-main { grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; padding-top: 14px; }
+.r-panel { gap: 10px; }
+.r-status { padding: 11px 14px; border: 1px solid var(--line); border-left-width: 1px; background: var(--surface); }
+.r-status > .icon { --icon-size: 18px; }
+.r-round { padding: 10px 14px; }
+.r-round-head .icon { color: var(--text-3); }
+.r-compose-area { display: grid; gap: 10px; }
+.howto { font-size: 13px; }
+.r-stage-foot { padding: 6px 2px; }
+.r-more { position: relative; }
+.r-more > summary { list-style: none; cursor: pointer; }
+.r-more > summary::-webkit-details-marker { display: none; }
+.r-more-menu { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 30; min-width: 240px; display: grid; gap: 6px; padding: 10px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.r-more-menu .btn { justify-content: flex-start; }
+.r-more-menu .r-export { padding: 4px 6px; color: var(--text-2); }
+.r-actions-hint { color: var(--text-2); }
+.r-actions-hint.is-pending { color: var(--text); font-weight: 500; } /* neutraal: niet verstuurd is geen fout */
+@media (max-width: 980px) {
+  .r-header-inner { padding: 10px 14px; }
+  .r-title-row h1 { font-size: 17px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .r-main { grid-template-columns: minmax(0, 1fr); }
+  .r-more-menu { right: 0; }
+}
+.r-deadline { display: flex; align-items: center; gap: 6px; margin: 0; }
+.r-deadline .icon { --icon-size: 15px; }
+.r-deadline.is-past { color: var(--warn-text); }
+.identity.is-verified { display: flex; align-items: center; gap: 8px; padding: 2px 2px; background: none; border: 0; color: var(--text-2); font-size: 13px; }
+.identity.is-verified .icon { --icon-size: 15px; color: var(--sel); }
+.identity.is-verified strong { color: var(--text); }
+/* Speler past met de regel eronder boven de vaste actiebalk. */
+@media (min-width: 981px) {
+  .r-stage .player-stage { max-height: calc(100vh - 290px); }
+}
+@media (max-width: 980px) {
+  .r-header-inner { position: relative; }
+  .r-version { position: absolute; top: 8px; right: 14px; }
+  .r-brand { padding-right: 104px; margin-bottom: 4px; }
+  .r-back { font-size: 12.5px; }
+  .r-nav { padding: 0 14px 8px; gap: 8px; }
+  .r-nav-link { padding: 4px 8px; }
+  .r-nav-text > .small { display: none; }
+  .r-nav-text .truncate { font-size: 13px; }
+  .r-stage-foot { padding: 4px 14px; }
+}
+.r-stage-foot { flex-wrap: nowrap; }
+.r-stage-foot > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-stage-actions { flex-shrink: 0; }
+.p-q-open .btn { pointer-events: auto; }

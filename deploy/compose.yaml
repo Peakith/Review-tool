@@ -1,0 +1,36 @@
+# Testomgeving: app + Caddy (automatisch HTTPS via Let's Encrypt).
+# Gebruik: cp deploy/voorbeeld.env deploy/.env, vul in, dan:
+#   docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
+services:
+  app:
+    build: ..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLIC_URL: https://${DOMAIN}
+      SECURE_COOKIES: "true"
+      TRUST_PROXY: "true"
+    volumes:
+      - review-data:/data
+      - review-backups:/backups
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      PREVIEW_USER: ${PREVIEW_USER}
+      PREVIEW_PASSWORD_HASH: ${PREVIEW_PASSWORD_HASH}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - app
+
+volumes:
+  review-data:
+  review-backups:
+  caddy-data:
